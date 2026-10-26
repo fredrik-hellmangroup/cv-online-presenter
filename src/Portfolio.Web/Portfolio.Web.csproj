@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Portfolio.Contracts\Portfolio.Contracts.csproj" />
+    <ProjectReference Include="..\Portfolio.Content\Portfolio.Content.csproj" />
+    <ProjectReference Include="..\Portfolio.Experience\Portfolio.Experience.csproj" />
+    <ProjectReference Include="..\Portfolio.Publishing\Portfolio.Publishing.csproj" />
+    <ProjectReference Include="..\Portfolio.Infrastructure\Portfolio.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

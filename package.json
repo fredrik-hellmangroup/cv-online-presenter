@@ -1,0 +1,8 @@
+{
+  "name": "cv-online-presenter",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix client run build",
+    "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release"
+  }
+}
