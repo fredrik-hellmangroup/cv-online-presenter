@@ -35,3 +35,5 @@ See [docs/architecture.md](docs/architecture.md) for project responsibilities an
 ## Content, deployment, and licensing
 
 Content schemas and templates live in the content repository, with its own validation workflow. Updating content means merging a content change, then updating this repository's submodule pointer in a separate app PR. The submodule commit records the exact content revision used by an app build. Deployment requires approved environment configuration; no domain, credentials, or production endpoint is included here. Both repositories use the MIT license.
+
+Version tags create an IIS-ready package with app/content revisions and a health endpoint. See [docs/iis-release.md](docs/iis-release.md) for staging setup and the deployment gate.

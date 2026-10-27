@@ -27,6 +27,7 @@ app.Use(async (context, next) =>
 });
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 
 var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
