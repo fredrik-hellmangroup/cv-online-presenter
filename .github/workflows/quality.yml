@@ -26,11 +26,11 @@ jobs:
             client/package-lock.json
             tools/a11y/package-lock.json
       - run: dotnet restore CvOnlinePresenter.sln
-      - run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
       - run: npm ci --prefix client
       - run: npm ci --prefix tools/a11y
       - run: npm run build
       - run: npm run build:metadata
+      - run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
       - run: npm run validate:content
       - run: npm audit --prefix client --audit-level=moderate
       - run: npm audit --prefix tools/a11y --audit-level=moderate
@@ -62,6 +62,8 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
+      - run: npm ci --prefix client
+      - run: npm run build
       - run: dotnet build CvOnlinePresenter.sln --configuration Release
       - run: npm ci --prefix tools/a11y
       - if: matrix.runner == 'ubuntu-24.04'
