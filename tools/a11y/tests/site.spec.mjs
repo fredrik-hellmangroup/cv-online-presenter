@@ -3,6 +3,18 @@ import { expect, test } from '@playwright/test';
 
 const routes = ['/', '/profile', '/services', '/projects', '/contact'];
 
+test('unknown URLs return a useful, private 404', async ({ page }) => {
+  const response = await page.goto('/this-page-does-not-exist');
+  expect(response?.status()).toBe(404);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'sv-SE');
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+  await expect(page.locator('h1')).toHaveText('Sidan hittades inte');
+  await expect(page.getByRole('link', { name: 'Till startsidan' })).toHaveAttribute('href', '/');
+  const html = await page.locator('body').innerText();
+  expect(html).not.toContain('Exception');
+  expect(html).not.toContain('StackTrace');
+});
+
 for (const route of routes) {
   test(`${route} keeps content and navigation available without JavaScript`, async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false, colorScheme: 'dark' });
