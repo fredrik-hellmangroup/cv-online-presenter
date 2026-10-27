@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
+  workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   use: {
     baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:5187',

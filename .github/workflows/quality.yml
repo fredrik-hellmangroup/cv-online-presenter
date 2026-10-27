@@ -10,13 +10,13 @@ permissions:
 
 jobs:
   build-and-security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -37,23 +37,23 @@ jobs:
 
   browser-quality:
     needs: build-and-security
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
       - run: dotnet build CvOnlinePresenter.sln --configuration Release
       - run: npm ci --prefix tools/a11y
-      - run: npx --prefix tools/a11y playwright install ${{ matrix.browser }}
+      - run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
       - run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
 
 
