@@ -49,7 +49,7 @@ jobs:
           - browser: chromium
             runner: windows-latest
           - browser: firefox
-            runner: ubuntu-24.04
+            runner: windows-latest
           - browser: webkit
             runner: windows-latest
     steps:
