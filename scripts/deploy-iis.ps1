@@ -32,4 +32,10 @@ catch {
     throw
 }
 
-Write-Output "Deployed $ReleaseId to IIS site '$SiteName'."
+$metadataPath = Join-Path $releasePath 'wwwroot/build-metadata.json'
+if (Test-Path -LiteralPath $metadataPath) {
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    Write-Output "Deployed $ReleaseId (app $($metadata.appRevision), content $($metadata.contentRevision)) to IIS site '$SiteName'."
+} else {
+    Write-Output "Deployed $ReleaseId to IIS site '$SiteName'."
+}
