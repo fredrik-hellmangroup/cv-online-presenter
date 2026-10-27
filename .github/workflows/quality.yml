@@ -1,0 +1,56 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            tools/a11y/package-lock.json
+      - run: dotnet restore CvOnlinePresenter.sln
+      - run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
+      - run: npm ci --prefix client
+      - run: npm ci --prefix tools/a11y
+      - run: npm run build
+      - run: npm run validate:content
+      - run: npm audit --prefix client --audit-level=moderate
+      - run: npm audit --prefix tools/a11y --audit-level=moderate
+      - name: Scan repository for secrets
+        run: docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --exit-code 1
+      - run: dotnet list CvOnlinePresenter.sln package --vulnerable --include-transitive
+
+  browser-quality:
+    needs: build-and-security
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: dotnet build CvOnlinePresenter.sln --configuration Release
+      - run: npm ci --prefix tools/a11y
+      - run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
+      - run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}

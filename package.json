@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "build": "npm --prefix client run build",
-    "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release"
+    "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release",
+    "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages",
+    "test:a11y": "npm --prefix tools/a11y test"
   }
 }

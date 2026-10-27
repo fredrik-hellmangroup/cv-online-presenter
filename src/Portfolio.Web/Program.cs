@@ -4,6 +4,7 @@ using System.Xml.Linq;
 using Portfolio.Content;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
 var sitePath = Path.GetFullPath(Path.Combine(contentRoot, "..", "site.json"));
 var settings = JsonSerializer.Deserialize<SiteSettings>(await File.ReadAllTextAsync(sitePath), new JsonSerializerOptions(JsonSerializerDefaults.Web))
@@ -14,6 +15,16 @@ var validationErrors = service.Validate(documents, settings.SupportedLocales.ToH
 if (validationErrors.Count > 0) throw new ContentValidationException(validationErrors);
 var siteUrl = NormalizeSiteUrl(settings.SiteUrl);
 var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    if (app.Environment.IsProduction() && siteUrl?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true && context.Request.IsHttps)
+        context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
