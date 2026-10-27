@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
@@ -28,6 +30,7 @@ jobs:
       - run: npm ci --prefix client
       - run: npm ci --prefix tools/a11y
       - run: npm run build
+      - run: npm run build:metadata
       - run: npm run validate:content
       - run: npm audit --prefix client --audit-level=moderate
       - run: npm audit --prefix tools/a11y --audit-level=moderate
@@ -44,13 +47,15 @@ jobs:
       matrix:
         include:
           - browser: chromium
-            runner: ubuntu-24.04
+            runner: windows-latest
           - browser: firefox
             runner: ubuntu-24.04
           - browser: webkit
             runner: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json

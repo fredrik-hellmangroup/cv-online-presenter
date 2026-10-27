@@ -1,11 +1,19 @@
 # CV Online Presenter
 
-A .NET modular monolith and TypeScript client build for a content-driven consultant portfolio. The repository currently contains the product foundation; no personal profile facts are published by the starter.
+A .NET modular monolith and TypeScript client build for a content-driven consultant portfolio. Content is maintained in the [`cv-online-presenter-content`](https://github.com/fredrik-hellmangroup/cv-online-presenter-content) repository and pinned here as a Git submodule revision. The template publishes no personal profile facts.
 
 ## Requirements
 
 - .NET SDK 10.0.401 (pinned in `global.json`)
 - Node.js 24 and npm
+
+Clone with the pinned content revision:
+
+```powershell
+git clone --recurse-submodules https://github.com/fredrik-hellmangroup/cv-online-presenter.git
+```
+
+For an existing checkout, run `git submodule update --init --recursive` before building.
 
 ## Build
 
@@ -26,4 +34,4 @@ See [docs/architecture.md](docs/architecture.md) for project responsibilities an
 
 ## Content, deployment, and licensing
 
-Content schemas and publishing rules will be introduced in subsequent slices. Deployment requires an approved environment configuration; no domain, credentials, or production endpoint is included in this repository. The repository license is MIT.
+Content schemas and templates live in the content repository, with its own validation workflow. Updating content means merging a content change, then updating this repository's submodule pointer in a separate app PR. The submodule commit records the exact content revision used by an app build. Deployment requires approved environment configuration; no domain, credentials, or production endpoint is included here. Both repositories use the MIT license.

@@ -101,7 +101,7 @@ static string ResolveContentRoot(string webRoot)
 {
     var candidates = new[]
     {
-        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "pages")),
+        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "content", "pages")),
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "content", "pages")),
         Path.GetFullPath(Path.Combine(webRoot, "content", "pages"))
     };
