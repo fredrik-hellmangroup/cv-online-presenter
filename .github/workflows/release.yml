@@ -1,0 +1,88 @@
+name: IIS release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --prefix client
+      - run: npm run build
+      - run: npm run build:metadata
+      - run: npm run validate:content
+      - run: dotnet restore CvOnlinePresenter.sln
+      - run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
+      - name: Create versioned IIS package
+        shell: pwsh
+        run: |
+          $package = "artifacts/cv-online-presenter-${{ github.ref_name }}.zip"
+          Compress-Archive -Path "artifacts/publish/*" -DestinationPath $package -CompressionLevel Optimal
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: cv-online-presenter-${{ github.ref_name }}
+          path: artifacts/cv-online-presenter-${{ github.ref_name }}.zip
+          if-no-files-found: error
+          retention-days: 90
+
+  publish-release:
+    needs: package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: cv-online-presenter-${{ github.ref_name }}
+          path: artifact
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
+          if ($null -eq $package) { throw 'Versioned package is missing.' }
+          gh release create "${{ github.ref_name }}" $package.FullName --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --generate-notes
+
+  deploy-staging:
+    if: ${{ vars.IIS_STAGING_ENABLED == 'true' }}
+    needs: package
+    runs-on: [self-hosted, windows, iis-staging]
+    environment: staging
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: cv-online-presenter-${{ github.ref_name }}
+          path: artifact
+      - name: Extract versioned IIS package
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
+          if ($null -eq $package) { throw 'Versioned package is missing.' }
+          Expand-Archive -LiteralPath $package.FullName -DestinationPath artifact/publish -Force
+      - name: Deploy and verify IIS health
+        shell: pwsh
+        env:
+          IIS_STAGING_ROOT: ${{ vars.IIS_STAGING_ROOT }}
+          IIS_STAGING_SITE: ${{ vars.IIS_STAGING_SITE }}
+          IIS_STAGING_APP_POOL: ${{ vars.IIS_STAGING_APP_POOL }}
+          IIS_STAGING_HEALTH_URL: ${{ vars.IIS_STAGING_HEALTH_URL }}
+        run: .\scripts\deploy-iis.ps1 -ReleaseDirectory artifact/publish -DeploymentRoot $env:IIS_STAGING_ROOT -SiteName $env:IIS_STAGING_SITE -AppPoolName $env:IIS_STAGING_APP_POOL -HealthUrl $env:IIS_STAGING_HEALTH_URL -ReleaseId "${{ github.ref_name }}"
