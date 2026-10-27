@@ -67,6 +67,13 @@ public sealed class MarkdownContentService
         var publishedSlugs = items.Where(item => item.Status.Equals("published", StringComparison.OrdinalIgnoreCase))
             .Select(item => item.Slug.Trim('/')).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var errors = new List<ContentValidationError>();
+        foreach (var group in items.Where(item => item.Status.Equals("published", StringComparison.OrdinalIgnoreCase))
+                     .GroupBy(item => item.Locale, StringComparer.OrdinalIgnoreCase))
+        {
+            AddDuplicates(group, item => item.Slug, "slug");
+            AddDuplicates(group, item => item.Title, "title");
+            AddDuplicates(group, item => item.Description, "description");
+        }
 
         foreach (var document in items)
         {
@@ -111,6 +118,13 @@ public sealed class MarkdownContentService
         }
 
         return errors;
+
+        void AddDuplicates(IEnumerable<ContentDocument> group, Func<ContentDocument, string> select, string field)
+        {
+            foreach (var duplicates in group.GroupBy(select, StringComparer.OrdinalIgnoreCase).Where(values => values.Count() > 1))
+                foreach (var document in duplicates)
+                    errors.Add(new(document.SourcePath, $"Published {field} '{duplicates.Key}' must be unique in locale '{document.Locale}'."));
+        }
     }
 
     public string Render(string markdown)
