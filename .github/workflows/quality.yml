@@ -47,7 +47,7 @@ jobs:
       matrix:
         include:
           - browser: chromium
-            runner: ubuntu-24.04
+            runner: windows-latest
           - browser: firefox
             runner: ubuntu-24.04
           - browser: webkit
