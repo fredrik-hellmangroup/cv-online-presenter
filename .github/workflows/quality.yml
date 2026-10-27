@@ -38,11 +38,17 @@ jobs:
   browser-quality:
     needs: build-and-security
     timeout-minutes: 20
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        include:
+          - browser: chromium
+            runner: ubuntu-24.04
+          - browser: firefox
+            runner: ubuntu-24.04
+          - browser: webkit
+            runner: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-dotnet@v6.0.0
@@ -53,7 +59,10 @@ jobs:
           node-version: 24
       - run: dotnet build CvOnlinePresenter.sln --configuration Release
       - run: npm ci --prefix tools/a11y
-      - run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
+      - if: matrix.runner == 'ubuntu-24.04'
+        run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
+      - if: matrix.runner == 'windows-latest'
+        run: npx --prefix tools/a11y playwright install ${{ matrix.browser }}
       - run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
 
 
