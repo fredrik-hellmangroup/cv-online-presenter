@@ -15,6 +15,13 @@ var validationErrors = service.Validate(documents, settings.SupportedLocales.ToH
 if (validationErrors.Count > 0) throw new ContentValidationException(validationErrors);
 var siteUrl = NormalizeSiteUrl(settings.SiteUrl);
 var app = builder.Build();
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    context.Response.ContentType = "text/plain; charset=utf-8";
+    context.Response.Headers["Cache-Control"] = "no-store";
+    await context.Response.WriteAsync("Ett oväntat fel inträffade.");
+}));
 app.Use(async (context, next) =>
 {
     context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -78,6 +85,15 @@ app.MapGet("/robots.txt", (HttpContext context) =>
         return Results.Text("User-agent: *\nDisallow: /\n", "text/plain; charset=utf-8");
     }
     return Results.Text($"User-agent: *\nAllow: /\nSitemap: {siteUrl}/sitemap.xml\n", "text/plain; charset=utf-8");
+});
+
+app.MapFallback((HttpContext context) =>
+{
+    context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    var locale = settings.SupportedLocales.FirstOrDefault() ?? "sv-SE";
+    var title = $"Sidan hittades inte · {settings.SiteName}";
+    var html = $"<!doctype html><html lang=\"{Encode(locale)}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{Encode(title)}</title><meta name=\"robots\" content=\"noindex, nofollow\"><link rel=\"stylesheet\" href=\"/css/site.css\"></head><body><a class=\"skip-link\" href=\"#main\">Hoppa till innehåll</a><header><a class=\"brand\" href=\"/\">{Encode(settings.SiteName)}</a><nav aria-label=\"Huvudnavigation\"><a href=\"/profile\">Profil</a><a href=\"/services\">Tjänster</a><a href=\"/projects\">Projekt</a><a href=\"/contact\">Kontakt</a></nav></header><main id=\"main\"><article><h1>Sidan hittades inte</h1><p>Adressen är fel eller sidan har flyttats.</p><p><a href=\"/\">Till startsidan</a></p></article></main><footer>{Encode(settings.SiteName)}</footer></body></html>";
+    return Results.Content(html, "text/html; charset=utf-8", statusCode: StatusCodes.Status404NotFound);
 });
 
 app.Run();
