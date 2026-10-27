@@ -37,6 +37,7 @@ jobs:
 
   browser-quality:
     needs: build-and-security
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -52,5 +53,7 @@ jobs:
           node-version: 24
       - run: dotnet build CvOnlinePresenter.sln --configuration Release
       - run: npm ci --prefix tools/a11y
-      - run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
+      - run: npx --prefix tools/a11y playwright install ${{ matrix.browser }}
       - run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
+
+
