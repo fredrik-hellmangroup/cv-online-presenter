@@ -1,6 +1,6 @@
 # Accessibility and responsive quality checks
 
-`npm --prefix tools/a11y test` checks the published page templates in Chromium, Firefox, and WebKit. It checks for horizontal overflow at 320, 360, 768, and 1440 CSS pixels, then at 720 CSS pixels to cover the content width produced by 200% zoom on a 1440-pixel desktop viewport. Chromium runs axe-core against WCAG 2.0, 2.1, and 2.2 A/AA rules and fails for critical or serious violations.
+`npm run test:a11y` builds the client bundle and checks the published page templates in Chromium, Firefox, and WebKit. It checks for horizontal overflow at 320, 360, 768, and 1440 CSS pixels, then at 720 CSS pixels to cover the content width produced by 200% zoom on a 1440-pixel desktop viewport. Chromium runs axe-core against WCAG 2.0, 2.1, and 2.2 A/AA rules in both themes and fails for critical or serious violations. It also checks theme controls and the optional easter egg with keyboard interaction.
 
 ## Manual release checklist
 
