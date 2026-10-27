@@ -101,9 +101,9 @@ static string ResolveContentRoot(string webRoot)
 {
     var candidates = new[]
     {
-        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "pages")),
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "content", "pages")),
-        Path.GetFullPath(Path.Combine(webRoot, "content", "pages"))
+        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "content", "pages")),
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "content", "content", "pages")),
+        Path.GetFullPath(Path.Combine(webRoot, "content", "content", "pages"))
     };
     return candidates.FirstOrDefault(Directory.Exists)
         ?? throw new DirectoryNotFoundException("Could not locate the content/pages directory.");

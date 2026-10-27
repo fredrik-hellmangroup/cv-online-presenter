@@ -4,7 +4,8 @@
   "scripts": {
     "build": "npm --prefix client run build",
     "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release",
-    "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages",
+    "build:metadata": "node scripts/write-build-metadata.mjs",
+    "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/content/pages",
     "test:a11y": "npm --prefix tools/a11y test"
   }
 }

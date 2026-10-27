@@ -1,0 +1,3 @@
+[submodule "content"]
+	path = content
+	url = https://github.com/fredrik-hellmangroup/cv-online-presenter-content.git
