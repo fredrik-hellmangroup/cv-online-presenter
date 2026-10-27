@@ -18,6 +18,8 @@ npm run build:dotnet
 
 Run the web host with `dotnet run --project src/Portfolio.Web`.
 
+Run accessibility and responsive checks with `npm ci --prefix tools/a11y` followed by `npm run test:a11y`. See [docs/accessibility.md](docs/accessibility.md) for the manual release checklist and security checks.
+
 ## Modules
 
 See [docs/architecture.md](docs/architecture.md) for project responsibilities and the allowed dependency direction. Architecture decisions available to this baseline are recorded in [docs/adr](docs/adr/README.md).

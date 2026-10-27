@@ -60,3 +60,6 @@ nunit-*.xml
 node_modules/
 client/node_modules/
 client/wwwroot/js/
+tools/a11y/node_modules/
+tools/a11y/test-results/
+tools/a11y/playwright-report/
