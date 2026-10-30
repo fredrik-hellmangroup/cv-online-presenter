@@ -2,6 +2,7 @@
   "name": "cv-online-presenter",
   "private": true,
   "scripts": {
+    "check:architecture": "node scripts/check-module-boundaries.mjs",
     "build": "npm --prefix client run build && node scripts/copy-client-assets.mjs",
     "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release",
     "build:metadata": "node scripts/write-build-metadata.mjs",

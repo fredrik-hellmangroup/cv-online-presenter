@@ -1,21 +1,49 @@
-using System.Net;
-using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
+using System.Diagnostics;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Http.HttpResults;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Portfolio.Content;
+using Portfolio.Infrastructure;
+using Portfolio.Web;
+using Portfolio.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+builder.Services.AddSingleton<TimeProvider, SystemReleaseClock>();
+builder.Services.AddRazorComponents();
+builder.Services.AddHttpContextAccessor();
+var releaseIdentity = ReleaseIdentity.Load(builder.Environment.ContentRootPath);
+builder.Services.AddSingleton(releaseIdentity);
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("cv-online-presenter", serviceVersion: releaseIdentity.BuildId))
+    .WithTracing(tracing =>
+    {
+        tracing.AddSource(PortfolioTelemetry.InstrumentationName);
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"])) tracing.AddOtlpExporter();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(PortfolioTelemetry.InstrumentationName);
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"])) metrics.AddOtlpExporter();
+    });
+
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
-var sitePath = Path.GetFullPath(Path.Combine(contentRoot, "..", "site.json"));
-var settings = JsonSerializer.Deserialize<SiteSettings>(await File.ReadAllTextAsync(sitePath), new JsonSerializerOptions(JsonSerializerDefaults.Web))
-    ?? throw new InvalidOperationException("The content/site.json configuration is invalid.");
+var loader = new ContentSnapshotLoader();
+var initialSnapshot = await loader.LoadAsync(contentRoot);
+var store = new ContentSnapshotStore(initialSnapshot, loader);
 var service = new MarkdownContentService();
-var documents = await service.LoadDirectoryAsync(contentRoot);
-var validationErrors = service.Validate(documents, settings.SupportedLocales.ToHashSet(StringComparer.OrdinalIgnoreCase));
-if (validationErrors.Count > 0) throw new ContentValidationException(validationErrors);
-var siteUrl = NormalizeSiteUrl(settings.SiteUrl);
+builder.Services.AddSingleton(store);
+builder.Services.AddSingleton(provider => new SiteContent(store, provider.GetRequiredService<IHttpContextAccessor>(), service));
+
 var app = builder.Build();
-app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+var siteContent = app.Services.GetRequiredService<SiteContent>();
+if (app.Environment.IsDevelopment()) app.UseDeveloperExceptionPage();
+else app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
     context.Response.ContentType = "text/plain; charset=utf-8";
@@ -24,95 +52,114 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 }));
 app.Use(async (context, next) =>
 {
+    context.Items[typeof(ContentSnapshot)] = store.Current;
     context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Cache-Control"] = "no-cache";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-    if (app.Environment.IsProduction() && siteUrl?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true && context.Request.IsHttps)
+    if (app.Environment.IsProduction() && siteContent.SiteUrl?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true && context.Request.IsHttps)
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     await next();
 });
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapGet("/health", () => Results.Json(new { status = "ok" }));
-
-var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+app.UseRouting();
+app.UseAntiforgery();
+app.Use(async (context, next) =>
 {
-    ["/"] = "home",
-    ["/profile"] = "profile",
-    ["/services"] = "services",
-    ["/contact"] = "contact",
-    ["/projects"] = "projects"
-};
-
-foreach (var (route, slug) in routes)
-{
-    app.MapGet(route, (HttpContext context) =>
+    var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched";
+    var start = Stopwatch.GetTimestamp();
+    using var activity = PortfolioTelemetry.ActivitySource.StartActivity("http.request");
+    activity?.SetTag("http.route", route);
+    activity?.SetTag("service.version", releaseIdentity.BuildId);
+    activity?.SetTag("app.revision", releaseIdentity.AppRevision);
+    activity?.SetTag("content.revision", releaseIdentity.ContentRevision);
+    using (app.Logger.BeginScope(new Dictionary<string, object>
     {
-        var page = PublishedPage(slug);
-        if (page is null) return Results.NotFound();
-        return RenderPage(context, page, route);
-    });
-}
-
-app.MapGet("/projects/{slug}", (HttpContext context, string slug) =>
-{
-    var project = documents.FirstOrDefault(item => item.Type == "project"
-        && item.Slug.Equals($"projects/{slug}", StringComparison.OrdinalIgnoreCase)
-        && IsPublished(item));
-    return project is null ? Results.NotFound() : RenderPage(context, project, $"/projects/{slug}");
+        ["BuildId"] = releaseIdentity.BuildId,
+        ["AppRevision"] = releaseIdentity.AppRevision,
+        ["ContentRevision"] = releaseIdentity.ContentRevision
+    }))
+    {
+        try
+        {
+            await next();
+        }
+        catch (Exception exception)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            app.Logger.LogError(exception, "Request failed for route {Route}", route);
+            throw;
+        }
+        finally
+        {
+            var duration = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            var tags = new TagList { { "http.route", route }, { "http.response.status_code", context.Response.StatusCode } };
+            PortfolioTelemetry.Requests.Add(1, tags);
+            PortfolioTelemetry.Duration.Record(duration, tags);
+            activity?.SetTag("http.response.status_code", context.Response.StatusCode);
+        }
+    }
 });
-
+app.MapGet("/health", () => Results.Json(new { status = "ok" }));
+app.MapGet("/api/search", (string? q) => Results.Json(siteContent.Search(q)));
 app.MapGet("/sitemap.xml", () =>
 {
-    if (siteUrl is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-    var paths = routes.Select(pair => (pair.Key, PublishedPage(pair.Value)))
-        .Where(item => item.Item2 is not null)
-        .Select(item => item.Key)
-        .Concat(documents.Where(item => item.Type == "project" && IsPublished(item))
-            .Select(item => $"/projects/{item.Slug.Split('/').Last()}"));
+    if (siteContent.SiteUrl is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    var paths = SiteContent.CoreRoutes.Keys.Where(path => siteContent.FindByPath(path) is not null)
+        .Concat(siteContent.PublishedProjects.Select(project => $"/projects/{project.Slug.Split('/').Last()}"));
     var xml = new XDocument(new XElement("urlset",
         new XAttribute("xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9"),
-        paths.Distinct().Select(path => new XElement("url", new XElement("loc", $"{siteUrl}{path}")))));
+        paths.Distinct().Select(path => new XElement("url", new XElement("loc", $"{siteContent.SiteUrl}{path}")))));
     return Results.Text(xml.ToString(), "application/xml; charset=utf-8");
 });
-
 app.MapGet("/robots.txt", (HttpContext context) =>
 {
-    if (!app.Environment.IsProduction() || siteUrl is null)
+    if (!app.Environment.IsProduction() || siteContent.SiteUrl is null)
     {
         context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
         return Results.Text("User-agent: *\nDisallow: /\n", "text/plain; charset=utf-8");
     }
-    return Results.Text($"User-agent: *\nAllow: /\nSitemap: {siteUrl}/sitemap.xml\n", "text/plain; charset=utf-8");
+    return Results.Text($"User-agent: *\nAllow: /\nSitemap: {siteContent.SiteUrl}/sitemap.xml\n", "text/plain; charset=utf-8");
 });
-
+var releasesRoot = builder.Configuration["Content:ReleasesRoot"];
+var activationToken = builder.Configuration["Content:ActivationToken"];
+if (!string.IsNullOrWhiteSpace(releasesRoot) && !string.IsNullOrWhiteSpace(activationToken))
+{
+    var releaseDirectory = Path.GetFullPath(releasesRoot);
+    app.MapPost("/internal/content/{action}/{releaseId}", async (HttpContext context, string action, string releaseId) =>
+    {
+        if (!context.Request.IsHttps || !IsAuthorized(context, activationToken)) return Results.NotFound();
+        if (action is not ("preview" or "activate") || releaseId.Length == 0
+            || releaseId.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_')))
+            return Results.BadRequest();
+        var pages = Path.Combine(releaseDirectory, releaseId, "pages");
+        try
+        {
+            var candidate = await loader.LoadAsync(pages, context.RequestAborted);
+            var diff = ContentSnapshotLoader.Compare(store.Current, candidate);
+            if (action == "activate")
+            {
+                diff = await store.ActivateAsync(pages, context.RequestAborted);
+                app.Logger.LogInformation("Activated content release {ReleaseId} with snapshot {Version}", releaseId, diff.ToVersion);
+            }
+            return Results.Json(diff);
+        }
+        catch (Exception exception) when (exception is ContentValidationException or IOException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return Results.BadRequest(new { error = exception.Message });
+        }
+    });
+}
+app.MapRazorComponents<App>();
 app.MapFallback((HttpContext context) =>
 {
+    context.Response.StatusCode = StatusCodes.Status404NotFound;
     context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
-    var locale = settings.SupportedLocales.FirstOrDefault() ?? "sv-SE";
-    var title = $"Sidan hittades inte · {settings.SiteName}";
-    var html = $"<!doctype html><html lang=\"{Encode(locale)}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{Encode(title)}</title><meta name=\"robots\" content=\"noindex, nofollow\"><link rel=\"stylesheet\" href=\"/css/site.css\"></head><body><a class=\"skip-link\" href=\"#main\">Hoppa till innehåll</a><header><a class=\"brand\" href=\"/\">{Encode(settings.SiteName)}</a><nav aria-label=\"Huvudnavigation\"><a href=\"/profile\">Profil</a><a href=\"/services\">Tjänster</a><a href=\"/projects\">Projekt</a><a href=\"/contact\">Kontakt</a></nav></header><main id=\"main\"><article><h1>Sidan hittades inte</h1><p>Adressen är fel eller sidan har flyttats.</p><p><a href=\"/\">Till startsidan</a></p></article></main><footer>{Encode(settings.SiteName)}</footer></body></html>";
-    return Results.Content(html, "text/html; charset=utf-8", statusCode: StatusCodes.Status404NotFound);
+    return new RazorComponentResult<App>();
 });
-
 app.Run();
-
-ContentDocument? PublishedPage(string slug) => documents.FirstOrDefault(item => item.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase) && IsPublished(item));
-bool IsPublished(ContentDocument page) => page.Status == "published" && settings.SupportedLocales.Contains(page.Locale, StringComparer.OrdinalIgnoreCase);
-
-IResult RenderPage(HttpContext context, ContentDocument page, string path)
-{
-    if (!app.Environment.IsProduction() || siteUrl is null)
-        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
-    var canonical = siteUrl is null ? "" : $"<link rel=\"canonical\" href=\"{Encode(siteUrl + path)}\"><meta property=\"og:url\" content=\"{Encode(siteUrl + path)}\">";
-    var contact = path == "/contact" && IsValidEmail(settings.ContactEmail)
-        ? $"<p><a href=\"mailto:{Encode(settings.ContactEmail!)}\">{Encode(settings.ContactEmail!)}</a></p>"
-        : "";
-    var title = $"{page.Title} · {settings.SiteName}";
-    var html = $"<!doctype html><html lang=\"{Encode(page.Locale)}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{Encode(title)}</title><meta name=\"description\" content=\"{Encode(page.Description)}\"><meta property=\"og:type\" content=\"website\"><meta property=\"og:title\" content=\"{Encode(title)}\"><meta property=\"og:description\" content=\"{Encode(page.Description)}\">{canonical}<link rel=\"stylesheet\" href=\"/css/site.css\"></head><body><a class=\"skip-link\" href=\"#main\">Hoppa till innehåll</a><header><a class=\"brand\" href=\"/\">{Encode(settings.SiteName)}</a><nav aria-label=\"Huvudnavigation\"><a href=\"/profile\">Profil</a><a href=\"/services\">Tjänster</a><a href=\"/projects\">Projekt</a><a href=\"/contact\">Kontakt</a></nav><button id=\"theme-toggle\" type=\"button\" aria-pressed=\"false\" hidden>Växla tema</button></header><main id=\"main\"><article>{service.Render(page.Markdown)}{contact}</article></main><footer><span>{Encode(settings.SiteName)}</span><button id=\"easter-egg-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"easter-egg\" hidden>Visa en överraskning</button><p id=\"easter-egg\" hidden>✨ Du hittade en liten detalj i portfoliomallen.</p></footer><script type=\"module\" src=\"/js/index.js\"></script></body></html>";
-    return Results.Content(html, "text/html; charset=utf-8");
-}
 
 static string ResolveContentRoot(string webRoot)
 {
@@ -126,17 +173,13 @@ static string ResolveContentRoot(string webRoot)
         ?? throw new DirectoryNotFoundException("Could not locate the content/pages directory.");
 }
 
-static string? NormalizeSiteUrl(string? value)
+static bool IsAuthorized(HttpContext context, string expected)
 {
-    if (string.IsNullOrWhiteSpace(value)) return null;
-    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http"))
-        throw new InvalidOperationException("siteUrl must be an absolute HTTP or HTTPS URL.");
-    return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+    var actual = context.Request.Headers["X-Content-Activation-Token"].ToString();
+    if (string.IsNullOrEmpty(actual)) return false;
+    return CryptographicOperations.FixedTimeEquals(
+        SHA256.HashData(Encoding.UTF8.GetBytes(actual)),
+        SHA256.HashData(Encoding.UTF8.GetBytes(expected)));
 }
 
-static bool IsValidEmail(string? value) =>
-    !string.IsNullOrWhiteSpace(value) && System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Address == value;
-
-static string Encode(string value) => WebUtility.HtmlEncode(value);
-
-internal sealed record SiteSettings(string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl);
+public partial class Program { }

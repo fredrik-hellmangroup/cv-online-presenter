@@ -1,6 +1,6 @@
 # Architecture
 
-The application is a single deployable ASP.NET Core application with explicit module projects. Client TypeScript is built independently into static assets.
+The application is a single deployable ASP.NET Core Blazor Web App using Static SSR for public pages, with explicit module projects. Browser behavior is progressive TypeScript built independently into static assets; no interactive Blazor render mode is enabled. Pages remain readable without JavaScript.
 
 | Project | Responsibility | Allowed dependencies |
 | --- | --- | --- |
@@ -14,3 +14,5 @@ The application is a single deployable ASP.NET Core application with explicit mo
 Dependencies point inward to contracts and content capabilities. Module projects do not depend on Web or on each other in a cycle. The Web host is the composition root. The client build has no dependency on server modules.
 
 The solution and client toolchain are pinned/documented so the same commands work locally and in CI.
+
+`npm run check:architecture` checks the project-reference allowlist, cycles, and leftover `Class1` placeholders in CI. The Web host remains the only composition root. `Portfolio.Contracts` defines publication policy; `Portfolio.Publishing` implements it. `Portfolio.Experience` owns the core route map, and `Portfolio.Infrastructure` supplies the host clock adapter. Deeper experience composition and content-source adapters are deferred until the classified snapshot and discovery slices (#26–#27); these modules must not acquire outward dependencies in the meantime.

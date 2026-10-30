@@ -22,9 +22,9 @@ for (const route of routes) {
     await page.goto(route);
     await expect(page.locator('main h1')).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Huvudnavigation' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Profil', exact: true })).toBeVisible();
-    const pageColor = await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor);
-    expect(pageColor).toBe('rgb(18, 24, 28)');
+    await expect(page.getByRole('navigation', { name: 'Huvudnavigation' }).getByRole('link', { name: 'Profil', exact: true })).toBeVisible();
+    const colorScheme = await page.locator('html').evaluate(element => getComputedStyle(element).colorScheme);
+    expect(colorScheme).toBe('dark');
     await expect(page.getByRole('button', { name: 'Växla tema' })).toBeHidden();
     await context.close();
   });

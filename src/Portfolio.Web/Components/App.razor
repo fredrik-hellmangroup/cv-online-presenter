@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="sv-SE">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <HeadOutlet />
+    <link rel="stylesheet" href="/css/site.css?v=@Content.Version" />
+</head>
+<body>
+    <Routes />
+    <dialog id="command-palette" aria-label="Sök i CV:t">
+        <form method="get" action="/search" role="search">
+            <label for="command-query">Sök i CV:t</label>
+            <input id="command-query" name="q" type="search" maxlength="100" autocomplete="off" />
+            <button type="submit">Visa alla resultat</button>
+            <button id="command-close" type="button">Stäng</button>
+        </form>
+        <ul id="command-results" aria-live="polite"></ul>
+    </dialog>
+    <script type="module" src="/js/index.js?v=@Content.Version"></script>
+</body>
+</html>
+
+@code {
+    [Inject] private SiteContent Content { get; set; } = default!;
+}
