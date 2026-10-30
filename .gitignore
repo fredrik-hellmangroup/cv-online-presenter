@@ -65,3 +65,4 @@ tools/a11y/test-results/
 tools/a11y/playwright-report/
 src/Portfolio.Web/wwwroot/build-metadata.json
 src/Portfolio.Web/wwwroot/js/
+src/Portfolio.Web/wwwroot/css/utilities.css

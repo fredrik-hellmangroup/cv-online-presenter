@@ -6,6 +6,7 @@
   --muted: #526174;
   --link: #17636b;
   --focus: #b8562d;
+  --season-accent: transparent;
   font-family: system-ui, sans-serif;
   color: var(--text);
   background: var(--page-bg);
@@ -19,6 +20,22 @@
   --muted: #c0cbd5;
   --link: #91d0d0;
   --focus: #ffc08a;
+}
+
+:root[data-calendar-layer="christmas"] {
+  --season-accent: #b8562d;
+}
+
+:root[data-calendar-layer="new-year"] {
+  --season-accent: #17636b;
+}
+
+:root[data-theme="dark"][data-calendar-layer="christmas"] {
+  --season-accent: #ffc08a;
+}
+
+:root[data-theme="dark"][data-calendar-layer="new-year"] {
+  --season-accent: #91d0d0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,7 +53,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; line-height: 1.6; background: var(--page-bg); color: var(--text); }
 header, main, footer { width: min(100% - 2rem, 68rem); margin-inline: auto; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.25rem; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.25rem; border-top: .25rem solid var(--season-accent); }
 nav { display: flex; flex-wrap: wrap; gap: 1rem; }
 a { color: var(--link); }
 a:focus-visible, button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
@@ -44,7 +61,7 @@ button { font: inherit; color: var(--text); background: var(--surface); border: 
 .brand { font-weight: 700; text-decoration: none; }
 main { min-height: 65vh; padding-block: 3rem; }
 article { max-width: 48rem; padding: clamp(1.25rem, 5vw, 3rem); background: var(--surface); border-radius: 1rem; }
-h1 { font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.1; }
+h1 { font-family: Georgia, Cambria, serif; font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.1; letter-spacing: -.025em; }
 footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding-block: 2rem; color: var(--muted); }
 footer p { flex-basis: 100%; margin: 0; color: var(--text); }
 .skip-link { position: absolute; left: 1rem; top: -5rem; z-index: 2; padding: .5rem 1rem; background: var(--surface); }

@@ -8,6 +8,7 @@
 - Check the primary flow with NVDA + Firefox or VoiceOver + Safari, including headings, navigation landmark, page language, link names, and contact path.
 - Check current stable Chrome, Firefox, Edge, Safari, mobile Chrome, and mobile Safari at 320, 360, 768, and 1440 CSS pixels and 200% zoom. Record browser versions and results in release notes.
 - Check color contrast in each theme and confirm reduced-motion preferences are respected after themes are enabled.
+- The browser suite checks both Christmas and New Year calendar layers in light and dark mode under reduced motion. Their decorative border tokens do not alter foreground/background contrast.
 - Review lab performance measurements for each release. Record LCP, CLS, and INP when field data is available.
 - Verify TLS and security headers in the deployed environment; these depend on the approved IIS/reverse-proxy configuration.
 

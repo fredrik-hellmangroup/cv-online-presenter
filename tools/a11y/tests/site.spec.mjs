@@ -61,6 +61,22 @@ for (const route of routes) {
     await expect(page.getByText('Du hittade en liten detalj i portfoliomallen.')).toBeVisible();
   });
 
+  test(`${route} seasonal layers retain contrast and reduced motion`, async ({ page, browserName }) => {
+    if (browserName !== 'chromium') test.skip();
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'light' });
+    await page.goto(route);
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ reducedMotion: 'reduce', colorScheme });
+      for (const layer of ['christmas', 'new-year']) {
+        await page.locator('html').evaluate((element, value) => { element.dataset.calendarLayer = value; }, layer);
+        const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(audit.violations.filter(item => item.id === 'color-contrast')).toEqual([]);
+        const motion = await page.locator('header').evaluate(element => getComputedStyle(element).animationDuration);
+        expect(parseFloat(motion)).toBeLessThanOrEqual(0.00001);
+      }
+    }
+  });
+
   test(`${route} has page language and a keyboard skip link`, async ({ page, browserName }) => {
     await page.goto(route);
     await expect(page.locator('html')).toHaveAttribute('lang', 'sv-SE');

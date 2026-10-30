@@ -1,0 +1,8 @@
+@import "tailwindcss/utilities.css";
+@source "../../src/Portfolio.Web/Components/**/*.razor";
+
+@theme inline {
+  --color-ink: var(--text);
+  --color-paper: var(--surface);
+  --color-accent: var(--link);
+}
