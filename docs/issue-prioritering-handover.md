@@ -3,6 +3,10 @@
 **Datum:** 2026-10-29  
 **Repo:** [cv-online-presenter](https://github.com/fredrik-hellmangroup/cv-online-presenter)
 
+## Statusuppdatering 2026-10-30
+
+GitHub-status kontrollerad: #25–#27 och #29–#32 är stängda efter mergad app-PR #33 och content-PR #2. #28 är enda kvarvarande kodissue; #7 och #8 väntar på staging, och #11 är öppen som tracker. För #28 finns nu separata Theme/Easter Egg Engines, manifest, jul-/nyårslager och Tailwind-bygge på arbetsgren. Lokal verifiering: 5/5 klienttest, 16/16 .NET-test och 58 passerade/20 avsiktligt hoppade Playwright-test i Chromium, Firefox och WebKit. Stagingstatus är fortfarande 0 Environments, 0 self-hosted runners och 0 repository variables. Oregistrerade källdokument i app-repots rot har bevarats och ingår inte i kodändringen.
+
 ## Omfattning
 
 Genomgången hittade 11 öppna issues: #7, #8, #11 och #25–#32. Issue #11 är en samlande tracker för PRD-arbetet; dess kvarvarande arbete motsvaras redan av #7, #8 och #25–#32. Implementera alltså de tio konkreta uppföljningarna och stäng trackern sist.

@@ -1,10 +1,12 @@
 {
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.9.3"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test test/theme.test.mjs"
+    "build": "tsc -p tsconfig.json && tailwindcss -i src/utilities.css -o ../src/Portfolio.Web/wwwroot/css/utilities.css --minify",
+    "test": "npm run build && node --test test/*.test.mjs"
   }
 }
