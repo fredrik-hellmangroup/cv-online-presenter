@@ -1,0 +1,44 @@
+@page "/search"
+@inject SiteContent Content
+
+<PageTitle>Sök · @Content.Settings.SiteName</PageTitle>
+<HeadContent><meta name="robots" content="noindex, nofollow" /></HeadContent>
+<a class="skip-link" href="#main">Hoppa till innehåll</a>
+<header>
+    <a class="brand" href="/">@Content.Settings.SiteName</a>
+    <nav aria-label="Huvudnavigation">
+        <a href="/profile">Profil</a>
+        <a href="/services">Tjänster</a>
+        <a href="/projects">Projekt</a>
+        <a href="/cv">CV</a>
+        <a href="/search">Sök</a>
+        <a href="/contact">Kontakt</a>
+    </nav>
+    <button id="command-open" type="button" aria-haspopup="dialog" aria-controls="command-palette" hidden>Sök</button>
+</header>
+<main id="main">
+    <article>
+        <h1>Sök i CV:t</h1>
+        <form method="get" action="/search" role="search">
+            <label for="search-query">Sökord</label>
+            <input id="search-query" name="q" type="search" value="@Query" maxlength="100" />
+            <button type="submit">Sök</button>
+        </form>
+        @if (!string.IsNullOrWhiteSpace(Query))
+        {
+            <h2>Resultat</h2>
+            <ul>
+                @foreach (var result in Content.Search(Query))
+                {
+                    <li><a href="@result.Path">@result.Title</a> – @result.Description</li>
+                }
+            </ul>
+        }
+    </article>
+</main>
+<footer>@Content.Settings.SiteName</footer>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Query { get; set; }
+}

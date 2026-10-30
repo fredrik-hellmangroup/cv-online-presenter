@@ -1,3 +1,8 @@
+import { nextTheme, resolveTheme } from './theme.js';
+import { startCommandPalette } from './command-palette.js';
+
+startCommandPalette();
+
 const themeToggle = document.querySelector<HTMLButtonElement>('#theme-toggle');
 const easterEggToggle = document.querySelector<HTMLButtonElement>('#easter-egg-toggle');
 const easterEgg = document.querySelector<HTMLParagraphElement>('#easter-egg');
@@ -19,14 +24,14 @@ const applyTheme = (theme: 'light' | 'dark') => {
 
 if (themeToggle) {
   themeToggle.hidden = false;
-  applyTheme(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : systemTheme.matches ? 'dark' : 'light');
+  applyTheme(resolveTheme(savedTheme, systemTheme.matches));
   themeToggle.addEventListener('click', () => {
-    const nextTheme = root.dataset.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(nextTheme);
+    const updatedTheme = nextTheme(root.dataset.theme === 'dark' ? 'dark' : 'light');
+    applyTheme(updatedTheme);
     hasExplicitTheme = true;
     try {
-      window.localStorage.setItem('theme', nextTheme);
-      savedTheme = nextTheme;
+      window.localStorage.setItem('theme', updatedTheme);
+      savedTheme = updatedTheme;
     } catch {
       // Theme still changes for the current page when storage is unavailable.
     }

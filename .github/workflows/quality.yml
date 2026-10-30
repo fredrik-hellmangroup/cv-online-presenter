@@ -26,11 +26,15 @@ jobs:
             client/package-lock.json
             tools/a11y/package-lock.json
       - run: dotnet restore CvOnlinePresenter.sln
+      - run: dotnet restore tests/Portfolio.Tests/Portfolio.Tests.csproj
+      - run: npm run check:architecture
       - run: npm ci --prefix client
       - run: npm ci --prefix tools/a11y
       - run: npm run build
+      - run: npm --prefix client test
       - run: npm run build:metadata
       - run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
+      - run: dotnet test tests/Portfolio.Tests/Portfolio.Tests.csproj --configuration Release --no-restore
       - run: npm run validate:content
       - run: npm audit --prefix client --audit-level=moderate
       - run: npm audit --prefix tools/a11y --audit-level=moderate
