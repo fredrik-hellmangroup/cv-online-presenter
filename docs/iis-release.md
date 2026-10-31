@@ -1,6 +1,6 @@
 # IIS release pipeline
 
-Pushing a protected version tag (`vMAJOR.MINOR.PATCH`) validates the app, creates a framework-dependent IIS publish folder, embeds `build-metadata.json` with app/content commit IDs and the GitHub run ID, and packages it as `cv-online-presenter-<tag>.zip`. The workflow publishes that package in a GitHub Release and deploys the same validated artifact to the single Beebyte IIS environment.
+Pushing a protected version tag (`vMAJOR.MINOR.PATCH`) on a commit reachable from `main` validates the app, creates a framework-dependent IIS publish folder, embeds `build-metadata.json` with app/content commit IDs and the GitHub run ID, and packages it as `cv-online-presenter-<tag>.zip`. The workflow publishes that package in a GitHub Release and deploys the same validated artifact to the single Beebyte IIS environment.
 
 ## GitHub Environment
 
