@@ -26,6 +26,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$socketTimeoutMilliseconds = 15000
+
+if ($null -eq ('CvOnlinePresenter.Deployment.CertificateValidation' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System.Net.Security;
+
+namespace CvOnlinePresenter.Deployment
+{
+    public static class CertificateValidation
+    {
+        public static readonly RemoteCertificateValidationCallback AcceptAny =
+            (_, _, _, _) => true;
+    }
+}
+'@
+}
 
 function Format-WebDeployValue {
     param(
@@ -71,6 +87,32 @@ function Resolve-WebDeployEndpoint {
     return $builder.Uri.AbsoluteUri
 }
 
+function Invoke-TlsAuthentication {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Net.Security.SslStream]$Stream,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetHost,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TimeoutMessage
+    )
+
+    $options = [System.Net.Security.SslClientAuthenticationOptions]::new()
+    $options.TargetHost = $TargetHost
+    $cancellation = [System.Threading.CancellationTokenSource]::new($socketTimeoutMilliseconds)
+    try {
+        $Stream.AuthenticateAsClientAsync($options, $cancellation.Token).GetAwaiter().GetResult()
+    }
+    catch [System.OperationCanceledException] {
+        throw $TimeoutMessage
+    }
+    finally {
+        $cancellation.Dispose()
+    }
+}
+
 function Get-PinnedRemoteCertificate {
     param(
         [Parameter(Mandatory = $true)]
@@ -83,13 +125,24 @@ function Get-PinnedRemoteCertificate {
     $client = [System.Net.Sockets.TcpClient]::new()
     $stream = $null
     try {
-        $client.Connect($Endpoint.Host, $Endpoint.Port)
+        Write-Host "Connecting to $($Endpoint.Host):$($Endpoint.Port) for certificate pin validation."
+        $connectTask = $client.ConnectAsync($Endpoint.Host, $Endpoint.Port)
+        if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
+            throw "Timed out connecting to the Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+        }
+        $connectTask.GetAwaiter().GetResult()
+        $client.ReceiveTimeout = $socketTimeoutMilliseconds
+        $client.SendTimeout = $socketTimeoutMilliseconds
         $stream = [System.Net.Security.SslStream]::new(
             $client.GetStream(),
             $false,
-            { param($sender, $certificate, $chain, $errors) $true }
+            [CvOnlinePresenter.Deployment.CertificateValidation]::AcceptAny
         )
-        $stream.AuthenticateAsClient($Endpoint.Host)
+        Invoke-TlsAuthentication `
+            -Stream $stream `
+            -TargetHost $Endpoint.Host `
+            -TimeoutMessage "Timed out reading the Web Deploy TLS certificate after $socketTimeoutMilliseconds ms."
+        Write-Host 'Received the Web Deploy TLS certificate.'
         $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($stream.RemoteCertificate)
         $actualSha256 = $certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
         if (-not $actualSha256.Equals($ExpectedSha256, [StringComparison]::OrdinalIgnoreCase)) {
@@ -119,9 +172,20 @@ function Assert-TrustedEndpoint {
     $client = [System.Net.Sockets.TcpClient]::new()
     $stream = $null
     try {
-        $client.Connect($Endpoint.Host, $Endpoint.Port)
+        Write-Host "Connecting to $($Endpoint.Host):$($Endpoint.Port) with normal TLS validation."
+        $connectTask = $client.ConnectAsync($Endpoint.Host, $Endpoint.Port)
+        if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
+            throw "Timed out connecting to the trusted Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+        }
+        $connectTask.GetAwaiter().GetResult()
+        $client.ReceiveTimeout = $socketTimeoutMilliseconds
+        $client.SendTimeout = $socketTimeoutMilliseconds
         $stream = [System.Net.Security.SslStream]::new($client.GetStream(), $false)
-        $stream.AuthenticateAsClient($Endpoint.Host)
+        Invoke-TlsAuthentication `
+            -Stream $stream `
+            -TargetHost $Endpoint.Host `
+            -TimeoutMessage "Timed out validating the Web Deploy TLS certificate after $socketTimeoutMilliseconds ms."
+        Write-Host 'Normal TLS validation succeeded for the pinned Web Deploy certificate.'
     }
     finally {
         if ($null -ne $stream) {
@@ -212,6 +276,7 @@ try {
     else {
         Add-Content -LiteralPath $hostsPath -Value $hostsEntry -Encoding ascii
         $hostsEntryAdded = $true
+        Write-Host "Added a temporary hosts mapping for '$certificateDnsName'."
     }
 
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
@@ -223,6 +288,7 @@ try {
     if (-not $alreadyTrusted) {
         $store.Add($certificate)
         $certificateAdded = $true
+        Write-Host 'Added the pinned certificate to the current-user root store temporarily.'
     }
 
     Assert-TrustedEndpoint -Endpoint $trustedEndpoint.Uri
@@ -250,10 +316,12 @@ try {
         '-retryInterval:5000'
     )
 
+    Write-Host "Starting Web Deploy synchronization for site '$deploySiteName'."
     & $MsDeployPath @arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Web Deploy failed for site '$deploySiteName' with exit code $LASTEXITCODE."
     }
+    Write-Host "Web Deploy synchronization completed for site '$deploySiteName'."
 }
 finally {
     try {
