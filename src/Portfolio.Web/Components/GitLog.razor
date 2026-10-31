@@ -1,0 +1,91 @@
+@using System.Security.Cryptography
+@using System.Text
+@using Portfolio.Content
+
+<div class="git-graph">
+    <p class="git-graph-title"><span aria-hidden="true">$ </span>git log --graph --oneline</p>
+    <ol class="git-log" aria-label="Uppdragen som en tidslinje, nyast först">
+        @foreach (var row in graph.Rows)
+        {
+            var assignment = row.AssignmentIndex >= 0 ? Assignments[row.AssignmentIndex] : null;
+            <li class="git-row @RowClass(row)" data-keywords="@(assignment is null ? null : string.Join('|', assignment.Keywords))">
+                <svg class="git-lanes" width="@Width" height="@RowHeight" viewBox="0 0 @Width @RowHeight" aria-hidden="true" focusable="false">
+                    @foreach (var lane in row.ThroughLanes)
+                    {
+                        <line class="lane lane-@LaneColor(lane)" x1="@X(lane)" y1="@(row.Kind == GitRowKind.Head ? Mid : 0)" x2="@X(lane)" y2="@RowHeight" />
+                    }
+                    @if (row.Kind == GitRowKind.Head)
+                    {
+                        <line class="lane lane-0" x1="@X(0)" y1="@Mid" x2="@X(0)" y2="@RowHeight" />
+                    }
+                    else
+                    {
+                        <line class="lane lane-0" x1="@X(0)" y1="0" x2="@X(0)" y2="@(IsLast(row) ? Mid : RowHeight)" />
+                        <line class="lane lane-@LaneColor(row.Lane)" x1="@X(row.Lane)" y1="@(row.Kind == GitRowKind.Merge ? Mid : 0)" x2="@X(row.Lane)" y2="@(row.Kind == GitRowKind.Merge ? RowHeight : Mid)" />
+                        <line class="lane lane-@LaneColor(row.Lane)" x1="@X(0)" y1="@Mid" x2="@X(row.Lane)" y2="@Mid" />
+                    }
+                    <circle class="dot @(row.Kind == GitRowKind.Merge ? "merge" : "branch") lane-@LaneColor(row.Lane)" cx="@X(row.Lane)" cy="@Mid" r="@(row.Kind == GitRowKind.Head ? 5 : 4)" />
+                </svg>
+                @if (row.Kind == GitRowKind.Head)
+                {
+                    <span class="git-text"><span class="git-ref">HEAD → main</span> <span class="git-msg">@HeadLabel</span></span>
+                }
+                else if (assignment is not null && row.Kind == GitRowKind.Branch)
+                {
+                    <span class="git-text">
+                        <span class="git-hash">@Hash(assignment.Title, "b")</span>
+                        <span class="git-year">@row.Year</span>
+                        @if (!string.IsNullOrEmpty(assignment.Id))
+                        {
+                            <a class="git-msg" href="#@assignment.Id">@assignment.Title</a>
+                        }
+                        else
+                        {
+                            <span class="git-msg">@assignment.Title</span>
+                        }
+                        <span class="git-role">@assignment.Role</span>
+                    </span>
+                }
+                else if (assignment is not null)
+                {
+                    <span class="git-text muted">
+                        <span class="git-hash">@Hash(assignment.Title, "m")</span>
+                        <span class="git-year">@row.Year</span>
+                        <span class="git-msg">merge: @assignment.Title</span>
+                    </span>
+                }
+            </li>
+        }
+    </ol>
+</div>
+
+@code {
+    private const int LaneWidth = 16;
+    private const int RowHeight = 30;
+    private const int Mid = RowHeight / 2;
+    private GitGraph graph = new([], 1);
+
+    [Parameter, EditorRequired] public IReadOnlyList<CvAssignment> Assignments { get; set; } = [];
+    [Parameter] public string HeadLabel { get; set; } = string.Empty;
+
+    private int Width => graph.LaneCount * LaneWidth + 8;
+
+    protected override void OnParametersSet() => graph = GitGraphLayout.Build(Assignments);
+
+    private static int X(int lane) => 10 + lane * LaneWidth;
+
+    private static int LaneColor(int lane) => lane % 6;
+
+    private bool IsLast(GitGraphRow row) => ReferenceEquals(row, graph.Rows[^1]);
+
+    private static string RowClass(GitGraphRow row) => row.Kind switch
+    {
+        GitRowKind.Head => "head",
+        GitRowKind.Merge => "merge",
+        _ => "branch"
+    };
+
+    // A short, stable pseudo commit id so the log reads like git output without inventing facts.
+    private static string Hash(string title, string kind) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(kind + title)))[..7].ToLowerInvariant();
+}

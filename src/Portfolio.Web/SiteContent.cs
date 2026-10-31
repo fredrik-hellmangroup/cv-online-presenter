@@ -25,6 +25,31 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
 
     public string Render(ContentDocument document) => renderer.Render(document.Markdown);
 
+    // The CV view is derived from the rendered CV page, so it is cached per content snapshot.
+    private static readonly Lock CvLock = new();
+    private static string? cachedCvVersion;
+    private static CvView? cachedCv;
+
+    public CvView? Cv
+    {
+        get
+        {
+            var snapshot = Snapshot;
+            lock (CvLock)
+            {
+                if (cachedCvVersion == snapshot.Version) return cachedCv;
+            }
+            var document = FindByPath("/cv");
+            var view = document is null ? null : CvPresenter.Build(Render(document));
+            lock (CvLock)
+            {
+                cachedCvVersion = snapshot.Version;
+                cachedCv = view;
+            }
+            return view;
+        }
+    }
+
     public IReadOnlyList<SearchResult> Search(string? query) => PortfolioSearch.Find(
         Snapshot, query, new PublicationPolicy(Snapshot.Identity.SupportedLocales.ToHashSet(StringComparer.OrdinalIgnoreCase)));
 

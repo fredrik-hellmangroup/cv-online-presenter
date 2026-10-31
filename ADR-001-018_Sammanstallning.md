@@ -15,7 +15,7 @@ Sammanställning av fastställda arkitekturbeslut för en publik, IIS-hostad .NE
 | ADR-003 | Frontend och rendering | B – Balanced Hybrid |
 | ADR-004 | Theme & Easter Egg Engine | B – Modulär Experience Architecture |
 | ADR-005 | Content Delivery & Deployment | B – Runtime Content |
-| ADR-006 | Design System & Visual Architecture | B – Tailwind + egna Blazor-komponenter; Scandinavian Editorial |
+| ADR-006 | Design System & Visual Architecture | B – Tailwind + egna Blazor-komponenter; Immersive Dark |
 | ADR-007 | Navigation & Discovery | C – Hybrid Navigation + Command Palette |
 | ADR-008 | Professional Identity & Dynamic SEO | C – Hybrid Identity |
 | ADR-009 | Observability, Analytics & Privacy | B – OpenTelemetry + Privacy-first Analytics |
@@ -93,11 +93,11 @@ CV kan uppdateras utan ombyggnad och omstart av appen. Privat innehåll utanför
 
 ### ADR-006: Design System & Visual Architecture
 
-**Valt alternativ:** B – Tailwind + egna Blazor-komponenter; Scandinavian Editorial
+**Valt alternativ:** B – Tailwind + egna Blazor-komponenter; Immersive Dark (ersätter Scandinavian Editorial)
 
 **Beslut**
 
-Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Ljus, typografiskt driven Scandinavian Editorial som huvudidentitet.
+Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med en konstellation av CV:ts nyckelteknologier som bakgrund, stor kondenserad typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
 
 **Tekniska konsekvenser och avgränsningar**
 

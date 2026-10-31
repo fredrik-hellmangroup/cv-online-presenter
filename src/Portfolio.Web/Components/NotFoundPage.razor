@@ -1,13 +1,14 @@
 @inject SiteContent Content
 
 <PageTitle>Sidan hittades inte · @Content.Settings.SiteName</PageTitle>
-<HeadContent><meta name="robots" content="noindex, nofollow" /></HeadContent>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
 <a class="skip-link" href="#main">Hoppa till innehåll</a>
 <header>
-    <a class="brand" href="/">@Content.Settings.SiteName</a>
+    <a class="brand" href="/" aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
     <nav aria-label="Huvudnavigation">
-        <a href="/profile">Profil</a>
-        <a href="/services">Tjänster</a>
+        <a href="/services">Kompetens</a>
         <a href="/projects">Projekt</a>
         <a href="/cv">CV</a>
         <a href="/contact">Kontakt</a>
@@ -20,4 +21,7 @@
         <p><a href="/">Till startsidan</a></p>
     </article>
 </main>
-<footer>@Content.Settings.SiteName</footer>
+<footer>
+    <span>© @DateTime.UtcNow.Year @(Content.Settings.CompanyName ?? "· Egenföretagare")</span>
+    <a href="/contact">Kontakt</a>
+</footer>

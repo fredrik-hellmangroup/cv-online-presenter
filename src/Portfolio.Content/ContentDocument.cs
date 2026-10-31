@@ -11,6 +11,8 @@ public sealed record ContentDocument(
     string Markdown,
     string SourcePath);
 
+public sealed record ContentSection(string? Id, string Heading, string Text);
+
 public sealed record ContentValidationError(string File, string Message);
 
 public sealed class ContentValidationException(IReadOnlyList<ContentValidationError> errors)

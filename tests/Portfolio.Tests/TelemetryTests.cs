@@ -6,6 +6,7 @@ using Portfolio.Web;
 
 namespace Portfolio.Tests;
 
+[Collection(WebHostCollection.Name)]
 public sealed class TelemetryTests
 {
     [Fact]

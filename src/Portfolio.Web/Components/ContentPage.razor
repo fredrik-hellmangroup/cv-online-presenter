@@ -1,14 +1,15 @@
 @page "/"
-@page "/profile"
 @page "/services"
 @page "/contact"
 @page "/projects"
 @page "/cv"
 @page "/projects/{Slug}"
+@using System.Text.Json
 @inject SiteContent Content
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IHostEnvironment HostEnvironment
+@inject IWebHostEnvironment WebHost
 
 @if (page is not null)
 {
@@ -28,64 +29,131 @@
 else
 {
     <PageTitle>Sidan hittades inte · @Content.Settings.SiteName</PageTitle>
-    <HeadContent><meta name="robots" content="noindex, nofollow" /></HeadContent>
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
 }
 
 <a class="skip-link" href="#main">Hoppa till innehåll</a>
-<header class="border-b border-accent">
-    <a class="brand" href="/">@Content.Settings.SiteName</a>
+<header class="site-header">
+    <div class="brand-wrap">
+        <span id="brand-mark" class="brand-mark" aria-hidden="true"></span>
+        <a class="brand" href="/"
+           aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
+    </div>
     <nav aria-label="Huvudnavigation">
-        <a href="/profile">Profil</a>
-        <a href="/services">Tjänster</a>
+        <a href="/services">Kompetens</a>
         <a href="/projects">Projekt</a>
         <a href="/cv">CV</a>
-        <a href="/search">Sök</a>
         <a href="/contact">Kontakt</a>
     </nav>
-    <button id="command-open" type="button" aria-haspopup="dialog" aria-controls="command-palette" hidden>Sök</button>
     @if (page is not null)
     {
-        <button id="theme-toggle" type="button" aria-pressed="false" hidden>Växla tema</button>
+        <button id="theme-toggle" type="button" aria-pressed="true" hidden>Växla tema</button>
     }
 </header>
-<main id="main">
-    <article>
-        @if (page is not null)
-        {
-            @((MarkupString)Content.Render(page))
-            @if (path == "/contact" && IsValidEmail(Content.Settings.ContactEmail))
-            {
-                <p><a href="mailto:@Content.Settings.ContactEmail">@Content.Settings.ContactEmail</a></p>
-            }
-        }
-        else
-        {
-            <h1>Sidan hittades inte</h1>
-            <p>Adressen är fel eller sidan har flyttats.</p>
-            <p><a href="/">Till startsidan</a></p>
-        }
-    </article>
-</main>
-<footer>
-    <span>@Content.Settings.SiteName</span>
-    @if (page is not null)
+<main id="main" class="@(isHome ? "home" : null)">
+    @if (cv is not null)
     {
-        <button id="easter-egg-toggle" type="button" aria-expanded="false" aria-controls="easter-egg" hidden>Visa en överraskning</button>
-        <p id="easter-egg" hidden>✨ Du hittade en liten detalj i portfoliomallen.</p>
+        <CvHero View="cv" PhotoUrl="@photoUrl" HistoryId="@cv.HistoryId" />
     }
+    <div class="page-layout">
+        @if (isCv)
+        {
+            <aside id="cv-toc" class="cv-toc" aria-label="Innehållsförteckning" hidden>
+                <p class="cv-toc-title">Innehåll</p>
+                <ol id="cv-toc-list"></ol>
+            </aside>
+        }
+        <article class="@(cv is null ? null : "cv")">
+            @if (page is not null)
+            {
+                @if (cv is not null)
+                {
+                    @((MarkupString)cv.BeforeHistoryHtml)
+                    @((MarkupString)cv.HistoryHeadingHtml)
+                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? PageHeading.Split(cv.Name).Name)" />
+                    @((MarkupString)cv.AssignmentsHtml)
+                    @((MarkupString)cv.AfterHistoryHtml)
+                }
+                else
+                {
+                    @((MarkupString)                    PageHeading.SplitFirstH1(Content.Render(page)))
+                }
+                @if (path == "/contact")
+                {
+                    <ContactSection Email="@Content.Settings.ContactEmail" />
+                }
+            }
+            else
+            {
+                <h1>Sidan hittades inte</h1>
+                <p>Adressen är fel eller sidan har flyttats.</p>
+                <p><a href="/">Till startsidan</a></p>
+            }
+        </article>
+    </div>
+</main>
+@if (isCv)
+{
+    <div id="cv-search" class="cv-search" hidden>
+        <div id="cv-search-panel" class="cv-search-panel" role="search" hidden>
+            <label for="cv-search-input">Sök i CV:t</label>
+            <input id="cv-search-input" type="search" maxlength="100" autocomplete="off"
+                   placeholder="Sök kompetens, roll, bransch…" />
+            <ul id="cv-search-results" aria-live="polite"></ul>
+        </div>
+        <button id="cv-search-toggle" type="button" aria-expanded="false" aria-controls="cv-search-panel">
+            <span>Sök</span><kbd aria-hidden="true">Ctrl K</kbd>
+        </button>
+    </div>
+}
+<footer>
+    <span>© @DateTime.UtcNow.Year @(Content.Settings.CompanyName ?? "· Egenföretagare")</span>
+    <a href="/contact">Kontakt</a>
 </footer>
+@if (page is not null)
+{
+    @if (constellationJson is not null)
+    {
+        <div id="constellation-data" data-json="@constellationJson" hidden></div>
+    }
+    <div id="easter-egg" class="easter-egg" role="status" hidden>
+        <p>✨ Du hittade en liten detalj i portfoliomallen.</p>
+        <button id="easter-egg-close" type="button">Stäng</button>
+    </div>
+}
 
 @code {
     [Parameter] public string? Slug { get; set; }
 
     private ContentDocument? page;
+    private CvView? cv;
+    private string? photoUrl;
+    private string? constellationJson;
     private string path = "/";
-    private string fullTitle => $"{page?.Title} · {Content.Settings.SiteName}";
+    private bool isCv => page is not null && path == "/cv";
+    private bool isHome => page is not null && path == "/";
+    // A title that already names the site (the home page) is used as is, so the name is not repeated.
+    private string fullTitle => page is null || page.Title.Contains(Content.Settings.SiteName,
+StringComparison.OrdinalIgnoreCase)
+        ? page?.Title ?? string.Empty
+        : $"{page.Title} · {Content.Settings.SiteName}";
 
     protected override void OnParametersSet()
     {
         path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
         page = Content.FindByPath(path);
+        var cvView = Content.Cv;
+        cv = isCv ? cvView : null;
+        photoUrl = cv is not null &&  WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
+            ? $"/img/profile.webp?v={Content.Version}"
+            : null;
+        constellationJson = cvView is { SkillGroups.Count: > 0 }
+            ? JsonSerializer.Serialize(
+                new { groups = cvView.SkillGroups, assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }) },
+                JsonSerializerOptions.Web)
+            : null;
         var context = HttpContextAccessor.HttpContext;
         if (page is null && context is not null)
         {
@@ -95,7 +163,4 @@ else
         else if (context is not null && (!HostEnvironment.IsProduction() || Content.SiteUrl is null))
             context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
     }
-
-    private static bool IsValidEmail(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Address == value;
 }

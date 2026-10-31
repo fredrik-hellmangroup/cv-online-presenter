@@ -1,0 +1,374 @@
+import { EGG_REVEAL_EVENT } from './easter-egg-engine.js';
+import { CV_QUERY_EVENT } from './events.js';
+import type { ExperienceEngine } from './experience.js';
+import { LABEL_HEIGHT, WOBBLE, clampRange, placeNodes } from './constellation-layout.js';
+import type { Area } from './constellation-layout.js';
+import {
+  buildEdges,
+  nodesMatching,
+  nodesMatchingQuery,
+  parseConstellationData,
+  toNodes
+} from './skills.js';
+import type { SkillEdge, SkillNode } from './skills.js';
+
+interface Body extends SkillNode {
+  hx: number;
+  hy: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  phase: number;
+  glow: number;
+  boost: number;
+  half: number;
+}
+
+interface Packet {
+  edge: SkillEdge;
+  progress: number;
+  speed: number;
+  reverse: boolean;
+}
+
+const MAX_PIXEL_RATIO = 1.5;
+const MAX_PACKETS = 26;
+const AMBIENT_GLOW = 0.38;
+const DIM_GLOW = 0.07;
+const NARROW_VIEWPORT = 700;
+const POINTER_RADIUS = 140;
+// Start page only: the cursor wakes nearby nodes, clicks send out a shockwave and a random node pulses now and then.
+const WAKE_RADIUS = 220;
+const SHOCK_RADIUS = 300;
+const PULSE_INTERVAL_MS = 1800;
+const PULSE_DURATION_MS = 1600;
+const HOME_AMBIENT_GLOW = 0.5;
+const TAU = Math.PI * 2;
+// Keep the constellation clear of the sticky header and the floating search button.
+const SIDE_INSET = 24;
+const BOTTOM_INSET = 88;
+const TOP_GAP = 16;
+
+const keywordsOf = (target: EventTarget | null): string[] | null => {
+  const element = target instanceof Element ? target.closest('[data-keywords], [data-skill]') : null;
+  if (!element) return null;
+  const skill = element.getAttribute('data-skill');
+  if (skill) return [skill];
+  return element.getAttribute('data-keywords')?.split('|').filter(Boolean) ?? null;
+};
+
+/**
+ * The background: the CV's key technologies as a constellation. Technologies that were used together
+ * in assignments are linked, the ones in the assignment being read (or hovered, or searched) light up,
+ * and small data packets travel along the links.
+ */
+export class ConstellationEngine implements ExperienceEngine {
+  readonly id = 'constellation';
+
+  start(): void {
+    const canvas = document.querySelector<HTMLCanvasElement>('#constellation-field');
+    const context = canvas?.getContext('2d');
+    const data = parseConstellationData(document.querySelector<HTMLElement>('#constellation-data')?.dataset.json);
+    if (!canvas || !context || !data) return;
+    const nodes = toNodes(data.groups);
+    if (nodes.length < 2) return;
+
+    const edges = buildEdges(nodes, data.assignments);
+    const root = document.documentElement;
+    const playful = document.querySelector('main.home') !== null;
+    const ambientGlow = playful ? HOME_AMBIENT_GLOW : AMBIENT_GLOW;
+    const neighbours = nodes.map(() => new Set<number>());
+    for (const edge of edges) {
+      neighbours[edge.a].add(edge.b);
+      neighbours[edge.b].add(edge.a);
+    }
+    let pulse: { members: Set<number>; until: number } | null = null;
+    let nextPulse = 0;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const pointer = { x: -9999, y: -9999 };
+    let bodies: Body[] = [];
+    let packets: Packet[] = [];
+    let focus: Set<number> | null = null;
+    let litEdges: SkillEdge[] = [];
+    let ambientEdges: SkillEdge[] = edges.filter(edge => edge.strong);
+    let query = '';
+    let hovered: string[] | null = null;
+    let inView: string[] | null = null;
+    let width = 0;
+    let height = 0;
+    let frame = 0;
+    let last = 0;
+    let colour = '255, 140, 80';
+    let labelColour = '215, 222, 238';
+    let labelAlpha = 0.14;
+    // The bright centre of lit nodes and data packets: white on dark, a deep ember on light.
+    let coreColour = '255, 255, 255';
+    let area: Area = { left: 0, top: 0, right: 0, bottom: 0 };
+
+    const refreshColour = () => {
+      const style = getComputedStyle(root);
+      colour = style.getPropertyValue('--particle-rgb').trim() || colour;
+      labelColour = style.getPropertyValue('--particle-label-rgb').trim() || labelColour;
+      labelAlpha = Number.parseFloat(style.getPropertyValue('--particle-label-alpha')) || labelAlpha;
+      coreColour = style.getPropertyValue('--particle-core-rgb').trim() || coreColour;
+    };
+
+    // The sticky header (desktop) or the sticky table of contents (narrow screens) covers the top of the viewport.
+    const stickyTop = (): number => {
+      const header = document.querySelector<HTMLElement>('.site-header');
+      if (header && getComputedStyle(header).position === 'sticky') return header.getBoundingClientRect().height;
+      const toc = document.querySelector<HTMLElement>('#cv-toc');
+      if (toc && !toc.hidden && getComputedStyle(toc).position === 'sticky') return toc.getBoundingClientRect().height;
+      return 0;
+    };
+
+    const layout = () => {
+      const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.font = '600 13px "Segoe UI", system-ui, sans-serif';
+
+      area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
+      const placements = placeNodes(
+        nodes,
+        data.groups.map(group => group.skills.length),
+        area,
+        name => context.measureText(name).width);
+      bodies = nodes.map((node, index) => {
+        const { x, y, half } = placements[index];
+        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: ambientGlow, boost: 0, half };
+      });
+    };
+
+    const targetGlow = (index: number) => {
+      if (focus) return focus.has(index) ? 1 : DIM_GLOW;
+      return Math.max(ambientGlow, bodies[index]?.boost ?? 0);
+    };
+
+    const recompute = () => {
+      const keywords = hovered ?? inView;
+      if (query.trim()) focus = nodesMatchingQuery(nodes, query);
+      else if (keywords) focus = nodesMatching(nodes, keywords);
+      else focus = null;
+      if (focus?.size === 0) focus = null;
+
+      const active = focus;
+      litEdges = active ? edges.filter(edge => active.has(edge.a) && active.has(edge.b)) : [];
+      ambientEdges = edges.filter(edge => edge.strong);
+      if (motion.matches) {
+        bodies.forEach((body, index) => { body.glow = targetGlow(index); });
+        draw();
+      }
+    };
+
+    const spawnPacket = () => {
+      const pool = litEdges.length > 0 ? litEdges : ambientEdges;
+      if (pool.length === 0 || packets.length >= MAX_PACKETS) return;
+      packets.push({
+        edge: pool[Math.floor(Math.random() * pool.length)],
+        progress: 0,
+        speed: 0.005 + Math.random() * 0.01,
+        reverse: Math.random() < 0.5
+      });
+    };
+
+    const spawnFrom = (index: number, count: number) => {
+      const own = edges.filter(edge => edge.a === index || edge.b === index);
+      for (let step = 0; step < count && own.length > 0 && packets.length < MAX_PACKETS; step++) {
+        const edge = own[Math.floor(Math.random() * own.length)];
+        packets.push({ edge, progress: 0, speed: 0.008 + Math.random() * 0.012, reverse: edge.b === index });
+      }
+    };
+
+    // Boost = how awake a node is: close to the cursor, or part of the current idle pulse.
+    const updatePlay = (time: number) => {
+      if (time >= nextPulse && bodies.length > 0) {
+        const index = Math.floor(Math.random() * bodies.length);
+        pulse = { members: new Set([index, ...neighbours[index]]), until: time + PULSE_DURATION_MS };
+        spawnFrom(index, 3);
+        nextPulse = time + PULSE_INTERVAL_MS;
+      }
+      if (pulse && time > pulse.until) pulse = null;
+      bodies.forEach((body, index) => {
+        const near = Math.max(0, 1 - Math.hypot(body.x - pointer.x, body.y - pointer.y) / WAKE_RADIUS);
+        const pulsed = pulse?.members.has(index) ? 0.85 : 0;
+        body.boost = Math.max(near * 1.1, pulsed);
+      });
+    };
+
+    const shockwave = (event: PointerEvent) => {
+      if (motion.matches || (event.target instanceof Element && event.target.closest('a, button, input, textarea, select'))) return;
+      for (const body of bodies) {
+        const dx = body.x - event.clientX;
+        const dy = body.y - event.clientY;
+        const distance = Math.hypot(dx, dy);
+        if (distance > SHOCK_RADIUS || distance < 0.1) continue;
+        const push = (1 - distance / SHOCK_RADIUS) * 14;
+        body.vx += (dx / distance) * push;
+        body.vy += (dy / distance) * push;
+        body.boost = 1;
+      }
+      for (let count = 0; count < 8; count++) spawnPacket();
+    };
+
+    const update = (delta: number, time: number) => {
+      if (playful) updatePlay(time);
+      for (const body of bodies) {
+        const targetX = body.hx + Math.sin(time / 1700 + body.phase) * WOBBLE;
+        const targetY = body.hy + Math.cos(time / 2100 + body.phase) * WOBBLE;
+        let forceX = (targetX - body.x) * 0.02;
+        let forceY = (targetY - body.y) * 0.02;
+        const dx = body.x - pointer.x;
+        const dy = body.y - pointer.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < POINTER_RADIUS && distance > 0.1) {
+          forceX += (dx / distance) * (POINTER_RADIUS - distance) * 0.012;
+          forceY += (dy / distance) * (POINTER_RADIUS - distance) * 0.012;
+        }
+        body.vx = (body.vx + forceX) * 0.86;
+        body.vy = (body.vy + forceY) * 0.86;
+        body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
+        body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
+      }
+      bodies.forEach((body, index) => {
+        body.glow += (targetGlow(index) - body.glow) * Math.min(1, 0.08 * delta);
+      });
+      if (Math.random() < (litEdges.length > 0 ? 0.18 : 0.05) * delta) spawnPacket();
+      for (const packet of packets) packet.progress += packet.speed * delta;
+      packets = packets.filter(packet => packet.progress < 1);
+    };
+
+    const draw = () => {
+      context.clearRect(0, 0, width, height);
+      const narrow = width < NARROW_VIEWPORT;
+
+      for (const edge of edges) {
+        const from = bodies[edge.a];
+        const to = bodies[edge.b];
+        const lit = Math.min(from.glow, to.glow);
+        const alpha = edge.strong ? 0.05 + lit * 0.5 : 0.03 + lit * 0.18;
+        context.strokeStyle = `rgba(${colour}, ${alpha})`;
+        context.lineWidth = edge.strong && lit > 0.6 ? 1.4 : 1;
+        context.beginPath();
+        context.moveTo(from.x, from.y);
+        context.lineTo(to.x, to.y);
+        context.stroke();
+      }
+
+      for (const packet of packets) {
+        const from = bodies[packet.edge.a];
+        const to = bodies[packet.edge.b];
+        const amount = packet.reverse ? 1 - packet.progress : packet.progress;
+        const x = from.x + (to.x - from.x) * amount;
+        const y = from.y + (to.y - from.y) * amount;
+        const halo = context.createRadialGradient(x, y, 0, x, y, 9);
+        halo.addColorStop(0, `rgba(${coreColour}, 0.95)`);
+        halo.addColorStop(0.35, `rgba(${colour}, 0.7)`);
+        halo.addColorStop(1, `rgba(${colour}, 0)`);
+        context.fillStyle = halo;
+        context.beginPath();
+        context.arc(x, y, 9, 0, TAU);
+        context.fill();
+      }
+
+      context.font = '600 13px "Segoe UI", system-ui, sans-serif';
+      context.textAlign = 'center';
+      for (const body of bodies) {
+        if (body.glow > 0.3) {
+          const halo = context.createRadialGradient(body.x, body.y, 0, body.x, body.y, 28);
+          halo.addColorStop(0, `rgba(${colour}, ${body.glow * 0.5})`);
+          halo.addColorStop(1, `rgba(${colour}, 0)`);
+          context.fillStyle = halo;
+          context.beginPath();
+          context.arc(body.x, body.y, 28, 0, TAU);
+          context.fill();
+        }
+        context.fillStyle = body.glow > 0.6 ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
+        context.beginPath();
+        context.arc(body.x, body.y, 2.2 + body.glow * 2.8, 0, TAU);
+        context.fill();
+        if (narrow && !playful && body.glow < 0.6) continue;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
+        context.fillText(body.name, body.x, body.y - 12);
+      }
+    };
+
+    const step = (time: number) => {
+      frame = requestAnimationFrame(step);
+      const delta = Math.min((time - last) / 16.67, 3);
+      last = time;
+      update(delta, time);
+      draw();
+    };
+
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      refreshColour();
+      if (motion.matches || document.hidden) {
+        bodies.forEach((body, index) => { body.glow = targetGlow(index); });
+        draw();
+        return;
+      }
+      last = performance.now();
+      frame = requestAnimationFrame(step);
+    };
+
+    const onEnter = (event: Event) => {
+      const keywords = keywordsOf(event.target);
+      if (!keywords) return;
+      hovered = keywords;
+      recompute();
+    };
+    const onLeave = (event: Event) => {
+      if (!keywordsOf(event.target)) return;
+      hovered = null;
+      recompute();
+    };
+
+    window.addEventListener('resize', () => { layout(); recompute(); draw(); });
+    window.addEventListener('pointermove', event => {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+    }, { passive: true });
+    document.documentElement.addEventListener('mouseleave', () => { pointer.x = pointer.y = -9999; });
+    if (playful) window.addEventListener('pointerdown', shockwave, { passive: true });
+    document.addEventListener('pointerover', onEnter);
+    document.addEventListener('pointerout', onLeave);
+    document.addEventListener('focusin', onEnter);
+    document.addEventListener('focusout', onLeave);
+    document.addEventListener(CV_QUERY_EVENT, event => {
+      query = (event as CustomEvent<string>).detail ?? '';
+      recompute();
+    });
+    document.addEventListener(EGG_REVEAL_EVENT, () => {
+      if (motion.matches) return;
+      for (let count = 0; count < MAX_PACKETS; count++) spawnPacket();
+    });
+    document.addEventListener('visibilitychange', sync);
+    motion.addEventListener('change', sync);
+    new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+
+    const visible = new Map<Element, string[]>();
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const keywords = keywordsOf(entry.target);
+        if (entry.isIntersecting && keywords) visible.set(entry.target, keywords);
+        else visible.delete(entry.target);
+      }
+      inView = [...visible.values()].at(-1) ?? null;
+      recompute();
+    }, { rootMargin: '-35% 0px -55% 0px' });
+    document.querySelectorAll('.assignment[data-keywords]').forEach(card => observer.observe(card));
+
+    layout();
+    recompute();
+    sync();
+    // Sticky elements (the table of contents on narrow screens) are only measurable once enhanced.
+    requestAnimationFrame(() => { layout(); recompute(); });
+  }
+}

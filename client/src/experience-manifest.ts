@@ -13,8 +13,12 @@ export interface ThemeManifest {
 
 export interface EasterEggManifest {
   readonly id: string;
-  readonly trigger: string;
+  readonly brandMark: string;
   readonly content: string;
+  readonly close: string;
+  readonly clickCount: number;
+  readonly clickWindowMs: number;
+  readonly keySequence: readonly string[];
 }
 
 export const themeManifest: ThemeManifest = {
@@ -29,9 +33,13 @@ export const themeManifest: ThemeManifest = {
 };
 
 export const easterEggManifest: EasterEggManifest = {
-  id: 'permanent-surprise',
-  trigger: '#easter-egg-toggle',
-  content: '#easter-egg'
+  id: 'hidden-surprise',
+  brandMark: '#brand-mark',
+  content: '#easter-egg',
+  close: '#easter-egg-close',
+  clickCount: 5,
+  clickWindowMs: 2000,
+  keySequence: ['k', 'o', 'd']
 };
 
 export const selectCalendarLayer = (date: Date, rules: readonly CalendarRule[]): CalendarLayer | null => {

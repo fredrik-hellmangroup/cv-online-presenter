@@ -1,0 +1,60 @@
+@using Portfolio.Content
+
+<header class="cv-hero">
+    <div class="cv-hero-copy">
+        @if (!string.IsNullOrWhiteSpace(View.Kicker))
+        {
+            <p class="cv-kicker">@View.Kicker</p>
+        }
+        <h1>
+            @if (tagline is null)
+            {
+                @name
+            }
+            else
+            {
+                <span class="h1-name">@name</span>
+                <span class="h1-tagline">@tagline</span>
+            }
+        </h1>
+        @if (View.Roles.Count > 0)
+        {
+            <ul class="cv-roles" aria-label="Roller">
+                @foreach (var role in View.Roles)
+                {
+                    <li>@role</li>
+                }
+            </ul>
+        }
+        @if (!string.IsNullOrWhiteSpace(View.Summary))
+        {
+            <p class="cv-summary">@View.Summary</p>
+        }
+        <p class="cv-actions">
+            <a class="button-link primary" href="#@HistoryId">Se uppdragen</a>
+            <a class="button-link" href="/contact">Kontakta mig</a>
+        </p>
+    </div>
+    @if (!string.IsNullOrEmpty(PhotoUrl))
+    {
+        <img class="cv-photo" src="@PhotoUrl" alt="Porträtt av @name" width="640" height="800" fetchpriority="high" />
+    }
+</header>
+<dl class="cv-figures">
+    @foreach (var figure in View.Figures)
+    {
+        <div>
+            <dt>@figure.Label</dt>
+            <dd data-count="@figure.Count" data-suffix="@figure.Suffix">@figure.Count@figure.Suffix</dd>
+        </div>
+    }
+</dl>
+
+@code {
+    [Parameter, EditorRequired] public CvView View { get; set; } = default!;
+    [Parameter] public string? PhotoUrl { get; set; }
+    [Parameter] public string HistoryId { get; set; } = "uppdragshistorik";
+
+    private string name => PageHeading.Split(View.Name).Name;
+    private string? tagline => PageHeading.Split(View.Name).Tagline;
+}
