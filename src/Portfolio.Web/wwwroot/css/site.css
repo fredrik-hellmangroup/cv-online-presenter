@@ -157,6 +157,12 @@ main.home .h1-tagline { font-size: clamp(1rem, 2.4vw, 1.5rem); }
 main.home .cv-actions { margin-top: 2rem; justify-content: center; }
 main.home article { margin-inline: auto; text-align: center; }
 main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+/* Sub pages: centered column and hero (title, accent rule, lead), left-aligned body text for readability. */
+main:not(.home) article:not(.cv) { margin-inline: auto; }
+main:not(.home) article:not(.cv) > h1 { text-align: center; }
+main:not(.home) article:not(.cv) > h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+main:not(.home) article:not(.cv) > h1 + p { margin-inline: auto; text-align: center; }
+main:not(.home) .contact-card { margin-inline: auto; }
 :root:has(main.home) { --particle-label-alpha: .42; }
 :root[data-theme="light"]:has(main.home) { --particle-label-alpha: .7; }
 
