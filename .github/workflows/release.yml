@@ -118,6 +118,7 @@ jobs:
       DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
+      DEPLOY_CERTIFICATE_SHA256: ${{ vars.DEPLOY_CERTIFICATE_SHA256 }}
       DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -157,7 +158,8 @@ jobs:
             -DeployServerUrl $env:DEPLOY_SERVER_URL `
             -DeploySiteName $env:DEPLOY_SITE_NAME `
             -DeployUsername $env:DEPLOY_USERNAME `
-            -DeployPassword $env:DEPLOY_PASSWORD
+            -DeployPassword $env:DEPLOY_PASSWORD `
+            -DeployCertificateSha256 $env:DEPLOY_CERTIFICATE_SHA256
       - name: Verify IIS health
         shell: pwsh
         run: .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
