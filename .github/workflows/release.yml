@@ -16,6 +16,14 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+      - name: Validate release tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Release tag must match vMAJOR.MINOR.PATCH."
+          }
       - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
@@ -28,11 +36,16 @@ jobs:
       - run: npm run validate:content
       - run: dotnet restore CvOnlinePresenter.sln
       - run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
-      - run: node scripts/write-release-notes.mjs "${{ github.ref_name }}"
+      - name: Write release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/write-release-notes.mjs "$env:RELEASE_TAG"
       - name: Create versioned IIS package
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          $package = "artifacts/cv-online-presenter-${{ github.ref_name }}.zip"
+          $package = "artifacts/cv-online-presenter-$env:RELEASE_TAG.zip"
           Compress-Archive -Path "artifacts/publish/*" -DestinationPath $package -CompressionLevel Optimal
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -65,20 +78,34 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
           $notes = Join-Path 'release-notes' 'release-notes.md'
           if ($null -eq $package) { throw 'Versioned package is missing.' }
-          gh release create "${{ github.ref_name }}" $package.FullName --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --notes-file $notes
+          gh release create $env:RELEASE_TAG $package.FullName --repo $env:REPOSITORY --title $env:RELEASE_TAG --notes-file $notes
 
-  deploy-staging:
-    if: ${{ vars.IIS_STAGING_ENABLED == 'true' }}
-    needs: package
-    runs-on: [self-hosted, windows, iis-staging]
-    environment: staging
+  deploy:
+    needs: [package, publish-release]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_HEALTH_URL }}
+    concurrency:
+      group: production-iis
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: read
+    env:
+      DEPLOY_SERVER_URL: ${{ vars.DEPLOY_SERVER_URL }}
+      DEPLOY_SITE_NAME: ${{ vars.DEPLOY_SITE_NAME }}
+      DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}
+      DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
+      DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.2
@@ -91,11 +118,33 @@ jobs:
           $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
           if ($null -eq $package) { throw 'Versioned package is missing.' }
           Expand-Archive -LiteralPath $package.FullName -DestinationPath artifact/publish -Force
-      - name: Deploy and verify IIS health
+          $requiredFiles = @('web.config', 'Portfolio.Web.dll')
+          foreach ($requiredFile in $requiredFiles) {
+            $requiredPath = Join-Path 'artifact/publish' $requiredFile
+            if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+              throw "Versioned package is missing required file '$requiredFile'."
+            }
+          }
+      - name: Ensure Microsoft Web Deploy is available
         shell: pwsh
-        env:
-          IIS_STAGING_ROOT: ${{ vars.IIS_STAGING_ROOT }}
-          IIS_STAGING_SITE: ${{ vars.IIS_STAGING_SITE }}
-          IIS_STAGING_APP_POOL: ${{ vars.IIS_STAGING_APP_POOL }}
-          IIS_STAGING_HEALTH_URL: ${{ vars.IIS_STAGING_HEALTH_URL }}
-        run: .\scripts\deploy-iis.ps1 -ReleaseDirectory artifact/publish -DeploymentRoot $env:IIS_STAGING_ROOT -SiteName $env:IIS_STAGING_SITE -AppPoolName $env:IIS_STAGING_APP_POOL -HealthUrl $env:IIS_STAGING_HEALTH_URL -ReleaseId "${{ github.ref_name }}"
+        run: |
+          $msDeployPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe'
+          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
+            choco install webdeploy -y --no-progress
+          }
+          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
+            throw 'Web Deploy installation failed or msdeploy.exe was not found.'
+          }
+      - name: Deploy release to IIS
+        shell: pwsh
+        run: |
+          .\scripts\deploy-beebyte-iis.ps1 `
+            -SourcePath 'artifact/publish' `
+            -DeployContentPath $env:DEPLOY_CONTENT_PATH `
+            -DeployServerUrl $env:DEPLOY_SERVER_URL `
+            -DeploySiteName $env:DEPLOY_SITE_NAME `
+            -DeployUsername $env:DEPLOY_USERNAME `
+            -DeployPassword $env:DEPLOY_PASSWORD
+      - name: Verify IIS health
+        shell: pwsh
+        run: .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
