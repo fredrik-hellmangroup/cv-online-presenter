@@ -49,7 +49,9 @@ function Invoke-FtpRequest {
         [Parameter(Mandatory = $true)]
         [string]$Method,
 
-        [byte[]]$Body
+        [byte[]]$Body,
+
+        [switch]$ReadResponseBody
     )
 
     $request = [System.Net.FtpWebRequest]::Create($Uri)
@@ -79,6 +81,25 @@ function Invoke-FtpRequest {
     $response = $null
     try {
         $response = [System.Net.FtpWebResponse]$request.GetResponse()
+        if ($ReadResponseBody) {
+            $reader = [IO.StreamReader]::new($response.GetResponseStream())
+            try {
+                $maximumCharacters = 1MB
+                $buffer = [char[]]::new(4096)
+                $content = [Text.StringBuilder]::new()
+                while (($charactersRead = $reader.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    if ($content.Length + $charactersRead -gt $maximumCharacters) {
+                        throw "FTP response from '$Uri' exceeded $maximumCharacters characters."
+                    }
+                    [void]$content.Append($buffer, 0, $charactersRead)
+                }
+                return $content.ToString()
+            }
+            finally {
+                $reader.Dispose()
+            }
+        }
+
         return $response.StatusDescription
     }
     finally {
@@ -92,20 +113,37 @@ function Remove-FtpFileIfExists {
     param([Parameter(Mandatory = $true)][Uri]$Uri)
 
     try {
-        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::GetFileSize) | Out-Null
+        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
+        return
     }
     catch [System.Net.WebException] {
-        if ($_.Exception.Message -match '550|not found|unavailable') {
+        $deleteError = $_.Exception
+        $fileName = [Uri]::UnescapeDataString($Uri.Segments[-1].TrimEnd('/'))
+        $parentPath = $Uri.AbsolutePath.Substring(0, $Uri.AbsolutePath.Length - $Uri.Segments[-1].Length)
+        $parentBuilder = [UriBuilder]$Uri
+        $parentBuilder.Path = $parentPath
+
+        try {
+            $listing = Invoke-FtpRequest `
+                -Uri $parentBuilder.Uri `
+                -Method ([System.Net.WebRequestMethods+Ftp]::ListDirectory) `
+                -ReadResponseBody
+        }
+        catch {
+            throw "Could not determine whether remote file '$Uri' exists after delete failed: $($_.Exception.Message)"
+        }
+
+        $listedNames = $listing -split '\r?\n' |
+            ForEach-Object {
+                if ($_.Length -gt 0) {
+                    ($_ -split '/')[-1]
+                }
+            }
+        if ($listedNames -notcontains $fileName) {
             return
         }
-        throw
-    }
 
-    try {
-        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
-    }
-    catch {
-        throw "Could not delete existing remote file '$Uri': $($_.Exception.Message)"
+        throw "Could not delete existing remote file '$Uri': $($deleteError.Message)"
     }
 }
 
