@@ -1,6 +1,8 @@
 import { EGG_REVEAL_EVENT } from './easter-egg-engine.js';
 import { CV_QUERY_EVENT } from './events.js';
 import type { ExperienceEngine } from './experience.js';
+import { LABEL_HEIGHT, WOBBLE, clampRange, placeNodes } from './constellation-layout.js';
+import type { Area } from './constellation-layout.js';
 import {
   buildEdges,
   nodesMatching,
@@ -9,7 +11,6 @@ import {
   toNodes
 } from './skills.js';
 import type { SkillEdge, SkillNode } from './skills.js';
-import { hoursOf, skyPalette, toCss } from './sky-palette.js';
 
 interface Body extends SkillNode {
   hx: number;
@@ -20,6 +21,7 @@ interface Body extends SkillNode {
   vy: number;
   phase: number;
   glow: number;
+  half: number;
 }
 
 interface Packet {
@@ -35,8 +37,11 @@ const AMBIENT_GLOW = 0.38;
 const DIM_GLOW = 0.07;
 const NARROW_VIEWPORT = 700;
 const POINTER_RADIUS = 140;
-const COLOUR_REFRESH_MS = 30_000;
 const TAU = Math.PI * 2;
+// Keep the constellation clear of the sticky header and the floating search button.
+const SIDE_INSET = 24;
+const BOTTOM_INSET = 88;
+const TOP_GAP = 16;
 
 const keywordsOf = (target: EventTarget | null): string[] | null => {
   const element = target instanceof Element ? target.closest('[data-keywords], [data-skill]') : null;
@@ -79,13 +84,19 @@ export class ConstellationEngine implements ExperienceEngine {
     let frame = 0;
     let last = 0;
     let colour = '255, 140, 80';
-    let colourAt = -COLOUR_REFRESH_MS;
+    let area: Area = { left: 0, top: 0, right: 0, bottom: 0 };
 
-    const refreshColour = (time: number) => {
-      colourAt = time;
-      colour = root.dataset.theme === 'light'
-        ? getComputedStyle(root).getPropertyValue('--particle-rgb').trim() || colour
-        : toCss(skyPalette(hoursOf(new Date())).curtain);
+    const refreshColour = () => {
+      colour = getComputedStyle(root).getPropertyValue('--particle-rgb').trim() || colour;
+    };
+
+    // The sticky header (desktop) or the sticky table of contents (narrow screens) covers the top of the viewport.
+    const stickyTop = (): number => {
+      const header = document.querySelector<HTMLElement>('.site-header');
+      if (header && getComputedStyle(header).position === 'sticky') return header.getBoundingClientRect().height;
+      const toc = document.querySelector<HTMLElement>('#cv-toc');
+      if (toc && !toc.hidden && getComputedStyle(toc).position === 'sticky') return toc.getBoundingClientRect().height;
+      return 0;
     };
 
     const layout = () => {
@@ -95,19 +106,17 @@ export class ConstellationEngine implements ExperienceEngine {
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.font = '600 13px "Segoe UI", system-ui, sans-serif';
 
-      const groupCount = data.groups.length;
-      const radius = Math.min(width, height) * (nodes.length > 24 ? 0.17 : 0.21);
-      const seen = new Array<number>(groupCount).fill(0);
-      bodies = nodes.map(node => {
-        const index = seen[node.group]++;
-        const groupAngle = (node.group / groupCount) * TAU - Math.PI / 2;
-        const centreX = width / 2 + Math.cos(groupAngle) * width * 0.34;
-        const centreY = height / 2 + Math.sin(groupAngle) * height * 0.3;
-        const angle = (index / data.groups[node.group].skills.length) * TAU + node.group;
-        const x = centreX + Math.cos(angle) * radius;
-        const y = centreY + Math.sin(angle) * radius;
-        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: AMBIENT_GLOW };
+      area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
+      const placements = placeNodes(
+        nodes,
+        data.groups.map(group => group.skills.length),
+        area,
+        name => context.measureText(name).width);
+      bodies = nodes.map((node, index) => {
+        const { x, y, half } = placements[index];
+        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: AMBIENT_GLOW, half };
       });
     };
 
@@ -142,8 +151,8 @@ export class ConstellationEngine implements ExperienceEngine {
 
     const update = (delta: number, time: number) => {
       for (const body of bodies) {
-        const targetX = body.hx + Math.sin(time / 1700 + body.phase) * 9;
-        const targetY = body.hy + Math.cos(time / 2100 + body.phase) * 9;
+        const targetX = body.hx + Math.sin(time / 1700 + body.phase) * WOBBLE;
+        const targetY = body.hy + Math.cos(time / 2100 + body.phase) * WOBBLE;
         let forceX = (targetX - body.x) * 0.02;
         let forceY = (targetY - body.y) * 0.02;
         const dx = body.x - pointer.x;
@@ -155,8 +164,8 @@ export class ConstellationEngine implements ExperienceEngine {
         }
         body.vx = (body.vx + forceX) * 0.86;
         body.vy = (body.vy + forceY) * 0.86;
-        body.x += body.vx * delta;
-        body.y += body.vy * delta;
+        body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
+        body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
       }
       bodies.forEach((body, index) => {
         body.glow += (targetGlow(index) - body.glow) * Math.min(1, 0.08 * delta);
@@ -225,7 +234,6 @@ export class ConstellationEngine implements ExperienceEngine {
       frame = requestAnimationFrame(step);
       const delta = Math.min((time - last) / 16.67, 3);
       last = time;
-      if (time - colourAt > COLOUR_REFRESH_MS) refreshColour(time);
       update(delta, time);
       draw();
     };
@@ -233,7 +241,7 @@ export class ConstellationEngine implements ExperienceEngine {
     const sync = () => {
       cancelAnimationFrame(frame);
       frame = 0;
-      refreshColour(performance.now());
+      refreshColour();
       if (motion.matches || document.hidden) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
@@ -292,5 +300,7 @@ export class ConstellationEngine implements ExperienceEngine {
     layout();
     recompute();
     sync();
+    // Sticky elements (the table of contents on narrow screens) are only measurable once enhanced.
+    requestAnimationFrame(() => { layout(); recompute(); });
   }
 }

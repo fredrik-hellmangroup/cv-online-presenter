@@ -1,4 +1,3 @@
-import { AuroraEngine } from './aurora-engine.js';
 import { CardGlowEngine } from './card-glow-engine.js';
 import { ConstellationEngine } from './constellation-engine.js';
 import { CountUpEngine } from './count-up-engine.js';
@@ -9,7 +8,6 @@ import { startExperience } from './experience.js';
 import { ThemeEngine } from './theme-engine.js';
 
 startExperience([
-  new AuroraEngine(),
   new ConstellationEngine(),
   new ThemeEngine(),
   new EasterEggEngine(),

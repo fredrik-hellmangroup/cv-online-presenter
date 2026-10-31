@@ -150,7 +150,7 @@ test('/cv constellation background is decorative and reduced motion keeps it sta
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/cv');
   await expect(page.locator('#constellation-field')).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.locator('#aurora-field')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('#aurora-field')).toHaveCount(0);
   const sample = () => page.locator('#constellation-field').evaluate(canvas => canvas.toDataURL());
   const first = await sample();
   await page.waitForTimeout(600);

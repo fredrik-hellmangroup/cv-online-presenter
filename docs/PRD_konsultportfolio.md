@@ -241,12 +241,12 @@ ADR-016 anger en forkbar open-source-applikation med oberoende CI. Senare owner-
 ### Analys och integritet
 Analys är P1 och kan utelämnas; standard avstängt/minimalt. Vid aktivering: dokumenterat verktyg, begränsat schema (sidvisning, kontakt- och projektlänk), inga formulärvärden, fingeravtryckning eller onödig identifiering. Beslut om samtycke, retention och leverantör krävs först.
 ## 11. Teman och easter eggs
-Visuell riktning är Immersive Dark (ersätter tidigare Scandinavian Editorial, se ADR-006): mörk bas med ett dämpat norrsken som följer klockslaget, en konstellation av CV:ts nyckelteknologier, stor kondenserad typografi samt stark orange accent. Ljust tema finns kvar som alternativ. Använd Tailwind CSS, semantiska design tokens, egna Razor-komponenter och komponentnära CSS; inget tungt generellt Blazor UI-bibliotek är bas.
+Visuell riktning är Immersive Dark (ersätter tidigare Scandinavian Editorial, se ADR-006): mörk bas med en konstellation av CV:ts nyckelteknologier, stor kondenserad typografi samt stark orange accent. Ljust tema finns kvar som alternativ. Använd Tailwind CSS, semantiska design tokens, egna Razor-komponenter och komponentnära CSS; inget tungt generellt Blazor UI-bibliotek är bas.
 | Del | Krav |
 | --- | --- |
 | Theme Engine | Separat modul med deklarativa manifest, kalenderregler och lager; mörk (standard) och ljus samt jul- och nyårsteman i första produktionsversionen. |
 | Ljust/mörkt | Mörkt är standard; valbar kontroll byter till ljust och valet sparas lokalt; verifiera kontrast i båda. |
-| Rörelse | Norrsken (WebGL, dämpat, utelämnas utan WebGL och i ljust tema) och konstellation (canvas) i full rörelse som standard, med begränsad upplösning och pausade när fliken är dold. Vid prefers-reduced-motion ritas en enda statisk bild. Tema-/easter-egg-/bakgrundsfel isoleras från kärninnehåll. |
+| Rörelse | Konstellation (canvas) i full rörelse som standard, med begränsad upplösning, pausad när fliken är dold och placerad inom en säker yta som undviker sticky header, sidkanter och sökknappen. Vid prefers-reduced-motion ritas en enda statisk bild. Tema-/easter-egg-/bakgrundsfel isoleras från kärninnehåll. |
 | Konstellation | Noderna är teknologierna i CV:ts Nyckelteknik. Teknologier som använts tillsammans i minst två uppdrag länkas; de som hör till uppdraget som läses, hovras eller söks tänds, och datapaket färdas längs länkarna. Datat härleds ur CV-innehållet; inget hittas på. |
 | CV-presentation | Hero med kicker, namn, roller och sammanfattning, nyckeltal (räknas upp), kompetenschips, uppdrag som kort med teknik-taggar och en tidslinje i stil med `git log --graph`. Allt är serverrenderat och fungerar utan JavaScript. Valfri porträttbild läggs i `wwwroot/img/profile.webp`. Se docs/cv-structure.md. |
 | Sök och innehållsförteckning | Sökning ligger som flytande panel på CV-sidan (Ctrl+K eller /) och det finns ingen separat söksida. CV-sidan har en scroll-följande innehållsförteckning byggd från rubrikernas ankare. |
@@ -429,7 +429,7 @@ CV kan uppdateras utan ombyggnad och omstart av appen. Privat innehåll utanför
 
 **Beslut**
 
-Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med dämpat norrsken och en konstellation av CV:ts nyckelteknologier som bakgrund, stor kondenserad typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
+Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med en konstellation av CV:ts nyckelteknologier som bakgrund, stor kondenserad typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
 
 **Tekniska konsekvenser och avgränsningar**
 

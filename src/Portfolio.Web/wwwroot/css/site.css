@@ -85,7 +85,7 @@ body::before {
     radial-gradient(50rem 36rem at 100% 25%, var(--glow-b), transparent 65%);
 }
 
-#aurora-field, #constellation-field {
+#constellation-field {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -93,8 +93,6 @@ body::before {
   height: 100%;
   pointer-events: none;
 }
-#aurora-field { opacity: .55; }
-:root[data-theme="light"] #aurora-field { display: none; }
 
 header, main, footer { position: relative; z-index: 1; width: min(100% - 2rem, 72rem); margin-inline: auto; }
 

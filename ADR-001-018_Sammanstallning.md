@@ -97,7 +97,7 @@ CV kan uppdateras utan ombyggnad och omstart av appen. Privat innehåll utanför
 
 **Beslut**
 
-Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med dämpat norrsken och en konstellation av CV:ts nyckelteknologier som bakgrund, stor kondenserad typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
+Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med en konstellation av CV:ts nyckelteknologier som bakgrund, stor kondenserad typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
 
 **Tekniska konsekvenser och avgränsningar**
 
