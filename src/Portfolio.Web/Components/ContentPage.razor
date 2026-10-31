@@ -28,7 +28,9 @@
 else
 {
     <PageTitle>Sidan hittades inte · @Content.Settings.SiteName</PageTitle>
-    <HeadContent><meta name="robots" content="noindex, nofollow" /></HeadContent>
+    <HeadContent>
+        <meta name="robots" content="noindex, nofollow" />
+    </HeadContent>
 }
 
 <a class="skip-link" href="#main">Hoppa till innehåll</a>
@@ -39,7 +41,7 @@ else
     </div>
     <nav aria-label="Huvudnavigation">
         <a href="/profile">Profil</a>
-        <a href="/services">Tjänster</a>
+        <a href="/services">Kompetens</a>
         <a href="/projects">Projekt</a>
         <a href="/cv">CV</a>
         <a href="/contact">Kontakt</a>
@@ -81,7 +83,8 @@ else
     <div id="cv-search" class="cv-search" hidden>
         <div id="cv-search-panel" class="cv-search-panel" role="search" hidden>
             <label for="cv-search-input">Sök i CV:t</label>
-            <input id="cv-search-input" type="search" maxlength="100" autocomplete="off" placeholder="Sök kompetens, roll, bransch…" />
+            <input id="cv-search-input" type="search" maxlength="100" autocomplete="off"
+                   placeholder="Sök kompetens, roll, bransch…" />
             <ul id="cv-search-results" aria-live="polite"></ul>
         </div>
         <button id="cv-search-toggle" type="button" aria-expanded="false" aria-controls="cv-search-panel">
@@ -123,5 +126,6 @@ else
     }
 
     private static bool IsValidEmail(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Address == value;
+        !string.IsNullOrWhiteSpace(value) && System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Address ==
+value;
 }
