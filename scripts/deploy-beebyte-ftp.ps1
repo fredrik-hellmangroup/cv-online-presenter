@@ -88,6 +88,19 @@ function Invoke-FtpRequest {
     }
 }
 
+function Remove-FtpFileIfExists {
+    param([Parameter(Mandatory = $true)][Uri]$Uri)
+
+    try {
+        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
+    }
+    catch [System.Net.WebException] {
+        if ($_.Exception.Message -notmatch '550|not found|unavailable') {
+            throw
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
     throw "SourcePath '$SourcePath' must be a directory."
 }
@@ -166,6 +179,7 @@ try {
         $remoteFilePath = "$remoteRoot/$relativePath"
         $fileUri = Get-FtpUri -Path $remoteFilePath -FtpServerHost $ftpHostValue -Port $FtpPort
         Write-Host "Uploading $relativePath."
+        Remove-FtpFileIfExists -Uri $fileUri
         Invoke-FtpRequest -Uri $fileUri -Method ([System.Net.WebRequestMethods+Ftp]::UploadFile) -Body ([IO.File]::ReadAllBytes($file.FullName)) | Out-Null
     }
     $deploymentSucceeded = $true
