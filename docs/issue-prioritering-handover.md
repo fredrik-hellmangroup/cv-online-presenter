@@ -47,7 +47,7 @@ Fundamenten #29 och #32, innehållsgranskningen #31 samt renderingbeslutet #25 k
 - Standard canonical URL är `https://hellmangroup.se`. Hostingprovidern ansvarar för IIS/TLS. Analytics och strukturerad data hålls avstängda tills de godkänts; `logo.svg` är fortfarande en releaseförutsättning.
 - #25 behöver uttryckligt beslut om dokumenterad arkitekturkonflikt innan valet implementeras.
 - #31 kräver verifiering av fakta och proveniens samt granskad content-commit innan appens submodulepekare uppdateras.
-- #7 väntar på Beebyte-värden i GitHub Environment `production` (`DEPLOY_SERVER_URL`, `DEPLOY_SITE_NAME`, `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_HEALTH_URL`), hemligheten `DEPLOY_PASSWORD`, Web Deploy-behörighet och .NET 10 Hosting Bundle.
+- #7 väntar på verifierad Beebyte explicit FTPS-deploy i GitHub Environment `production` (`DEPLOY_SERVER_URL`, `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_HEALTH_URL`), hemligheten `DEPLOY_PASSWORD` och .NET 10 Hosting Bundle.
 - #8 kan inte avslutas med enbart lokalt test; den kräver minst två versionsmärkta releaser och genomförd health check/rollback mot Beebyte.
 
 ## Nästa session

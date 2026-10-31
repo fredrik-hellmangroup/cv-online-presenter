@@ -107,26 +107,24 @@ jobs:
       name: production
       url: ${{ vars.DEPLOY_HEALTH_URL }}
     concurrency:
-      group: production-iis
+      group: production-deployment
       cancel-in-progress: false
     permissions:
       actions: read
       contents: read
     env:
-      DEPLOY_SERVER_URL: ${{ vars.DEPLOY_SERVER_URL }}
-      DEPLOY_SITE_NAME: ${{ vars.DEPLOY_SITE_NAME }}
+      DEPLOY_FTP_HOST: ${{ vars.DEPLOY_SERVER_URL }}
+      DEPLOY_FTP_PORT: 21
       DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
-      DEPLOY_CERTIFICATE_SHA256: ${{ vars.DEPLOY_CERTIFICATE_SHA256 }}
-      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifact
-      - name: Extract versioned IIS package
+      - name: Extract versioned FTP package
         shell: pwsh
         run: |
           $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
@@ -139,27 +137,17 @@ jobs:
               throw "Versioned package is missing required file '$requiredFile'."
             }
           }
-      - name: Ensure Microsoft Web Deploy is available
+      - name: Deploy release over explicit FTPS
         shell: pwsh
+        env:
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          $msDeployPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe'
-          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
-            choco install webdeploy -y --no-progress
-          }
-          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
-            throw 'Web Deploy installation failed or msdeploy.exe was not found.'
-          }
-      - name: Deploy release to IIS
-        shell: pwsh
-        run: |
-          .\scripts\deploy-beebyte-iis.ps1 `
+          .\scripts\deploy-beebyte-ftp.ps1 `
             -SourcePath 'artifact/publish' `
-            -DeployContentPath $env:DEPLOY_CONTENT_PATH `
-            -DeployServerUrl $env:DEPLOY_SERVER_URL `
-            -DeploySiteName $env:DEPLOY_SITE_NAME `
-            -DeployUsername $env:DEPLOY_USERNAME `
-            -DeployPassword $env:DEPLOY_PASSWORD `
-            -DeployCertificateSha256 $env:DEPLOY_CERTIFICATE_SHA256
-      - name: Verify IIS health
+            -FtpHost $env:DEPLOY_FTP_HOST `
+            -FtpPort $env:DEPLOY_FTP_PORT `
+            -RemotePath $env:DEPLOY_CONTENT_PATH `
+            -Username $env:DEPLOY_USERNAME
+      - name: Verify site health
         shell: pwsh
         run: .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL

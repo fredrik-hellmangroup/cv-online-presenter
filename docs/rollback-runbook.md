@@ -1,4 +1,4 @@
-# IIS rollback runbook
+# Beebyte rollback runbook
 
 The Beebyte deployment synchronizes a versioned GitHub Release package to the remote IIS content path. It does not have the local filesystem and app-pool access required by the legacy `rollback-iis.ps1` script.
 
@@ -6,12 +6,12 @@ The Beebyte deployment synchronizes a versioned GitHub Release package to the re
 
 1. Download the previous `cv-online-presenter-<tag>.zip` from GitHub Releases.
 2. Extract it to a clean local folder.
-3. Install Microsoft Web Deploy on an authorized Windows machine.
-4. Run `scripts/deploy-beebyte-iis.ps1` with the same Beebyte target values configured in the `production` GitHub Environment and the extracted folder as `SourcePath`.
+3. Use an authorized Windows machine with PowerShell and network access to Beebyte explicit FTPS.
+4. Run `scripts/deploy-beebyte-ftp.ps1` with the same Beebyte FTP target values configured in the `production` GitHub Environment and the extracted folder as `SourcePath`.
 5. Run `scripts/health-check.ps1` against the configured HTTPS `/health` URL.
 6. Verify `build-metadata.json` reports the expected app/content revision pair.
 
-Do not rebuild an old source tag for rollback when its immutable release package is available. Web Deploy uses `AppOffline` while synchronizing the selected package and preserves `/.well-known`.
+Do not rebuild an old source tag for rollback when its immutable release package is available. The FTP script uses a temporary `app_offline.htm` during upload and preserves existing files outside the selected package, including `/.well-known`. FTP deployment is not atomic; verify `/health` after the upload and repeat the rollback if the site remains offline.
 
 ## Release notes
 
