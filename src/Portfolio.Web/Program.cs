@@ -92,6 +92,24 @@ app.Use(async (context, next) =>
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
     if (app.Environment.IsProduction() && siteContent.SiteUrl?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true && context.Request.IsHttps)
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    context.Response.OnStarting(() =>
+    {
+        var relativePath = context.Request.Path.Value?.TrimStart('/');
+        var assetRevision = context.RequestServices.GetRequiredService<ReleaseIdentity>().AppRevision;
+        if (relativePath is not null
+            && IsCacheableStaticAsset(relativePath)
+            && (string.Equals(relativePath, "css/fonts.css", StringComparison.Ordinal)
+                || app.Environment.WebRootFileProvider.GetFileInfo(relativePath) is { Exists: true, IsDirectory: false })
+            && (context.Response.StatusCode is StatusCodes.Status200OK or StatusCodes.Status304NotModified)
+            && IsFullAppRevision(assetRevision)
+            && context.Request.Query.TryGetValue("v", out var requestedVersion)
+            && requestedVersion.Count == 1
+            && string.Equals(requestedVersion[0], assetRevision, StringComparison.Ordinal))
+        {
+            context.Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        }
+        return Task.CompletedTask;
+    });
     await next();
 });
 app.UseDefaultFiles();
@@ -136,18 +154,48 @@ app.Use(async (context, next) =>
     }
 });
 app.MapGet("/health", () => Results.Json(new { status = "ok" }));
+app.MapGet("/css/fonts.css", (ReleaseIdentity identity) =>
+{
+    var fontVersion = IsFullAppRevision(identity.AppRevision) ? $"?v={identity.AppRevision}" : string.Empty;
+    var fontStylesheet = $$"""
+        @font-face {
+          font-family: "Barlow Condensed";
+          font-style: normal;
+          font-weight: 700;
+          font-display: swap;
+          src: url("/fonts/BarlowCondensed-700.woff2{{fontVersion}}") format("woff2");
+        }
+
+        @font-face {
+          font-family: "Barlow Condensed";
+          font-style: normal;
+          font-weight: 800;
+          font-display: swap;
+          src: url("/fonts/BarlowCondensed-800.woff2{{fontVersion}}") format("woff2");
+        }
+        """;
+    return Results.Text(fontStylesheet, "text/css; charset=utf-8");
+});
 app.MapGet("/api/search", (string? q) => Results.Json(siteContent.Search(q)));
 app.MapGet("/search", () => Results.Redirect("/cv", permanent: true));
 app.MapGet("/profile", () => Results.Redirect("/cv", permanent: true));
-app.MapGet("/sitemap.xml", () =>
+app.MapGet("/sitemap.xml", (HttpContext context) =>
 {
+    if (!app.Environment.IsProduction()) context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
     if (siteContent.SiteUrl is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-    var paths = SiteContent.CoreRoutes.Keys.Where(path => siteContent.FindByPath(path) is not null)
-        .Concat(siteContent.PublishedProjects.Select(project => $"/projects/{project.Slug.Split('/').Last()}"));
-    var xml = new XDocument(new XElement("urlset",
-        new XAttribute("xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9"),
-        paths.Distinct().Select(path => new XElement("url", new XElement("loc", $"{siteContent.SiteUrl}{path}")))));
+    XNamespace sitemap = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    var xml = new XDocument(new XElement(sitemap + "urlset",
+        PublishedPages(siteContent).Select(item => new XElement(sitemap + "url",
+            new XElement(sitemap + "loc", $"{siteContent.SiteUrl}{item.Path}")))));
     return Results.Text(xml.ToString(), "application/xml; charset=utf-8");
+});
+app.MapGet("/llms.txt", (HttpContext context) =>
+{
+    if (!app.Environment.IsProduction()) context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    if (siteContent.SiteUrl is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    var lines = PublishedPages(siteContent).Select(item =>
+        $"- {item.Document.Title}: {item.Document.Description.ReplaceLineEndings(" ")} ({siteContent.SiteUrl}{item.Path})");
+    return Results.Text($"# {siteContent.Settings.SiteName}{Environment.NewLine}{Environment.NewLine}{string.Join(Environment.NewLine, lines)}{Environment.NewLine}", "text/plain; charset=utf-8");
 });
 app.MapGet("/robots.txt", (HttpContext context) =>
 {
@@ -195,6 +243,24 @@ app.MapFallback((HttpContext context) =>
     return new RazorComponentResult<App>();
 });
 app.Run();
+
+static IEnumerable<(string Path, ContentDocument Document)> PublishedPages(SiteContent content)
+{
+    foreach (var path in SiteContent.CoreRoutes.Keys)
+    {
+        if (content.FindByPath(path) is { } document) yield return (path, document);
+    }
+
+    foreach (var document in content.PublishedProjects)
+        yield return ($"/{document.Slug}", document);
+}
+
+static bool IsFullAppRevision(string revision) => revision.Length == 40
+    && revision.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+static bool IsCacheableStaticAsset(string path) => Path.GetExtension(path).ToLowerInvariant() is
+    ".css" or ".js" or ".mjs" or ".woff" or ".woff2" or ".ttf" or ".otf"
+        or ".svg" or ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".avif" or ".ico";
 
 static string ResolveContentRoot(string webRoot)
 {
