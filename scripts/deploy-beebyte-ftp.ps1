@@ -92,13 +92,28 @@ function Remove-FtpFileIfExists {
     param([Parameter(Mandatory = $true)][Uri]$Uri)
 
     try {
-        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
+        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::GetFileSize) | Out-Null
     }
     catch [System.Net.WebException] {
-        if ($_.Exception.Message -notmatch '550|not found|unavailable') {
-            throw
+        if ($_.Exception.Message -match '550|not found|unavailable') {
+            return
         }
+        throw
     }
+
+    try {
+        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
+    }
+    catch {
+        throw "Could not delete existing remote file '$Uri': $($_.Exception.Message)"
+    }
+}
+
+function Wait-ForRemoteApplicationStop {
+    param([int]$Seconds = 10)
+
+    Write-Host "Waiting $Seconds seconds for IIS to release application files."
+    Start-Sleep -Seconds $Seconds
 }
 
 if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
@@ -158,6 +173,7 @@ try {
     Write-Host "Connecting to $ftpHostValue on explicit FTPS port $FtpPort."
     Invoke-FtpRequest -Uri $offlineUri -Method ([System.Net.WebRequestMethods+Ftp]::UploadFile) -Body $offlineBody | Out-Null
     $offlineUploaded = $true
+    Wait-ForRemoteApplicationStop
 
     foreach ($directory in $directories) {
         $directoryUri = Get-FtpUri -Path "$remoteRoot/$directory" -FtpServerHost $ftpHostValue -Port $FtpPort
