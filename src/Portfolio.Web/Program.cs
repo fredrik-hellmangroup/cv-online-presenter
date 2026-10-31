@@ -98,7 +98,8 @@ app.Use(async (context, next) =>
         var assetRevision = context.RequestServices.GetRequiredService<ReleaseIdentity>().AppRevision;
         if (relativePath is not null
             && IsCacheableStaticAsset(relativePath)
-            && app.Environment.WebRootFileProvider.GetFileInfo(relativePath) is { Exists: true, IsDirectory: false }
+            && (string.Equals(relativePath, "css/fonts.css", StringComparison.Ordinal)
+                || app.Environment.WebRootFileProvider.GetFileInfo(relativePath) is { Exists: true, IsDirectory: false })
             && (context.Response.StatusCode is StatusCodes.Status200OK or StatusCodes.Status304NotModified)
             && IsFullAppRevision(assetRevision)
             && context.Request.Query.TryGetValue("v", out var requestedVersion)
@@ -153,6 +154,28 @@ app.Use(async (context, next) =>
     }
 });
 app.MapGet("/health", () => Results.Json(new { status = "ok" }));
+app.MapGet("/css/fonts.css", (ReleaseIdentity identity) =>
+{
+    var fontVersion = IsFullAppRevision(identity.AppRevision) ? $"?v={identity.AppRevision}" : string.Empty;
+    var fontStylesheet = $$"""
+        @font-face {
+          font-family: "Barlow Condensed";
+          font-style: normal;
+          font-weight: 700;
+          font-display: swap;
+          src: url("/fonts/BarlowCondensed-700.woff2{{fontVersion}}") format("woff2");
+        }
+
+        @font-face {
+          font-family: "Barlow Condensed";
+          font-style: normal;
+          font-weight: 800;
+          font-display: swap;
+          src: url("/fonts/BarlowCondensed-800.woff2{{fontVersion}}") format("woff2");
+        }
+        """;
+    return Results.Text(fontStylesheet, "text/css; charset=utf-8");
+});
 app.MapGet("/api/search", (string? q) => Results.Json(siteContent.Search(q)));
 app.MapGet("/search", () => Results.Redirect("/cv", permanent: true));
 app.MapGet("/profile", () => Results.Redirect("/cv", permanent: true));

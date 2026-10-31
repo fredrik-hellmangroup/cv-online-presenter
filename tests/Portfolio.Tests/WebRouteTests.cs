@@ -197,6 +197,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         var mismatched = await client.GetAsync("/css/site.css?v=unknown");
         var unversioned = await client.GetAsync("/css/site.css");
         var html = await client.GetStringAsync("/cv");
+        var fontsCss = await client.GetStringAsync("/css/fonts.css");
 
         Assert.Equal("no-cache", mismatched.Headers.GetValues("Cache-Control").Single());
         Assert.Equal("no-cache", unversioned.Headers.GetValues("Cache-Control").Single());
@@ -206,11 +207,18 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             Assert.Equal("public, max-age=31536000, immutable", versioned.Headers.GetValues("Cache-Control").Single());
             Assert.Contains($"/css/site.css?v={revision}", html);
             Assert.Contains($"/js/index.js?v={revision}", html);
+            Assert.Contains($"/css/fonts.css?v={revision}", html);
+            Assert.Contains($"/fonts/BarlowCondensed-800.woff2?v={revision}", html);
+            Assert.Contains($"/fonts/BarlowCondensed-700.woff2?v={revision}", fontsCss);
+            Assert.Contains($"/fonts/BarlowCondensed-800.woff2?v={revision}", fontsCss);
         }
         else
         {
             Assert.DoesNotContain("/css/site.css?v=", html);
             Assert.DoesNotContain("/js/index.js?v=", html);
+            Assert.DoesNotContain("/css/fonts.css?v=", html);
+            Assert.DoesNotContain("/fonts/BarlowCondensed-800.woff2?v=", html);
+            Assert.DoesNotContain("?v=", fontsCss);
         }
     }
 
@@ -223,14 +231,30 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
                 new ReleaseIdentity("test", revision, "unknown"))));
         using var versionedClient = versionedFactory.CreateClient();
 
+        var fontsCssResponse = await versionedClient.GetAsync($"/css/fonts.css?v={revision}");
+        var fontsCss = await fontsCssResponse.Content.ReadAsStringAsync();
+        var mismatchedFontsCss = await versionedClient.GetAsync("/css/fonts.css?v=0123456789abcdef0123456789abcdef01234568");
+        var unversionedFontsCss = await versionedClient.GetAsync("/css/fonts.css");
         var matching = await versionedClient.GetAsync($"/css/site.css?v={revision}");
+        var font700 = await versionedClient.GetAsync($"/fonts/BarlowCondensed-700.woff2?v={revision}");
+        var font800 = await versionedClient.GetAsync($"/fonts/BarlowCondensed-800.woff2?v={revision}");
         var mismatched = await versionedClient.GetAsync("/css/site.css?v=0123456789abcdef0123456789abcdef01234568");
         var html = await versionedClient.GetAsync($"/cv?v={revision}");
+        var htmlBody = await html.Content.ReadAsStringAsync();
         var sitemap = await versionedClient.GetAsync($"/sitemap.xml?v={revision}");
         var robots = await versionedClient.GetAsync($"/robots.txt?v={revision}");
         var llms = await versionedClient.GetAsync($"/llms.txt?v={revision}");
 
+        Assert.Contains($"/fonts/BarlowCondensed-700.woff2?v={revision}", fontsCss);
+        Assert.Contains($"/fonts/BarlowCondensed-800.woff2?v={revision}", fontsCss);
+        Assert.Contains($"/fonts/BarlowCondensed-800.woff2?v={revision}", htmlBody);
+        Assert.Contains($"/css/fonts.css?v={revision}", htmlBody);
+        Assert.Equal("public, max-age=31536000, immutable", fontsCssResponse.Headers.GetValues("Cache-Control").Single());
+        Assert.Equal("no-cache", mismatchedFontsCss.Headers.GetValues("Cache-Control").Single());
+        Assert.Equal("no-cache", unversionedFontsCss.Headers.GetValues("Cache-Control").Single());
         Assert.Equal("public, max-age=31536000, immutable", matching.Headers.GetValues("Cache-Control").Single());
+        Assert.Equal("public, max-age=31536000, immutable", font700.Headers.GetValues("Cache-Control").Single());
+        Assert.Equal("public, max-age=31536000, immutable", font800.Headers.GetValues("Cache-Control").Single());
         Assert.Equal("no-cache", mismatched.Headers.GetValues("Cache-Control").Single());
         Assert.Equal("no-cache", html.Headers.GetValues("Cache-Control").Single());
         Assert.Equal("no-cache", sitemap.Headers.GetValues("Cache-Control").Single());
