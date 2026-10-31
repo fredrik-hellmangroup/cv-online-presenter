@@ -8,7 +8,8 @@ if (!tag) throw new Error('Usage: node scripts/write-release-notes.mjs <tag>');
 
 const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const tags = git(['tag', '--sort=-version:refname']).split(/\r?\n/).filter(Boolean);
-const previousTag = tags.find(candidate => candidate !== tag);
+const currentTagIndex = tags.indexOf(tag);
+const previousTag = currentTagIndex >= 0 ? tags[currentTagIndex + 1] : undefined;
 const range = previousTag ? `${previousTag}..${tag}` : tag;
 const changes = git(['log', '--format=- %s (%h)', range]).split(/\r?\n/).filter(Boolean);
 const metadataPath = path.join(root, 'src', 'Portfolio.Web', 'wwwroot', 'build-metadata.json');
@@ -27,7 +28,7 @@ ${changes.length ? changes.join('\n') : '- No commits found for this tag range.'
 ## Rollback
 
 - Previous release: ${previousTag ? `\`${previousTag}\`` : 'none recorded'}.
-- Restore the previous IIS release folder and verify \`/health\` using [the rollback runbook](https://github.com/fredrik-hellmangroup/cv-online-presenter/blob/main/docs/rollback-runbook.md).
+- Redeploy the previous versioned package and verify \`/health\` using [the rollback runbook](https://github.com/fredrik-hellmangroup/cv-online-presenter/blob/main/docs/rollback-runbook.md).
 
 ## Build provenance
 

@@ -1,22 +1,18 @@
 # IIS rollback runbook
 
-Rollback selects an already published release folder. It does not restore source code, rebuild the app, or resolve a new content revision. Each folder retains the exact `wwwroot/build-metadata.json` generated for its app/content pair.
+The Beebyte deployment synchronizes a versioned GitHub Release package to the remote IIS content path. It does not have the local filesystem and app-pool access required by the legacy `rollback-iis.ps1` script.
 
 ## Manual rollback
 
-Run this on the configured self-hosted IIS runner or IIS host from an elevated PowerShell session. Replace the example values with the approved `staging` Environment settings and a release ID already present under `IIS_STAGING_ROOT\releases`:
+1. Download the previous `cv-online-presenter-<tag>.zip` from GitHub Releases.
+2. Extract it to a clean local folder.
+3. Install Microsoft Web Deploy on an authorized Windows machine.
+4. Run `scripts/deploy-beebyte-iis.ps1` with the same Beebyte target values configured in the `production` GitHub Environment and the extracted folder as `SourcePath`.
+5. Run `scripts/health-check.ps1` against the configured HTTPS `/health` URL.
+6. Verify `build-metadata.json` reports the expected app/content revision pair.
 
-```powershell
-./scripts/rollback-iis.ps1 `
-  -DeploymentRoot 'D:\sites\cv-online-presenter' `
-  -SiteName 'cv-online-presenter-staging' `
-  -AppPoolName 'cv-online-presenter-staging' `
-  -HealthUrl 'https://staging.example.invalid/health' `
-  -ReleaseId 'v1.0.0'
-```
-
-The script switches the IIS physical path to the selected existing release, restarts the app pool, and checks `/health`. If that check fails, it restores the path that was active before the rollback, restarts the pool, and checks health again. It prints only the release ID and app/content revisions; it does not log request data, personal data, or secrets.
+Do not rebuild an old source tag for rollback when its immutable release package is available. Web Deploy uses `AppOffline` while synchronizing the selected package and preserves `/.well-known`.
 
 ## Release notes
 
-The tag workflow generates notes containing commit summaries, content revision, migration review status, build provenance, and the previous release rollback reference. Review content changes and fill in migration details before production promotion. The staging pipeline is not enabled until the IIS environment is approved and configured.
+The tag workflow generates notes containing commit summaries, content revision, migration review status, build provenance, and the previous release rollback reference. Review content changes and migration details before deployment. The first live rollback must be exercised in an approved maintenance window before rollback readiness is claimed.
