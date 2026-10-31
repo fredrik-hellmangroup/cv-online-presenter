@@ -1,9 +1,13 @@
 # Search and sharing metadata
 
-Public pages derive a unique HTML title and description from validated page front matter. A title that already contains `siteName` (the home page) is used as is; other titles get ` · {siteName}` appended, so the name appears once per title. Open Graph title and description use the same reviewed values. Canonical and Open Graph URLs are emitted only when `siteUrl` is configured as an absolute HTTP or HTTPS origin in `content/site.json`.
+Public pages derive their title, description, and language from validated page metadata. The home title is used as-is when it already contains `siteName`; other titles append ` · {siteName}`. Canonical and Open Graph URLs use only the validated HTTP(S) origin in `content/site.json`, never the incoming `Host` header.
 
-The person's name is shown once as the `h1` of the home and CV pages, together with the role (`# Name – tagline`). The header brand is a monogram with an `aria-label` carrying the full name, and the footer shows `© year` and the optional `companyName` from `site.json`.
+Open Graph and Twitter tags use only the existing site name, page title, description, and locale. No verified social profile or share-image asset is available in public metadata/assets, so no social handles or images are emitted.
 
-`/sitemap.xml` lists published pages and projects only. Until `siteUrl` is set, it returns unavailable rather than publish incorrect canonical URLs. Production `robots.txt` references the sitemap; development and other staging environments disallow crawling and return `X-Robots-Tag: noindex, nofollow`.
+JSON-LD describes only `WebSite` and `WebPage`, using the site name, canonical URL, published page title and description, and validated locale. No `Person` or `Organization` claims are published. JSON is serialized with the default HTML-safe encoder before insertion into the JSON-LD script element.
 
-Unknown URLs return a noindex 404 with a link to the home page. Analytics and structured data remain disabled until their owner decisions are recorded in [analytics.md](./analytics.md).
+`/sitemap.xml` and `/llms.txt` are generated from the same publication policy as page rendering. They include only published pages/projects and canonical URLs from `siteUrl`; drafts are excluded. Both are unavailable when `siteUrl` is missing. `/robots.txt` allows indexing only in production with a configured `siteUrl`; development/staging disallow crawling and return `X-Robots-Tag: noindex, nofollow`. Unknown URLs are noindex 404 pages.
+
+HTML, sitemap, robots, llms.txt, and static URLs without a matching revision parameter use `no-cache`. Eligible CSS, JavaScript, font, and image assets receive a one-year immutable cache only when `v` exactly matches the complete app Git revision in release metadata. The release workflow generates that metadata before publishing. Missing, unknown, or mismatched revisions fail closed to `no-cache`.
+
+Analytics remains off. Decisions about provider, purpose, event schema, consent, and retention are required before enabling it. Do not collect form values, fingerprint visitors, or add unnecessary identifiers.

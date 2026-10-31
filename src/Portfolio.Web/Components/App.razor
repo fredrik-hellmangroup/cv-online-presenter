@@ -5,16 +5,21 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <HeadOutlet />
     <link rel="preload" href="/fonts/BarlowCondensed-800.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/css/site.css?v=@Content.Version" />
-    <link rel="stylesheet" href="/css/utilities.css?v=@Content.Version" />
+    <link rel="stylesheet" href="@(VersionedAsset("/css/site.css"))" />
+    <link rel="stylesheet" href="@(VersionedAsset("/css/utilities.css"))" />
 </head>
 <body>
     <canvas id="constellation-field" aria-hidden="true"></canvas>
     <Routes />
-    <script type="module" src="/js/index.js?v=@Content.Version"></script>
+    <script type="module" src="@(VersionedAsset("/js/index.js"))"></script>
 </body>
 </html>
 
 @code {
-    [Inject] private SiteContent Content { get; set; } = default!;
+    [Inject] private ReleaseIdentity Release { get; set; } = default!;
+
+    private string VersionedAsset(string path) => Release.AppRevision.Length == 40
+        && Release.AppRevision.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f')
+            ? $"{path}?v={Release.AppRevision}"
+            : path;
 }

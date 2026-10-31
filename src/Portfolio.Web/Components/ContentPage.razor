@@ -10,6 +10,7 @@
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IHostEnvironment HostEnvironment
 @inject IWebHostEnvironment WebHost
+@inject ReleaseIdentity ReleaseIdentity
 
 @if (page is not null)
 {
@@ -17,12 +18,22 @@
     <HeadContent>
         <meta name="description" content="@(page.Description)" />
         <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="@Content.Settings.SiteName" />
+        <meta property="og:locale" content="@(page.Locale.Replace('-', '_'))" />
         <meta property="og:title" content="@fullTitle" />
         <meta property="og:description" content="@(page.Description)" />
-        @if (Content.SiteUrl is not null)
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="@fullTitle" />
+        <meta name="twitter:description" content="@(page.Description)" />
+        @if (canonicalUrl is not null)
         {
-            <link rel="canonical" href="@(Content.SiteUrl + path)" />
-            <meta property="og:url" content="@(Content.SiteUrl + path)" />
+            <link rel="canonical" href="@canonicalUrl" />
+            <meta property="og:url" content="@canonicalUrl" />
+            <meta name="twitter:url" content="@canonicalUrl" />
+        }
+        @if (structuredData is not null)
+        {
+            <script type="application/ld+json">@((MarkupString)structuredData)</script>
         }
     </HeadContent>
 }
@@ -132,6 +143,7 @@ else
     private string? photoUrl;
     private string? constellationJson;
     private string path = "/";
+    private string canonicalPath = "/";
     private bool isCv => page is not null && path == "/cv";
     private bool isHome => page is not null && path == "/";
     // A title that already names the site (the home page) is used as is, so the name is not repeated.
@@ -140,14 +152,45 @@ StringComparison.OrdinalIgnoreCase)
         ? page?.Title ?? string.Empty
         : $"{page.Title} · {Content.Settings.SiteName}";
 
+
+    private string? canonicalUrl => page is null || Content.SiteUrl is null ? null : Content.SiteUrl + canonicalPath;
+    private string VersionedAsset(string assetPath) => ReleaseIdentity.AppRevision.Length == 40
+        && ReleaseIdentity.AppRevision.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f')
+            ? $"{assetPath}?v={ReleaseIdentity.AppRevision}"
+            : assetPath;
+    private string? structuredData => page is null || canonicalUrl is null ? null : JsonSerializer.Serialize(new object[]
+    {
+        new Dictionary<string, object?>
+        {
+            ["@context"] = "https://schema.org",
+            ["@type"] = "WebSite",
+            ["name"] = Content.Settings.SiteName,
+            ["url"] = Content.SiteUrl + "/",
+            ["inLanguage"] = page.Locale
+        },
+        new Dictionary<string, object?>
+        {
+            ["@context"] = "https://schema.org",
+            ["@type"] = "WebPage",
+            ["name"] = fullTitle,
+            ["description"] = page.Description,
+            ["url"] = canonicalUrl,
+            ["inLanguage"] = page.Locale
+        }
+    });
+
     protected override void OnParametersSet()
     {
         path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
         page = Content.FindByPath(path);
+        canonicalPath = page is null
+            ? path
+            : SiteContent.CoreRoutes.FirstOrDefault(route => string.Equals(route.Value, page.Slug, StringComparison.OrdinalIgnoreCase)).Key
+                ?? $"/{page.Slug}";
         var cvView = Content.Cv;
         cv = isCv ? cvView : null;
         photoUrl = cv is not null &&  WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
-            ? $"/img/profile.webp?v={Content.Version}"
+            ? VersionedAsset("/img/profile.webp")
             : null;
         constellationJson = cvView is { SkillGroups.Count: > 0 }
             ? JsonSerializer.Serialize(
