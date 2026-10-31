@@ -257,6 +257,7 @@ $hostsPath = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'
 $hostsEntry = "$($pinnedConnection.Address)`t$certificateDnsName`t# cv-online-presenter Web Deploy"
 $hostsEntryAdded = $false
 $certificateAdded = $false
+$certificatePath = Join-Path ([IO.Path]::GetTempPath()) "cv-online-presenter-$($certificate.Thumbprint).cer"
 $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
     [System.Security.Cryptography.X509Certificates.StoreName]::Root,
     [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
@@ -279,14 +280,21 @@ try {
         Write-Host "Added a temporary hosts mapping for '$certificateDnsName'."
     }
 
-    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
     $alreadyTrusted = $store.Certificates.Find(
         [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
         $certificate.Thumbprint,
         $false
     ).Count -gt 0
     if (-not $alreadyTrusted) {
-        $store.Add($certificate)
+        [IO.File]::WriteAllBytes(
+            $certificatePath,
+            $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+        )
+        & certutil.exe -user -f -addstore Root $certificatePath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to add the pinned certificate to the current-user root store (certutil exit code $LASTEXITCODE)."
+        }
         $certificateAdded = $true
         Write-Host 'Added the pinned certificate to the current-user root store temporarily.'
     }
@@ -326,7 +334,10 @@ try {
 finally {
     try {
         if ($certificateAdded) {
-            $store.Remove($certificate)
+            & certutil.exe -user -delstore Root $certificate.Thumbprint
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to remove the pinned certificate from the current-user root store (certutil exit code $LASTEXITCODE)."
+            }
         }
     }
     finally {
@@ -335,9 +346,14 @@ finally {
         }
         finally {
             try {
-                if ($hostsEntryAdded) {
-                    $remainingHostsEntries = Get-Content -LiteralPath $hostsPath | Where-Object { $_ -ne $hostsEntry }
-                    Set-Content -LiteralPath $hostsPath -Value $remainingHostsEntries -Encoding ascii
+                try {
+                    if ($hostsEntryAdded) {
+                        $remainingHostsEntries = Get-Content -LiteralPath $hostsPath | Where-Object { $_ -ne $hostsEntry }
+                        Set-Content -LiteralPath $hostsPath -Value $remainingHostsEntries -Encoding ascii
+                    }
+                }
+                finally {
+                    Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
                 }
             }
             finally {
