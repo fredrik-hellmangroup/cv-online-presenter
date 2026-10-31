@@ -121,17 +121,19 @@ if ($ValidateOnly) {
 }
 
 $files = Get-ChildItem -LiteralPath $resolvedSourcePath -File -Recurse
-$directories = $files | ForEach-Object {
-    $_.Directory.FullName.Substring($resolvedSourcePath.Length).TrimStart('\')
-} | Where-Object { $_ } | ForEach-Object {
-    ($_ -replace '\\', '/') -split '/'
-} | ForEach-Object {
-    $parts = [System.Collections.Generic.List[string]]::new()
-    foreach ($part in $_) {
-        [void]$parts.Add($part)
-        $parts -join '/'
+$directorySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($file in $files) {
+    $relativeDirectory = $file.Directory.FullName.Substring($resolvedSourcePath.Length).TrimStart('\')
+    if ($relativeDirectory) {
+        $parts = $relativeDirectory -replace '\\', '/' -split '/'
+        $pathParts = [System.Collections.Generic.List[string]]::new()
+        foreach ($part in $parts) {
+            [void]$pathParts.Add($part)
+            [void]$directorySet.Add(($pathParts -join '/'))
+        }
     }
-} | Sort-Object -Unique
+}
+$directories = $directorySet | Sort-Object
 
 $offlinePath = "$remoteRoot/app_offline.htm"
 $offlineUri = Get-FtpUri -Path $offlinePath -FtpServerHost $ftpHostValue -Port $FtpPort
