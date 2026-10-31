@@ -4,11 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <HeadOutlet />
+    <link rel="preload" href="/fonts/BarlowCondensed-800.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/css/site.css?v=@Content.Version" />
     <link rel="stylesheet" href="/css/utilities.css?v=@Content.Version" />
 </head>
 <body>
-    <canvas id="particle-field" aria-hidden="true"></canvas>
+    <canvas id="aurora-field" aria-hidden="true"></canvas>
+    <canvas id="constellation-field" aria-hidden="true"></canvas>
     <Routes />
     <script type="module" src="/js/index.js?v=@Content.Version"></script>
 </body>

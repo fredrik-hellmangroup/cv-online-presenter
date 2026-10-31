@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 
 const routes = ['/', '/profile', '/services', '/projects', '/contact', '/cv'];
 
+// Entrance animations and colour transitions change computed colours mid-flight, which would skew contrast checks.
+const settled = page => page.evaluate(() => Promise.all(
+  document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)
+));
+
 test('unknown URLs return a useful, private 404', async ({ page }) => {
   const response = await page.goto('/this-page-does-not-exist');
   expect(response?.status()).toBe(404);
@@ -49,12 +54,14 @@ for (const route of routes) {
     const themeToggle = page.getByRole('button', { name: 'Växla tema' });
     await expect(themeToggle).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await settled(page);
     const darkAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(darkAudit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 
     await themeToggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(themeToggle).toHaveAttribute('aria-pressed', 'false');
+    await settled(page);
     const lightAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(lightAudit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
   });
@@ -87,7 +94,7 @@ for (const route of routes) {
         await page.locator('html').evaluate((element, value) => { element.dataset.calendarLayer = value; }, layer);
         const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
         expect(audit.violations.filter(item => item.id === 'color-contrast')).toEqual([]);
-        const motion = await page.locator('header').evaluate(element => getComputedStyle(element).animationDuration);
+        const motion = await page.locator('.site-header').evaluate(element => getComputedStyle(element).animationDuration);
         expect(parseFloat(motion)).toBeLessThanOrEqual(0.00001);
       }
     }
@@ -99,6 +106,7 @@ for (const route of routes) {
     if (browserName !== 'chromium') test.skip();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Hoppa till innehåll' })).toBeFocused();
+    await settled(page);
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     const severe = results.violations.filter(item => item.impact === 'critical' || item.impact === 'serious');
     expect(severe, JSON.stringify(severe, null, 2)).toEqual([]);
@@ -138,12 +146,44 @@ test('/cv search is a floating panel and /search no longer exists as a page', as
   await expect(page).toHaveURL(/\/cv$/);
 });
 
-test('/cv particle canvas is present and reduced motion keeps it static', async ({ page }) => {
+test('/cv constellation background is decorative and reduced motion keeps it static', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/cv');
-  await expect(page.locator('#particle-field')).toHaveAttribute('aria-hidden', 'true');
-  const sample = () => page.locator('#particle-field').evaluate(canvas => canvas.toDataURL());
+  await expect(page.locator('#constellation-field')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('#aurora-field')).toHaveAttribute('aria-hidden', 'true');
+  const sample = () => page.locator('#constellation-field').evaluate(canvas => canvas.toDataURL());
   const first = await sample();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(600);
   expect(await sample()).toBe(first);
+});
+
+test('/cv constellation reacts to hovering an assignment and runs without errors', async ({ page, browserName }) => {
+  if (browserName !== 'chromium') test.skip();
+  const problems = [];
+  page.on('pageerror', error => problems.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') problems.push(message.text()); });
+  await page.goto('/cv');
+  const canvas = page.locator('#constellation-field');
+  const ambient = await canvas.evaluate(element => element.toDataURL());
+  await page.locator('.git-row.branch a').first().hover();
+  await page.waitForTimeout(900);
+  expect(await canvas.evaluate(element => element.toDataURL())).not.toBe(ambient);
+  expect(problems).toEqual([]);
+});
+
+test('/cv presents the CV as hero, figures, git log and cards without JavaScript', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto('/cv');
+  await expect(page.locator('main h1')).toHaveCount(1);
+  expect(await page.locator('.cv-figures > div').count()).toBeGreaterThanOrEqual(3);
+  expect(await page.locator('.git-log .git-row').count()).toBeGreaterThan(10);
+  expect(await page.locator('.assignment').count()).toBeGreaterThanOrEqual(5);
+  expect(await page.locator('.assignment .tags li').count()).toBeGreaterThan(10);
+  expect(await page.locator('.skill-group .chips li').count()).toBeGreaterThan(10);
+  const firstLink = page.locator('.git-row.branch a').first();
+  const target = (await firstLink.getAttribute('href'))?.slice(1);
+  expect(target).toBeTruthy();
+  await expect(page.locator(`[id="${target}"]`)).toHaveCount(1);
+  await context.close();
 });

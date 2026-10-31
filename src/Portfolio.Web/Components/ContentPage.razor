@@ -5,10 +5,12 @@
 @page "/projects"
 @page "/cv"
 @page "/projects/{Slug}"
+@using System.Text.Json
 @inject SiteContent Content
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IHostEnvironment HostEnvironment
+@inject IWebHostEnvironment WebHost
 
 @if (page is not null)
 {
@@ -52,6 +54,10 @@ else
     }
 </header>
 <main id="main">
+    @if (cv is not null)
+    {
+        <CvHero View="cv" PhotoUrl="@photoUrl" HistoryId="@cv.HistoryId" />
+    }
     <div class="page-layout">
         @if (isCv)
         {
@@ -60,10 +66,21 @@ else
                 <ol id="cv-toc-list"></ol>
             </aside>
         }
-        <article>
+        <article class="@(cv is null ? null : "cv")">
             @if (page is not null)
             {
-                @((MarkupString)Content.Render(page))
+                @if (cv is not null)
+                {
+                    @((MarkupString)cv.BeforeHistoryHtml)
+                    @((MarkupString)cv.HistoryHeadingHtml)
+                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? cv.Name)" />
+                    @((MarkupString)cv.AssignmentsHtml)
+                    @((MarkupString)cv.AfterHistoryHtml)
+                }
+                else
+                {
+                    @((MarkupString)Content.Render(page))
+                }
                 @if (path == "/contact" && IsValidEmail(Content.Settings.ContactEmail))
                 {
                     <p><a href="mailto:@Content.Settings.ContactEmail">@Content.Settings.ContactEmail</a></p>
@@ -97,6 +114,10 @@ else
 </footer>
 @if (page is not null)
 {
+    @if (constellationJson is not null)
+    {
+        <div id="constellation-data" data-json="@constellationJson" hidden></div>
+    }
     <div id="easter-egg" class="easter-egg" role="status" hidden>
         <p>✨ Du hittade en liten detalj i portfoliomallen.</p>
         <button id="easter-egg-close" type="button">Stäng</button>
@@ -107,6 +128,9 @@ else
     [Parameter] public string? Slug { get; set; }
 
     private ContentDocument? page;
+    private CvView? cv;
+    private string? photoUrl;
+    private string? constellationJson;
     private string path = "/";
     private bool isCv => page is not null && path == "/cv";
     private string fullTitle => $"{page?.Title} · {Content.Settings.SiteName}";
@@ -115,6 +139,16 @@ else
     {
         path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
         page = Content.FindByPath(path);
+        var cvView = Content.Cv;
+        cv = isCv ? cvView : null;
+        photoUrl = cv is not null && WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
+            ? $"/img/profile.webp?v={Content.Version}"
+            : null;
+        constellationJson = cvView is { SkillGroups.Count: > 0 }
+            ? JsonSerializer.Serialize(
+                new { groups = cvView.SkillGroups, assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }) },
+                JsonSerializerOptions.Web)
+            : null;
         var context = HttpContextAccessor.HttpContext;
         if (page is null && context is not null)
         {

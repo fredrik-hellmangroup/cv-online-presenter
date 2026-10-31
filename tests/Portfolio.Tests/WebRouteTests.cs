@@ -72,5 +72,21 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("id=\"easter-egg\" class=\"easter-egg\" role=\"status\" hidden", html);
         Assert.DoesNotContain("easter-egg-toggle", html);
         Assert.DoesNotContain("href=\"/search\"", html);
+        Assert.Contains("class=\"cv-hero\"", html);
+        Assert.Contains("data-count=", html);
+        Assert.Contains("git log --graph --oneline", html);
+        Assert.Contains("class=\"assignment\"", html);
+        Assert.Contains("class=\"skill-group\"", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<h1[ >]"));
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/cv")]
+    public async Task EveryPageCarriesTheConstellationData(string path)
+    {
+        var html = await client.GetStringAsync(path);
+        Assert.Contains("id=\"constellation-data\"", html);
+        Assert.Contains("data-json=\"{&quot;groups&quot;", html);
     }
 }

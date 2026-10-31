@@ -1,3 +1,4 @@
+import { CV_QUERY_EVENT } from './events.js';
 import type { ExperienceEngine } from './experience.js';
 
 type SearchResult = { path: string; title: string; description: string };
@@ -20,7 +21,9 @@ export class CvSearchEngine implements ExperienceEngine {
       toggle.setAttribute('aria-expanded', String(open));
       if (open) input.focus();
       else toggle.focus();
+      announce(open ? input.value.trim() : '');
     };
+    const announce = (query: string) => document.dispatchEvent(new CustomEvent(CV_QUERY_EVENT, { detail: query }));
 
     toggle.addEventListener('click', () => setOpen(!isOpen()));
     document.addEventListener('keydown', event => {
@@ -42,6 +45,7 @@ export class CvSearchEngine implements ExperienceEngine {
       const currentRequest = ++requestNumber;
       results.replaceChildren();
       const query = input.value.trim();
+      announce(query);
       if (!query) return;
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
