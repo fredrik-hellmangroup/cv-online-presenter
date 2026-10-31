@@ -30,8 +30,9 @@
   --on-accent: #0a0d16;
   --focus: #7dd3fc;
   --particle-rgb: 255, 140, 80;
-  --particle-label-rgb: 215, 222, 238;
+  --particle-label-rgb: 255, 176, 128;
   --particle-label-alpha: .14;
+  --particle-core-rgb: 255, 255, 255;
   --glow-a: rgba(255, 107, 44, .18);
   --glow-b: rgba(99, 84, 255, .16);
   --season-accent: transparent;
@@ -56,8 +57,9 @@
   --on-accent: #fff;
   --focus: #0a58ff;
   --particle-rgb: 194, 65, 12;
-  --particle-label-rgb: 20, 22, 31;
+  --particle-label-rgb: 154, 52, 0;
   --particle-label-alpha: .6;
+  --particle-core-rgb: 124, 29, 0;
   --glow-a: rgba(255, 140, 80, .22);
   --glow-b: rgba(99, 84, 255, .1);
 }
@@ -147,6 +149,16 @@ nav a:hover, nav a:focus-visible { color: var(--text); border-bottom-color: var(
 main { min-height: 65vh; padding-block: clamp(2rem, 7vw, 5rem); animation: rise .8s cubic-bezier(.2, .7, .2, 1) both; }
 .page-layout { display: block; }
 article { max-width: 56rem; min-width: 0; }
+
+/* Start page: a quiet title so the constellation behind it is the focus. */
+main.home { min-height: calc(100svh - 11rem); display: grid; align-content: center; }
+main.home h1 { font-size: clamp(2.75rem, 8vw, 5.5rem); margin-bottom: 1.25rem; }
+main.home .h1-tagline { font-size: clamp(1rem, 2.4vw, 1.5rem); }
+main.home .cv-actions { margin-top: 2rem; justify-content: center; }
+main.home article { margin-inline: auto; text-align: center; }
+main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+:root:has(main.home) { --particle-label-alpha: .42; }
+:root[data-theme="light"]:has(main.home) { --particle-label-alpha: .7; }
 
 h1 {
   margin: 0 0 1.5rem;
@@ -274,6 +286,32 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 .button-link:hover { color: var(--text); border-color: var(--accent); box-shadow: 0 0 1.5rem -.25rem var(--accent); transform: translateY(-1px); }
 .button-link.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .button-link.primary:hover { color: var(--on-accent); }
+
+.contact-card { position: relative; max-width: 40rem; margin-top: 2.5rem; padding: clamp(1.5rem, 4vw, 2.5rem); border: 1px solid var(--line); border-radius: 1.5rem; background: var(--surface-solid); box-shadow: 0 1.5rem 4rem -2rem rgba(0, 0, 0, .6); }
+.contact-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: .25rem; border-radius: 1.5rem 0 0 1.5rem; background: linear-gradient(var(--accent), var(--focus)); }
+.contact-card h2 { margin: 0 0 1rem; padding: 0; border: 0; font-size: clamp(1.8rem, 5vw, 2.8rem); line-height: .95; }
+.contact-card p { margin: 0 0 1.25rem; }
+.contact-eyebrow { margin: 0 0 .5rem; font-family: var(--font-mono); font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--link); }
+.contact-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+.contact-field { display: grid; gap: .4rem; }
+.contact-field label { font-weight: 700; }
+.contact-field input, .contact-field textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--text); background: var(--surface-solid); border: 1px solid var(--line); border-radius: .75rem; padding: .7rem .9rem; }
+.contact-field textarea { resize: vertical; min-height: 9rem; }
+.contact-field input:focus-visible, .contact-field textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.contact-field [aria-invalid="true"] { border-color: var(--accent); }
+.contact-error { margin: 0; color: var(--link); font-size: .95rem; }
+.contact-notice { margin: 0 0 1.25rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface-solid); }
+.contact-notice p { margin: 0; }
+.contact-alert { border-color: var(--accent); }
+.contact-alert:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.contact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0; }
+.contact-submit { padding: .7rem 1.4rem; font-weight: 700; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.contact-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+/* The Turnstile widget is a fixed 300px wide; scale it down so it fits the card on very narrow screens. */
+@media (max-width: 25rem) {
+  .contact-card { padding: 1.25rem; }
+  .cf-turnstile { transform: scale(.8); transform-origin: 0 0; height: 3.3rem; }
+}
 .cv-photo { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 1.5rem; border: 1px solid var(--line); box-shadow: 0 0 5rem -1.5rem var(--accent); }
 
 .cv-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; margin: 0 0 3rem; padding: 0; }

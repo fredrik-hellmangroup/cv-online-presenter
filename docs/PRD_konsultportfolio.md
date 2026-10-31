@@ -283,7 +283,7 @@ Visuell riktning är Immersive Dark (ersätter tidigare Scandinavian Editorial, 
 | OQ-06 | **Löst:** MIT för båda repona; demo-CV är tydligt syntetisk och skild från godkänt innehåll. |
 | OQ-07 | **Avstängd som säkert standardläge:** ingen analytics-vendor eller tracking är konfigurerad. Aktivering kräver leverantör, ändamål, events, samtycke och retention. |
 | OQ-08 | **Delvis löst:** ägaren tillhandahåller `logo.svg` före deployment. System-font stack används; nuvarande palett är designutkast. Extra fotografier/illustrationer ingår inte utan rättighetsgodkännande. |
-| OQ-09 | **Löst:** kontakt sker via e-postlänk; formulär ingår inte. `contactEmail` är satt till `fredrik@hellmangroup.se` i `content/content/site.json` efter ägarens godkännande. |
+| OQ-09 | **Löst:** kontakt sker via e-postlänk (`mailto:`), och ett kontaktformulär med Cloudflare Turnstile är godkänt av ägaren. Formuläret visas först när Turnstile och SMTP är konfigurerade; annars visas ett kontaktkort med e-postlänk. `contactEmail` är satt till `fredrik@hellmangroup.se` i `content/content/site.json`. Se [contact-form.md](contact-form.md). |
 | OQ-10 | **Defererat/out of scope:** produktions-SLO, backup/retention och incidentansvar fastställs innan produktionstjänst med dessa driftkrav tas i scope. |
 ## 13. Releaseplan och definition av klart
 Releaseplanen består av vertikala slices med fungerande flöde från innehåll till sida. Estimat lämnas öppna tills kapacitet och hosting är kända.

@@ -38,6 +38,12 @@ public sealed class PageHeadingTests
         Assert.Equal(html, PageHeading.SplitFirstH1(html));
     }
 
+    [Fact]
+    public void RemoveFirstH1DropsOnlyTheFirstHeading()
+    {
+        Assert.Equal("<p>Text</p><h1>Kvar</h1>", PageHeading.RemoveFirstH1("<h1 id=\"profil\">Profil</h1>\n<p>Text</p><h1>Kvar</h1>"));
+    }
+
     [Theory]
     [InlineData("Fredrik Hallerös", "FH")]
     [InlineData("Cher", "C")]

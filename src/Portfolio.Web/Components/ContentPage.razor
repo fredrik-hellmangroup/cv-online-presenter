@@ -39,7 +39,8 @@ else
 <header class="site-header">
     <div class="brand-wrap">
         <span id="brand-mark" class="brand-mark" aria-hidden="true"></span>
-        <a class="brand" href="/" aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
+        <a class="brand" href="/"
+           aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
     </div>
     <nav aria-label="Huvudnavigation">
         <a href="/profile">Profil</a>
@@ -53,10 +54,14 @@ else
         <button id="theme-toggle" type="button" aria-pressed="true" hidden>Växla tema</button>
     }
 </header>
-<main id="main">
+<main id="main" class="@(isHome ? "home" : null)">
     @if (cv is not null)
     {
         <CvHero View="cv" PhotoUrl="@photoUrl" HistoryId="@cv.HistoryId" />
+    }
+    else if (profileHero is not null)
+    {
+        <CvHero View="profileHero" Heading="Profil" PhotoUrl="@photoUrl" HistoryHref="@($"/cv#{profileHero.HistoryId}")" />
     }
     <div class="page-layout">
         @if (isCv)
@@ -79,11 +84,12 @@ else
                 }
                 else
                 {
-                    @((MarkupString)PageHeading.SplitFirstH1(Content.Render(page)))
+                    @((MarkupString)PageHeading.SplitFirstH1(profileHero is null ? Content.Render(page) :
+            PageHeading.RemoveFirstH1(Content.Render(page))))
                 }
-                @if (path == "/contact" && IsValidEmail(Content.Settings.ContactEmail))
+                @if (path == "/contact")
                 {
-                    <p><a href="mailto:@Content.Settings.ContactEmail">@Content.Settings.ContactEmail</a></p>
+                    <ContactSection Email="@Content.Settings.ContactEmail" />
                 }
             }
             else
@@ -130,12 +136,15 @@ else
 
     private ContentDocument? page;
     private CvView? cv;
+    private CvView? profileHero;
     private string? photoUrl;
     private string? constellationJson;
     private string path = "/";
     private bool isCv => page is not null && path == "/cv";
+    private bool isHome => page is not null && path == "/";
     // A title that already names the site (the home page) is used as is, so the name is not repeated.
-    private string fullTitle => page is null || page.Title.Contains(Content.Settings.SiteName, StringComparison.OrdinalIgnoreCase)
+    private string fullTitle => page is null || page.Title.Contains(Content.Settings.SiteName,
+StringComparison.OrdinalIgnoreCase)
         ? page?.Title ?? string.Empty
         : $"{page.Title} · {Content.Settings.SiteName}";
 
@@ -145,7 +154,8 @@ else
         page = Content.FindByPath(path);
         var cvView = Content.Cv;
         cv = isCv ? cvView : null;
-        photoUrl = cv is not null && WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
+        profileHero = page is not null && path == "/profile" ? cvView : null;
+        photoUrl = (cv ?? profileHero) is not null && WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
             ? $"/img/profile.webp?v={Content.Version}"
             : null;
         constellationJson = cvView is { SkillGroups.Count: > 0 }
@@ -162,8 +172,4 @@ else
         else if (context is not null && (!HostEnvironment.IsProduction() || Content.SiteUrl is null))
             context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
     }
-
-    private static bool IsValidEmail(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && System.Net.Mail.MailAddress.TryCreate(value, out var address) && address.Address ==
-value;
 }

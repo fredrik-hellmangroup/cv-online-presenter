@@ -2,12 +2,20 @@
 
 <header class="cv-hero">
     <div class="cv-hero-copy">
-        @if (!string.IsNullOrWhiteSpace(View.Kicker))
+        @if (Heading is not null)
+        {
+            <p class="cv-kicker">@name</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(View.Kicker))
         {
             <p class="cv-kicker">@View.Kicker</p>
         }
         <h1>
-            @if (tagline is null)
+            @if (Heading is not null)
+            {
+                @Heading
+            }
+            else if (tagline is null)
             {
                 @name
             }
@@ -31,7 +39,7 @@
             <p class="cv-summary">@View.Summary</p>
         }
         <p class="cv-actions">
-            <a class="button-link primary" href="#@HistoryId">Se uppdragen</a>
+            <a class="button-link primary" href="@(HistoryHref ?? "#" + HistoryId)">Se uppdragen</a>
             <a class="button-link" href="/contact">Kontakta mig</a>
         </p>
     </div>
@@ -54,6 +62,10 @@
     [Parameter, EditorRequired] public CvView View { get; set; } = default!;
     [Parameter] public string? PhotoUrl { get; set; }
     [Parameter] public string HistoryId { get; set; } = "uppdragshistorik";
+    // Replaces the name as the H1 (the name then becomes the kicker); used where the hero introduces a page other than the CV.
+    [Parameter] public string? Heading { get; set; }
+    // Overrides the in-page anchor to the assignment history, for pages other than the CV.
+    [Parameter] public string? HistoryHref { get; set; }
 
     private string name => PageHeading.Split(View.Name).Name;
     private string? tagline => PageHeading.Split(View.Name).Tagline;

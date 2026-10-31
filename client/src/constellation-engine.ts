@@ -21,6 +21,7 @@ interface Body extends SkillNode {
   vy: number;
   phase: number;
   glow: number;
+  boost: number;
   half: number;
 }
 
@@ -37,6 +38,12 @@ const AMBIENT_GLOW = 0.38;
 const DIM_GLOW = 0.07;
 const NARROW_VIEWPORT = 700;
 const POINTER_RADIUS = 140;
+// Start page only: the cursor wakes nearby nodes, clicks send out a shockwave and a random node pulses now and then.
+const WAKE_RADIUS = 220;
+const SHOCK_RADIUS = 300;
+const PULSE_INTERVAL_MS = 1800;
+const PULSE_DURATION_MS = 1600;
+const HOME_AMBIENT_GLOW = 0.5;
 const TAU = Math.PI * 2;
 // Keep the constellation clear of the sticky header and the floating search button.
 const SIDE_INSET = 24;
@@ -69,6 +76,15 @@ export class ConstellationEngine implements ExperienceEngine {
 
     const edges = buildEdges(nodes, data.assignments);
     const root = document.documentElement;
+    const playful = document.querySelector('main.home') !== null;
+    const ambientGlow = playful ? HOME_AMBIENT_GLOW : AMBIENT_GLOW;
+    const neighbours = nodes.map(() => new Set<number>());
+    for (const edge of edges) {
+      neighbours[edge.a].add(edge.b);
+      neighbours[edge.b].add(edge.a);
+    }
+    let pulse: { members: Set<number>; until: number } | null = null;
+    let nextPulse = 0;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const pointer = { x: -9999, y: -9999 };
     let bodies: Body[] = [];
@@ -86,6 +102,8 @@ export class ConstellationEngine implements ExperienceEngine {
     let colour = '255, 140, 80';
     let labelColour = '215, 222, 238';
     let labelAlpha = 0.14;
+    // The bright centre of lit nodes and data packets: white on dark, a deep ember on light.
+    let coreColour = '255, 255, 255';
     let area: Area = { left: 0, top: 0, right: 0, bottom: 0 };
 
     const refreshColour = () => {
@@ -93,6 +111,7 @@ export class ConstellationEngine implements ExperienceEngine {
       colour = style.getPropertyValue('--particle-rgb').trim() || colour;
       labelColour = style.getPropertyValue('--particle-label-rgb').trim() || labelColour;
       labelAlpha = Number.parseFloat(style.getPropertyValue('--particle-label-alpha')) || labelAlpha;
+      coreColour = style.getPropertyValue('--particle-core-rgb').trim() || coreColour;
     };
 
     // The sticky header (desktop) or the sticky table of contents (narrow screens) covers the top of the viewport.
@@ -121,11 +140,14 @@ export class ConstellationEngine implements ExperienceEngine {
         name => context.measureText(name).width);
       bodies = nodes.map((node, index) => {
         const { x, y, half } = placements[index];
-        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: AMBIENT_GLOW, half };
+        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: ambientGlow, boost: 0, half };
       });
     };
 
-    const targetGlow = (index: number) => focus ? (focus.has(index) ? 1 : DIM_GLOW) : AMBIENT_GLOW;
+    const targetGlow = (index: number) => {
+      if (focus) return focus.has(index) ? 1 : DIM_GLOW;
+      return Math.max(ambientGlow, bodies[index]?.boost ?? 0);
+    };
 
     const recompute = () => {
       const keywords = hovered ?? inView;
@@ -154,7 +176,47 @@ export class ConstellationEngine implements ExperienceEngine {
       });
     };
 
+    const spawnFrom = (index: number, count: number) => {
+      const own = edges.filter(edge => edge.a === index || edge.b === index);
+      for (let step = 0; step < count && own.length > 0 && packets.length < MAX_PACKETS; step++) {
+        const edge = own[Math.floor(Math.random() * own.length)];
+        packets.push({ edge, progress: 0, speed: 0.008 + Math.random() * 0.012, reverse: edge.b === index });
+      }
+    };
+
+    // Boost = how awake a node is: close to the cursor, or part of the current idle pulse.
+    const updatePlay = (time: number) => {
+      if (time >= nextPulse && bodies.length > 0) {
+        const index = Math.floor(Math.random() * bodies.length);
+        pulse = { members: new Set([index, ...neighbours[index]]), until: time + PULSE_DURATION_MS };
+        spawnFrom(index, 3);
+        nextPulse = time + PULSE_INTERVAL_MS;
+      }
+      if (pulse && time > pulse.until) pulse = null;
+      bodies.forEach((body, index) => {
+        const near = Math.max(0, 1 - Math.hypot(body.x - pointer.x, body.y - pointer.y) / WAKE_RADIUS);
+        const pulsed = pulse?.members.has(index) ? 0.85 : 0;
+        body.boost = Math.max(near * 1.1, pulsed);
+      });
+    };
+
+    const shockwave = (event: PointerEvent) => {
+      if (motion.matches || (event.target instanceof Element && event.target.closest('a, button, input, textarea, select'))) return;
+      for (const body of bodies) {
+        const dx = body.x - event.clientX;
+        const dy = body.y - event.clientY;
+        const distance = Math.hypot(dx, dy);
+        if (distance > SHOCK_RADIUS || distance < 0.1) continue;
+        const push = (1 - distance / SHOCK_RADIUS) * 14;
+        body.vx += (dx / distance) * push;
+        body.vy += (dy / distance) * push;
+        body.boost = 1;
+      }
+      for (let count = 0; count < 8; count++) spawnPacket();
+    };
+
     const update = (delta: number, time: number) => {
+      if (playful) updatePlay(time);
       for (const body of bodies) {
         const targetX = body.hx + Math.sin(time / 1700 + body.phase) * WOBBLE;
         const targetY = body.hy + Math.cos(time / 2100 + body.phase) * WOBBLE;
@@ -204,7 +266,7 @@ export class ConstellationEngine implements ExperienceEngine {
         const x = from.x + (to.x - from.x) * amount;
         const y = from.y + (to.y - from.y) * amount;
         const halo = context.createRadialGradient(x, y, 0, x, y, 9);
-        halo.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        halo.addColorStop(0, `rgba(${coreColour}, 0.95)`);
         halo.addColorStop(0.35, `rgba(${colour}, 0.7)`);
         halo.addColorStop(1, `rgba(${colour}, 0)`);
         context.fillStyle = halo;
@@ -225,11 +287,11 @@ export class ConstellationEngine implements ExperienceEngine {
           context.arc(body.x, body.y, 28, 0, TAU);
           context.fill();
         }
-        context.fillStyle = body.glow > 0.6 ? '#fff' : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
+        context.fillStyle = body.glow > 0.6 ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
         context.beginPath();
         context.arc(body.x, body.y, 2.2 + body.glow * 2.8, 0, TAU);
         context.fill();
-        if (narrow && body.glow < 0.6) continue;
+        if (narrow && !playful && body.glow < 0.6) continue;
         context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
         context.fillText(body.name, body.x, body.y - 12);
       }
@@ -268,12 +330,13 @@ export class ConstellationEngine implements ExperienceEngine {
       recompute();
     };
 
-    window.addEventListener('resize', () => { layout(); recompute(); if (!frame) draw(); });
+    window.addEventListener('resize', () => { layout(); recompute(); draw(); });
     window.addEventListener('pointermove', event => {
       pointer.x = event.clientX;
       pointer.y = event.clientY;
     }, { passive: true });
     document.documentElement.addEventListener('mouseleave', () => { pointer.x = pointer.y = -9999; });
+    if (playful) window.addEventListener('pointerdown', shockwave, { passive: true });
     document.addEventListener('pointerover', onEnter);
     document.addEventListener('pointerout', onLeave);
     document.addEventListener('focusin', onEnter);

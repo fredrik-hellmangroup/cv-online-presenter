@@ -1,13 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Xml.Linq;
 using System.Diagnostics;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Http.HttpResults;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Portfolio.Content;
+using Portfolio.Contracts;
+using Portfolio.Experience;
 using Portfolio.Infrastructure;
 using Portfolio.Web;
 using Portfolio.Web.Components;
@@ -17,6 +21,30 @@ builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 builder.Services.AddSingleton<TimeProvider, SystemReleaseClock>();
 builder.Services.AddRazorComponents();
 builder.Services.AddHttpContextAccessor();
+builder.Services.Configure<TurnstileOptions>(builder.Configuration.GetSection(TurnstileOptions.SectionName));
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.AddSingleton(provider => provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TurnstileOptions>>().Value);
+builder.Services.AddSingleton(provider => provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SmtpOptions>>().Value);
+builder.Services.AddSingleton<ContactFormSettings>();
+builder.Services.AddHttpClient<ICaptchaVerifier, TurnstileCaptchaVerifier>(client => client.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<IContactSender, SmtpContactSender>();
+builder.Services.AddScoped<ContactSubmissionService>();
+// Contact form submissions are limited per client address; no address is stored or logged.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        await context.HttpContext.Response.WriteAsync("För många försök. Vänta en stund och försök igen.", token);
+    };
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/contact")
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 })
+            : RateLimitPartition.GetNoLimiter("other"));
+});
 var releaseIdentity = ReleaseIdentity.Load(builder.Environment.ContentRootPath);
 builder.Services.AddSingleton(releaseIdentity);
 builder.Services.AddOpenTelemetry()
@@ -42,6 +70,10 @@ builder.Services.AddSingleton(provider => new SiteContent(store, provider.GetReq
 
 var app = builder.Build();
 var siteContent = app.Services.GetRequiredService<SiteContent>();
+var contactForm = app.Services.GetRequiredService<ContactFormSettings>();
+const string baseCsp = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+// Turnstile needs its script, frame and verification traffic; the allowance is limited to the contact page and only when the form is on.
+const string contactCsp = $"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self' {ContactFormSettings.TurnstileOrigin}; frame-src {ContactFormSettings.TurnstileOrigin}; connect-src 'self' {ContactFormSettings.TurnstileOrigin}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 if (app.Environment.IsDevelopment()) app.UseDeveloperExceptionPage();
 else app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
@@ -53,7 +85,7 @@ else app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 app.Use(async (context, next) =>
 {
     context.Items[typeof(ContentSnapshot)] = store.Current;
-    context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+    context.Response.Headers["Content-Security-Policy"] = contactForm.IsEnabled && context.Request.Path.StartsWithSegments("/contact") ? contactCsp : baseCsp;
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Cache-Control"] = "no-cache";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
@@ -65,6 +97,7 @@ app.Use(async (context, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAntiforgery();
 app.Use(async (context, next) =>
 {

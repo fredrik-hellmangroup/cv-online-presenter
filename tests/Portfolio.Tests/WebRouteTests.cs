@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Portfolio.Tests;
 
+[Collection(WebHostCollection.Name)]
 public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient client;
@@ -86,6 +87,25 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             var footer = System.Text.RegularExpressions.Regex.Match(html, "<footer>.*?</footer>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
             Assert.DoesNotContain("Hallerös", footer);
         }
+    }
+
+    [Fact]
+    public async Task StartPageIsMinimalWithEntryToProfile()
+    {
+        var html = await client.GetStringAsync("/");
+        Assert.Contains("<main id=\"main\" class=\"home\"", html);
+        Assert.DoesNotContain("cv-figures", html);
+    }
+
+    [Fact]
+    public async Task ProfilePageCarriesHeroWithProfileHeading()
+    {
+        var html = await client.GetStringAsync("/profile");
+        Assert.Contains("cv-hero", html);
+        Assert.Contains("cv-figures", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<h1"));
+        Assert.Matches("<h1[^>]*>\\s*Profil\\s*</h1>", html);
+        Assert.Contains("href=\"/cv#", html);
     }
 
     [Theory]
