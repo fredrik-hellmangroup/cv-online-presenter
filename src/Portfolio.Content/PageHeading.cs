@@ -30,13 +30,6 @@ public static class PageHeading
                 + $"<span class=\"h1-tagline\">{match.Groups["tagline"].Value}</span>{match.Groups["close"].Value}",
             1);
 
-    private static readonly Regex AnyH1Pattern = new(
-        @"<h1(?:\s[^>]*)?>.*?</h1>\s*",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
-
-    /// <summary>Drops the first H1 from rendered HTML, for pages whose heading is supplied by a hero instead.</summary>
-    public static string RemoveFirstH1(string renderedHtml) => AnyH1Pattern.Replace(renderedHtml, string.Empty, 1);
-
     /// <summary>Initials of a name, for a compact brand mark ("Fredrik Hallerös" becomes "FH").</summary>
     public static string Monogram(string name)
     {

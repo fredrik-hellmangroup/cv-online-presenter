@@ -1,5 +1,4 @@
 @page "/"
-@page "/profile"
 @page "/services"
 @page "/contact"
 @page "/projects"
@@ -43,7 +42,6 @@ else
            aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
     </div>
     <nav aria-label="Huvudnavigation">
-        <a href="/profile">Profil</a>
         <a href="/services">Kompetens</a>
         <a href="/projects">Projekt</a>
         <a href="/cv">CV</a>
@@ -58,10 +56,6 @@ else
     @if (cv is not null)
     {
         <CvHero View="cv" PhotoUrl="@photoUrl" HistoryId="@cv.HistoryId" />
-    }
-    else if (profileHero is not null)
-    {
-        <CvHero View="profileHero" Heading="Profil" PhotoUrl="@photoUrl" HistoryHref="@($"/cv#{profileHero.HistoryId}")" />
     }
     <div class="page-layout">
         @if (isCv)
@@ -84,8 +78,7 @@ else
                 }
                 else
                 {
-                    @((MarkupString)PageHeading.SplitFirstH1(profileHero is null ? Content.Render(page) :
-            PageHeading.RemoveFirstH1(Content.Render(page))))
+                    @((MarkupString)                    PageHeading.SplitFirstH1(Content.Render(page)))
                 }
                 @if (path == "/contact")
                 {
@@ -136,7 +129,6 @@ else
 
     private ContentDocument? page;
     private CvView? cv;
-    private CvView? profileHero;
     private string? photoUrl;
     private string? constellationJson;
     private string path = "/";
@@ -154,8 +146,7 @@ StringComparison.OrdinalIgnoreCase)
         page = Content.FindByPath(path);
         var cvView = Content.Cv;
         cv = isCv ? cvView : null;
-        profileHero = page is not null && path == "/profile" ? cvView : null;
-        photoUrl = (cv ?? profileHero) is not null && WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
+        photoUrl = cv is not null &&  WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
             ? $"/img/profile.webp?v={Content.Version}"
             : null;
         constellationJson = cvView is { SkillGroups.Count: > 0 }

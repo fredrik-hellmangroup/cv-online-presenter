@@ -17,7 +17,6 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
 
     [Theory]
     [InlineData("/")]
-    [InlineData("/profile")]
     [InlineData("/services")]
     [InlineData("/contact")]
     [InlineData("/cv")]
@@ -76,7 +75,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task NameAppearsOnceInTitleAndNotInHeaderOrFooterText()
     {
-        foreach (var path in new[] { "/", "/cv", "/profile" })
+        foreach (var path in new[] { "/", "/cv" })
         {
             var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync(path));
             var title = System.Text.RegularExpressions.Regex.Match(html, "<title>(.*?)</title>").Groups[1].Value;
@@ -90,7 +89,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task StartPageIsMinimalWithEntryToProfile()
+    public async Task StartPageIsMinimal()
     {
         var html = await client.GetStringAsync("/");
         Assert.Contains("<main id=\"main\" class=\"home\"", html);
@@ -98,14 +97,12 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task ProfilePageCarriesHeroWithProfileHeading()
+    public async Task LegacyProfilePageRedirectsToCv()
     {
-        var html = await client.GetStringAsync("/profile");
-        Assert.Contains("cv-hero", html);
-        Assert.Contains("cv-figures", html);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<h1"));
-        Assert.Matches("<h1[^>]*>\\s*Profil\\s*</h1>", html);
-        Assert.Contains("href=\"/cv#", html);
+        var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var response = await noRedirect.GetAsync("/profile");
+        Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
+        Assert.Equal("/cv", response.Headers.Location?.OriginalString);
     }
 
     [Theory]

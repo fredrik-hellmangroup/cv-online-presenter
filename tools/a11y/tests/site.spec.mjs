@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const routes = ['/', '/profile', '/services', '/projects', '/contact', '/cv'];
+const routes = ['/', '/services', '/projects', '/contact', '/cv'];
 
 // Entrance animations and colour transitions change computed colours mid-flight, which would skew contrast checks.
 const settled = page => page.evaluate(() => Promise.all(
@@ -27,7 +27,7 @@ for (const route of routes) {
     await page.goto(route);
     await expect(page.locator('main h1')).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Huvudnavigation' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Huvudnavigation' }).getByRole('link', { name: 'Profil', exact: true })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Huvudnavigation' }).getByRole('link', { name: 'CV', exact: true })).toBeVisible();
     const colorScheme = await page.locator('html').evaluate(element => getComputedStyle(element).colorScheme);
     expect(colorScheme).toBe('dark');
     await expect(page.getByRole('button', { name: 'Växla tema' })).toBeHidden();
