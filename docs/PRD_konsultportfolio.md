@@ -121,7 +121,7 @@ Kriterier verifieras manuellt, automatiserat eller i CI. P0 ingår i första pub
 | FR-007 | Markdown och Mermaid | P0 | Full Markdown-rendering enligt vald kompatibilitetsspecifikation, inklusive kodblock och Mermaid; front matter valideras och fel stoppar publicering med begriplig förklaring. |
 | FR-008 | Säker rendering | P0 | Script, event handlers och osäker HTML körs inte; URL-scheman whitelist-testas. |
 | FR-009 | Teman | P0 | Modulär Theme Engine med deklarativa manifest/tokens, ljust/mörkt samt jul- och nyårslager i första produktionsversionen; kontrast och läsbarhet bibehålls, även vid klientfel. |
-| FR-010 | Easter eggs | P0 | Minst ett permanent, frivilligt och kosmetiskt easter egg; tangentbordstillgängligt, reducerat vid prefers-reduced-motion och utan navigationhinder. |
+| FR-010 | Easter eggs | P0 | Minst ett permanent, frivilligt och kosmetiskt easter egg som är dolt som standard och aktiveras via dolda utlösare (logotypklick, tangentföljd); tangentbordstillgängligt, reducerat vid prefers-reduced-motion och utan navigationhinder. |
 | FR-011 | Metadata | P0 | Unik titel, beskrivning, canonical och social metadata per publik sida. |
 | FR-012 | Sitemap/robots | P0 | Sitemap innehåller enbart publicerade canonical URL:er; staging indexeras inte. |
 | FR-013 | Strukturerad data | P1 | Endast godkända fält; valideras i releasepipeline. |
@@ -134,7 +134,7 @@ Kriterier verifieras manuellt, automatiserat eller i CI. P0 ingår i första pub
 | FR-020 | 404/fel | P1 | Okänd URL visar användbar 404; stack trace/hemligheter exponeras inte. |
 | FR-021 | Vertikal slice | P0 | Varje slice innehåller fungerande UI, innehåll, validering, relevanta kvalitetsgrindar och publiceringsväg. |
 | FR-022 | Ändringslogg | P1 | Release notes anger ändringar, innehållsmigrering och rollback-referens. |
-| FR-023 | Navigation och discovery | P0 | Editorial-start, serverrenderade detaljrutter, full CV-vy, Command Palette, CV-sökning och stabila deep links fungerar med vanliga länkar och browser history. |
+| FR-023 | Navigation och discovery | P0 | Editorial-start, serverrenderade detaljrutter, full CV-vy med scroll-följande innehållsförteckning, flytande CV-sökning (ingen separat söksida; /search omdirigeras till /cv) och stabila deep links fungerar med vanliga länkar och browser history. |
 | FR-024 | Content Intelligence och runtime snapshot | P0 | Deterministiska regler klassificerar Markdig AST; metadata är valfri och okänt innehåll får generisk fallback. ContentSnapshot byggs/valideras före atomärt aktiveringsbyte; varje request använder en konsekvent snapshot och verserade asset-URL:er. |
 | FR-025 | Identitet och dynamisk SEO | P0 | Identitetsmanifest och Markdown-innehåll renderas samstämmigt; titlar, JSON-LD, sitemap, social metadata och canonical URL byggs från samma versionssatta snapshot; SEO skapar inga CV-fakta. |
 ## 6. Icke-funktionella krav
@@ -241,13 +241,16 @@ ADR-016 anger en forkbar open-source-applikation med oberoende CI. Senare owner-
 ### Analys och integritet
 Analys är P1 och kan utelämnas; standard avstängt/minimalt. Vid aktivering: dokumenterat verktyg, begränsat schema (sidvisning, kontakt- och projektlänk), inga formulärvärden, fingeravtryckning eller onödig identifiering. Beslut om samtycke, retention och leverantör krävs först.
 ## 11. Teman och easter eggs
-Visuell riktning är Scandinavian Editorial: typografiskt driven, ljus och professionell. Använd Tailwind CSS, semantiska design tokens, egna Razor-komponenter och komponentnära CSS; inget tungt generellt Blazor UI-bibliotek är bas.
+Visuell riktning är Immersive Dark (ersätter tidigare Scandinavian Editorial, se ADR-006): mörk bas med animerat partikel-/nätverksbakgrund, stor och tung typografi samt stark orange accent. Ljust tema finns kvar som alternativ. Använd Tailwind CSS, semantiska design tokens, egna Razor-komponenter och komponentnära CSS; inget tungt generellt Blazor UI-bibliotek är bas.
 | Del | Krav |
 | --- | --- |
-| Theme Engine | Separat modul med deklarativa manifest, kalenderregler och lager; ljus/mörk samt jul- och nyårsteman i första produktionsversionen. |
-| Ljust/mörkt | Systempreferens som utgångspunkt, valbar kontroll; verifiera kontrast i båda. |
-| Rörelse | Diskret; reduceras vid prefers-reduced-motion. Tema-/easter-egg-fel isoleras från kärninnehåll. |
-| Easter Egg Engine | Separat modul; minst ett permanent, frivilligt, kosmetiskt och tangentbordstillgängligt easter egg som är lätt att ignorera. |
+| Theme Engine | Separat modul med deklarativa manifest, kalenderregler och lager; mörk (standard) och ljus samt jul- och nyårsteman i första produktionsversionen. |
+| Ljust/mörkt | Mörkt är standard; valbar kontroll byter till ljust och valet sparas lokalt; verifiera kontrast i båda. |
+| Rörelse | Partikelanimation i full rörelse som standard (canvas, begränsat antal partiklar, pausas när fliken är dold). Vid prefers-reduced-motion ritas en enda statisk bild. Tema-/easter-egg-/partikelfel isoleras från kärninnehåll. |
+| Sök och innehållsförteckning | Sökning ligger som flytande panel på CV-sidan (Ctrl+K eller /) och det finns ingen separat söksida. CV-sidan har en scroll-följande innehållsförteckning byggd från rubrikernas ankare. |
+| Easter Egg Engine | Separat modul; easter egget är dolt som standard och visas endast via dolda utlösare: fem klick på logotypens ljusprick inom två sekunder, eller tangentföljden K-O-D utanför textfält. Escape eller Stäng döljer det igen. Alla alternativ dokumenteras i docs/easter-eggs.md. |
+| Integritet | Ingen dold spårning, extern begäran eller persondata. |
+| Verifiering | Kärninnehåll/navigation fungerar även utan aktivering. |
 | Integritet | Ingen dold spårning, extern begäran eller persondata. |
 | Verifiering | Kärninnehåll/navigation fungerar även utan aktivering. |
 ## 12. Risker, antaganden och öppna frågor
@@ -304,7 +307,7 @@ Releaseplanen består av vertikala slices med fungerande flöde från innehåll 
 | ADR-003 B Balanced Hybrid | FR-001/023, NFR-012; Static SSR med selektiv interaktivitet och TypeScript. |
 | ADR-004 B Theme & Easter Egg Engine | FR-009/010, NFR-002; deklarativa teman, kalenderregler, reducerad rörelse och felisolering. |
 | ADR-005 B Runtime Content | FR-017/018/024; separat app/content-versionering, validering, runtime-aktivering och rollback; repo-avstämning i avsnitt 4. |
-| ADR-006 B Design System | FR-001/009, NFR-002/003; Tailwind, egna komponenter, tokens och Scandinavian Editorial. |
+| ADR-006 B Design System | FR-001/009, NFR-002/003; Tailwind, egna komponenter, tokens och Immersive Dark. |
 | ADR-007 C Navigation & Discovery | FR-023; Command Palette, sökning, detaljrutter och deep links. |
 | ADR-008 C Hybrid Identity | FR-011–013/025; identitetsmanifest och versionssatt SEO-snapshot. |
 | ADR-009 B Observability & Privacy | FR-019, NFR-007/011; OpenTelemetry och separat integritetsvänlig analys. |
@@ -342,7 +345,7 @@ Sammanställning av fastställda arkitekturbeslut för en publik, IIS-hostad .NE
 | ADR-003 | Frontend och rendering | B – Balanced Hybrid |
 | ADR-004 | Theme & Easter Egg Engine | B – Modulär Experience Architecture |
 | ADR-005 | Content Delivery & Deployment | B – Runtime Content |
-| ADR-006 | Design System & Visual Architecture | B – Tailwind + egna Blazor-komponenter; Scandinavian Editorial |
+| ADR-006 | Design System & Visual Architecture | B – Tailwind + egna Blazor-komponenter; Immersive Dark |
 | ADR-007 | Navigation & Discovery | C – Hybrid Navigation + Command Palette |
 | ADR-008 | Professional Identity & Dynamic SEO | C – Hybrid Identity |
 | ADR-009 | Observability, Analytics & Privacy | B – OpenTelemetry + Privacy-first Analytics |
@@ -404,7 +407,7 @@ Separata Theme Engine och Easter Egg Engine, gemensam orkestrering, deklarativa 
 
 **Tekniska konsekvenser och avgränsningar**
 
-Permanenta easter eggs finns året runt. Högtider och födelsedag styr visuella lager. Respektera reduced motion, prestandabudget och felisolering.
+Easter eggs är dolda som standard och finns året runt bakom dolda utlösare. Högtider och födelsedag styr visuella lager. Respektera reduced motion, prestandabudget och felisolering.
 
 ### ADR-005: Content Delivery & Deployment
 
@@ -420,11 +423,11 @@ CV kan uppdateras utan ombyggnad och omstart av appen. Privat innehåll utanför
 
 ### ADR-006: Design System & Visual Architecture
 
-**Valt alternativ:** B – Tailwind + egna Blazor-komponenter; Scandinavian Editorial
+**Valt alternativ:** B – Tailwind + egna Blazor-komponenter; Immersive Dark (ersätter Scandinavian Editorial)
 
 **Beslut**
 
-Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Ljus, typografiskt driven Scandinavian Editorial som huvudidentitet.
+Tailwind CSS, semantiska design tokens, egen Razor-komponentuppsättning, komponentnära CSS och separat Markdown-typografi. Mörk, immersiv identitet med canvasbaserad partikelanimation, stor tung typografi och orange accent som huvudidentitet; ljust tema finns som alternativ. Beslutet ändrades efter ägarens önskan om en mer upplevelsedriven och mindre enterprise-lik design.
 
 **Tekniska konsekvenser och avgränsningar**
 

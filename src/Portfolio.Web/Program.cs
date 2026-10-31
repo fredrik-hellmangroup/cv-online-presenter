@@ -104,6 +104,7 @@ app.Use(async (context, next) =>
 });
 app.MapGet("/health", () => Results.Json(new { status = "ok" }));
 app.MapGet("/api/search", (string? q) => Results.Json(siteContent.Search(q)));
+app.MapGet("/search", () => Results.Redirect("/cv", permanent: true));
 app.MapGet("/sitemap.xml", () =>
 {
     if (siteContent.SiteUrl is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);

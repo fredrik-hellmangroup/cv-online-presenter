@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const routes = ['/', '/profile', '/services', '/projects', '/contact'];
+const routes = ['/', '/profile', '/services', '/projects', '/contact', '/cv'];
 
 test('unknown URLs return a useful, private 404', async ({ page }) => {
   const response = await page.goto('/this-page-does-not-exist');
@@ -42,23 +42,39 @@ for (const route of routes) {
     }
   });
 
-  test(`${route} theme and easter egg are keyboard operable`, async ({ page }) => {
+  test(`${route} theme toggle works and both themes pass contrast audits`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto(route);
 
     const themeToggle = page.getByRole('button', { name: 'Växla tema' });
     await expect(themeToggle).toBeVisible();
-    await themeToggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(themeToggle).toHaveAttribute('aria-pressed', 'true');
     const darkAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(darkAudit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 
-    const eggToggle = page.getByRole('button', { name: 'Visa en överraskning' });
-    await eggToggle.focus();
-    await page.keyboard.press('Enter');
-    await expect(eggToggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByText('Du hittade en liten detalj i portfoliomallen.')).toBeVisible();
+    await themeToggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(themeToggle).toHaveAttribute('aria-pressed', 'false');
+    const lightAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(lightAudit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
+  });
+
+  test(`${route} keeps the easter egg hidden until a secret trigger is used`, async ({ page }) => {
+    await page.goto(route);
+    await expect(page.getByRole('button', { name: 'Växla tema' })).toBeVisible();
+    const egg = page.getByText('Du hittade en liten detalj i portfoliomallen.');
+    await expect(page.getByRole('button', { name: 'Visa en överraskning' })).toHaveCount(0);
+    await expect(egg).toBeHidden();
+
+    await page.keyboard.type('kod');
+    await expect(egg).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(egg).toBeHidden();
+
+    await page.locator('#brand-mark').evaluate(mark => { for (let click = 0; click < 5; click++) mark.click(); });
+    await expect(egg).toBeVisible();
+    await page.getByRole('button', { name: 'Stäng' }).click();
+    await expect(egg).toBeHidden();
   });
 
   test(`${route} seasonal layers retain contrast and reduced motion`, async ({ page, browserName }) => {
@@ -88,3 +104,46 @@ for (const route of routes) {
     expect(severe, JSON.stringify(severe, null, 2)).toEqual([]);
   });
 }
+
+test('/cv has a scroll-following table of contents', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/cv');
+  const toc = page.getByRole('complementary', { name: 'Innehållsförteckning' });
+  await expect(toc).toBeVisible();
+  const links = toc.getByRole('link');
+  expect(await links.count()).toBeGreaterThanOrEqual(2);
+  const last = links.last();
+  await last.click();
+  await expect(last).toHaveAttribute('aria-current', 'location');
+  await page.mouse.wheel(0, 400);
+  await expect(toc).toBeInViewport();
+});
+
+test('/cv search is a floating panel and /search no longer exists as a page', async ({ page }) => {
+  await page.goto('/cv');
+  const toggle = page.getByRole('button', { name: /^Sök/ });
+  await expect(toggle).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sök', exact: true })).toHaveCount(0);
+
+  await page.keyboard.press('Control+k');
+  const input = page.getByRole('searchbox', { name: 'Sök i CV:t' });
+  await expect(input).toBeFocused();
+  await input.fill('Fredrik');
+  await expect(page.locator('#cv-search-results a').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(input).toBeHidden();
+  await expect(toggle).toBeFocused();
+
+  await page.goto('/search?q=Fredrik');
+  await expect(page).toHaveURL(/\/cv$/);
+});
+
+test('/cv particle canvas is present and reduced motion keeps it static', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/cv');
+  await expect(page.locator('#particle-field')).toHaveAttribute('aria-hidden', 'true');
+  const sample = () => page.locator('#particle-field').evaluate(canvas => canvas.toDataURL());
+  const first = await sample();
+  await page.waitForTimeout(500);
+  expect(await sample()).toBe(first);
+});

@@ -6,8 +6,13 @@ namespace Portfolio.Tests;
 public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient client;
+    private readonly WebApplicationFactory<Program> factory;
 
-    public WebRouteTests(WebApplicationFactory<Program> factory) => client = factory.CreateClient();
+    public WebRouteTests(WebApplicationFactory<Program> factory)
+    {
+        this.factory = factory;
+        client = factory.CreateClient();
+    }
 
     [Theory]
     [InlineData("/")]
@@ -46,8 +51,26 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("/cv", json);
         Assert.DoesNotContain("demo-profile", json);
-        var page = await client.GetStringAsync("/search?q=Fredrik");
-        Assert.Contains("Sök i CV:t", page);
-        Assert.Contains("/cv", page);
+    }
+
+    [Fact]
+    public async Task LegacySearchPageRedirectsToCv()
+    {
+        var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var response = await noRedirect.GetAsync("/search?q=Fredrik");
+        Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
+        Assert.Equal("/cv", response.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public async Task CvPageHasHeadingAnchorsAndHiddenEasterEgg()
+    {
+        var html = await client.GetStringAsync("/cv");
+        Assert.Matches("<h2 id=\"[a-z0-9-]+\"", html);
+        Assert.Contains("id=\"cv-toc\"", html);
+        Assert.Contains("id=\"cv-search\"", html);
+        Assert.Contains("id=\"easter-egg\" class=\"easter-egg\" role=\"status\" hidden", html);
+        Assert.DoesNotContain("easter-egg-toggle", html);
+        Assert.DoesNotContain("href=\"/search\"", html);
     }
 }

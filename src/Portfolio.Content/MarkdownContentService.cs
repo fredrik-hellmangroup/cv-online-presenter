@@ -138,6 +138,7 @@ public sealed class MarkdownContentService
         sanitizer.AllowedSchemes.Add("tel");
         sanitizer.AllowedTags.Remove("style");
         sanitizer.AllowedAttributes.Remove("style");
+        sanitizer.AllowedAttributes.Add("id");
         return sanitizer.Sanitize(html);
     }
 
