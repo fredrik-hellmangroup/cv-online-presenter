@@ -8,7 +8,7 @@ The Swedish heading names are defaults in `CvHeadings`; pass another `CvHeadings
 
 | Markdown | Used for |
 | --- | --- |
-| `# NAME` | Hero heading (the only `h1` on the page). |
+| `# NAME – tagline` | Hero heading (the only `h1` on the page). Text after ` – ` becomes a smaller tagline line inside the same `h1`. |
 | `## Roller` with a list | Role pills in the hero. The section itself is left out of the body. |
 | `## Översikt`, first paragraph | First sentence becomes the hero summary. `över N års erfarenhet` in the overview gives the first figure. |
 | `## Branscherfarenhet`, comma-separated paragraph | Number of industries (figure). |

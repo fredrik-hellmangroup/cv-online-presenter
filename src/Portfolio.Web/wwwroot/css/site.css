@@ -30,6 +30,8 @@
   --on-accent: #0a0d16;
   --focus: #7dd3fc;
   --particle-rgb: 255, 140, 80;
+  --particle-label-rgb: 215, 222, 238;
+  --particle-label-alpha: .14;
   --glow-a: rgba(255, 107, 44, .18);
   --glow-b: rgba(99, 84, 255, .16);
   --season-accent: transparent;
@@ -54,6 +56,8 @@
   --on-accent: #fff;
   --focus: #0a58ff;
   --particle-rgb: 194, 65, 12;
+  --particle-label-rgb: 20, 22, 31;
+  --particle-label-alpha: .6;
   --glow-a: rgba(255, 140, 80, .22);
   --glow-b: rgba(99, 84, 255, .1);
 }
@@ -156,6 +160,18 @@ h1 {
   text-shadow: 0 0 4rem rgba(var(--particle-rgb), .35);
 }
 h1::after { content: ""; display: block; width: 5rem; height: .35rem; margin-top: 1.5rem; border-radius: 999px; background: linear-gradient(90deg, var(--accent), transparent); }
+.h1-name, .h1-tagline { display: block; }
+.h1-tagline {
+  margin-top: 1rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 3.2vw, 1.75rem);
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 600;
+  color: var(--muted);
+  text-shadow: none;
+}
 h2 {
   margin: 4.5rem 0 1.25rem;
   padding-top: 1.5rem;
@@ -195,6 +211,10 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 #cv-search-results li { padding: .6rem .25rem; border-top: 1px solid var(--line); }
 #cv-search-results a { display: block; font-weight: 700; }
 #cv-search-results span, .cv-search-empty { display: block; color: var(--muted); font-size: .9rem; }
+#cv-search-results mark { color: var(--text); background: color-mix(in srgb, var(--accent) 35%, transparent); border-radius: .2rem; padding: 0 .1rem; }
+.cv-search-hit { animation: cv-search-hit 2.5s ease-out; }
+@keyframes cv-search-hit { 0%, 40% { background: color-mix(in srgb, var(--accent) 30%, transparent); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .cv-search-hit { animation: none; outline: 2px solid var(--accent); } }
 
 .easter-egg {
   position: fixed;
@@ -245,7 +265,7 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 .cv-hero-copy > :nth-child(5) { animation-delay: .24s; }
 .cv-hero h1 { font-size: clamp(4rem, 17vw, 10.5rem); line-height: .84; margin-bottom: 1.25rem; }
 .cv-hero h1::after { margin-top: 1.25rem; }
-.cv-kicker { margin: 0 0 1rem; font-family: var(--font-mono); font-size: .85rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--link); }
+.cv-kicker { margin: 0 0 1rem; font-family: var(--font-mono); font-size: clamp(.55rem, 2.6vw, .85rem); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; color: var(--link); }
 .cv-roles { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1.25rem; padding: 0; list-style: none; }
 .cv-roles li { padding: .3rem .85rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-weight: 600; backdrop-filter: blur(8px); }
 .cv-summary { max-width: 46ch; margin: 0 0 1.5rem; font-size: clamp(1.1rem, 2vw, 1.45rem); line-height: 1.45; color: var(--text); text-shadow: 0 0 1.5rem var(--page-bg); }

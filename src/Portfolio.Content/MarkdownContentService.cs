@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Ganss.Xss;
 using Markdig;
+using Markdig.Renderers.Html;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -124,6 +125,37 @@ public sealed class MarkdownContentService
             foreach (var duplicates in group.GroupBy(select, StringComparer.OrdinalIgnoreCase).Where(values => values.Count() > 1))
                 foreach (var document in duplicates)
                     errors.Add(new(document.SourcePath, $"Published {field} '{duplicates.Key}' must be unique in locale '{document.Locale}'."));
+        }
+    }
+
+    // Splits Markdown at headings. Ids match the ones Render produces, so a section can be linked as #id.
+    public static IReadOnlyList<ContentSection> ExtractSections(string markdown)
+    {
+        var sections = new List<ContentSection>();
+        string? id = null;
+        var heading = string.Empty;
+        var body = new List<string>();
+
+        foreach (var block in Markdown.Parse(markdown, Pipeline))
+        {
+            var source = markdown.Substring(block.Span.Start, block.Span.Length);
+            if (block is Markdig.Syntax.HeadingBlock headingBlock)
+            {
+                Flush();
+                id = headingBlock.GetAttributes().Id;
+                heading = Markdown.ToPlainText(source, Pipeline).Trim();
+                body = [];
+            }
+            else body.Add(Markdown.ToPlainText(source, Pipeline));
+        }
+        Flush();
+        return sections;
+
+        void Flush()
+        {
+            var text = string.Join(' ', body);
+            if (id is null && text.Trim().Length == 0) return;
+            sections.Add(new ContentSection(id, heading, text));
         }
     }
 

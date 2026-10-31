@@ -64,8 +64,9 @@ export class CvSearchEngine implements ExperienceEngine {
           const link = document.createElement('a');
           link.href = match.path;
           link.textContent = match.title;
+          link.addEventListener('click', event => goTo(event, match.path));
           const description = document.createElement('span');
-          description.textContent = match.description;
+          appendHighlighted(description, match.description, query);
           item.append(link, description);
           results.append(item);
         }
@@ -73,5 +74,38 @@ export class CvSearchEngine implements ExperienceEngine {
         results.replaceChildren();
       }
     });
+
+    // Same-page hits scroll to and flash the matching heading instead of reloading the page.
+    const goTo = (event: MouseEvent, path: string) => {
+      const url = new URL(path, location.href);
+      if (url.pathname !== location.pathname || !url.hash) return;
+      const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+      if (!target) return;
+      event.preventDefault();
+      setOpen(false);
+      history.pushState(null, '', url.hash);
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+      target.classList.add('cv-search-hit');
+      window.setTimeout(() => target.classList.remove('cv-search-hit'), 2500);
+    };
   }
+}
+
+function appendHighlighted(parent: HTMLElement, text: string, query: string): void {
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let position = 0;
+  let index = lowerQuery ? lowerText.indexOf(lowerQuery) : -1;
+  while (index >= 0) {
+    if (index > position) parent.append(text.slice(position, index));
+    const mark = document.createElement('mark');
+    mark.textContent = text.slice(index, index + query.length);
+    parent.append(mark);
+    position = index + query.length;
+    index = lowerText.indexOf(lowerQuery, position);
+  }
+  if (position < text.length) parent.append(text.slice(position));
 }

@@ -6,7 +6,17 @@
         {
             <p class="cv-kicker">@View.Kicker</p>
         }
-        <h1>@View.Name</h1>
+        <h1>
+            @if (tagline is null)
+            {
+                @name
+            }
+            else
+            {
+                <span class="h1-name">@name</span>
+                <span class="h1-tagline">@tagline</span>
+            }
+        </h1>
         @if (View.Roles.Count > 0)
         {
             <ul class="cv-roles" aria-label="Roller">
@@ -27,7 +37,7 @@
     </div>
     @if (!string.IsNullOrEmpty(PhotoUrl))
     {
-        <img class="cv-photo" src="@PhotoUrl" alt="Porträtt av @View.Name" width="640" height="800" fetchpriority="high" />
+        <img class="cv-photo" src="@PhotoUrl" alt="Porträtt av @name" width="640" height="800" fetchpriority="high" />
     }
 </header>
 <dl class="cv-figures">
@@ -44,4 +54,7 @@
     [Parameter, EditorRequired] public CvView View { get; set; } = default!;
     [Parameter] public string? PhotoUrl { get; set; }
     [Parameter] public string HistoryId { get; set; } = "uppdragshistorik";
+
+    private string name => PageHeading.Split(View.Name).Name;
+    private string? tagline => PageHeading.Split(View.Name).Tagline;
 }

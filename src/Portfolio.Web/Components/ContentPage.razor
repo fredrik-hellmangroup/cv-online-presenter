@@ -39,7 +39,7 @@ else
 <header class="site-header">
     <div class="brand-wrap">
         <span id="brand-mark" class="brand-mark" aria-hidden="true"></span>
-        <a class="brand" href="/">@Content.Settings.SiteName</a>
+        <a class="brand" href="/" aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
     </div>
     <nav aria-label="Huvudnavigation">
         <a href="/profile">Profil</a>
@@ -73,13 +73,13 @@ else
                 {
                     @((MarkupString)cv.BeforeHistoryHtml)
                     @((MarkupString)cv.HistoryHeadingHtml)
-                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? cv.Name)" />
+                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? PageHeading.Split(cv.Name).Name)" />
                     @((MarkupString)cv.AssignmentsHtml)
                     @((MarkupString)cv.AfterHistoryHtml)
                 }
                 else
                 {
-                    @((MarkupString)Content.Render(page))
+                    @((MarkupString)PageHeading.SplitFirstH1(Content.Render(page)))
                 }
                 @if (path == "/contact" && IsValidEmail(Content.Settings.ContactEmail))
                 {
@@ -110,7 +110,8 @@ else
     </div>
 }
 <footer>
-    <span>@Content.Settings.SiteName</span>
+    <span>© @DateTime.UtcNow.Year @(Content.Settings.CompanyName ?? "· Egenföretagare")</span>
+    <a href="/contact">Kontakt</a>
 </footer>
 @if (page is not null)
 {
@@ -133,7 +134,10 @@ else
     private string? constellationJson;
     private string path = "/";
     private bool isCv => page is not null && path == "/cv";
-    private string fullTitle => $"{page?.Title} · {Content.Settings.SiteName}";
+    // A title that already names the site (the home page) is used as is, so the name is not repeated.
+    private string fullTitle => page is null || page.Title.Contains(Content.Settings.SiteName, StringComparison.OrdinalIgnoreCase)
+        ? page?.Title ?? string.Empty
+        : $"{page.Title} · {Content.Settings.SiteName}";
 
     protected override void OnParametersSet()
     {

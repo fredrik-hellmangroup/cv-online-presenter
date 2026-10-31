@@ -54,12 +54,48 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task SearchReturnsMatchingSectionWithAnchorAndSnippet()
+    {
+        var response = await client.GetAsync("/api/search?q=Fredrik");
+        var results = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Contains(results.EnumerateArray(), item =>
+            item.GetProperty("path").GetString()!.StartsWith("/cv#", StringComparison.Ordinal)
+            && item.GetProperty("description").GetString()!.Contains("Fredrik", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task LegacySearchPageRedirectsToCv()
     {
         var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
         var response = await noRedirect.GetAsync("/search?q=Fredrik");
         Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
         Assert.Equal("/cv", response.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public async Task NameAppearsOnceInTitleAndNotInHeaderOrFooterText()
+    {
+        foreach (var path in new[] { "/", "/cv", "/profile" })
+        {
+            var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync(path));
+            var title = System.Text.RegularExpressions.Regex.Match(html, "<title>(.*?)</title>").Groups[1].Value;
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(title, "Hallerös"));
+            var header = System.Text.RegularExpressions.Regex.Match(html, "<header class=\"site-header\">.*?</header>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
+            Assert.Contains(">FH</a>", header);
+            Assert.Contains("aria-label=\"Fredrik Hallerös – startsida\"", header);
+            var footer = System.Text.RegularExpressions.Regex.Match(html, "<footer>.*?</footer>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
+            Assert.DoesNotContain("Hallerös", footer);
+        }
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/cv")]
+    public async Task H1CarriesNameAndRole(string path)
+    {
+        var html = await client.GetStringAsync(path);
+        Assert.Contains("class=\"h1-name\"", html);
+        Assert.Contains("class=\"h1-tagline\"", html);
     }
 
     [Fact]

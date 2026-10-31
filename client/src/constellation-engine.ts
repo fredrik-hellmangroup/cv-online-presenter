@@ -84,10 +84,15 @@ export class ConstellationEngine implements ExperienceEngine {
     let frame = 0;
     let last = 0;
     let colour = '255, 140, 80';
+    let labelColour = '215, 222, 238';
+    let labelAlpha = 0.14;
     let area: Area = { left: 0, top: 0, right: 0, bottom: 0 };
 
     const refreshColour = () => {
-      colour = getComputedStyle(root).getPropertyValue('--particle-rgb').trim() || colour;
+      const style = getComputedStyle(root);
+      colour = style.getPropertyValue('--particle-rgb').trim() || colour;
+      labelColour = style.getPropertyValue('--particle-label-rgb').trim() || labelColour;
+      labelAlpha = Number.parseFloat(style.getPropertyValue('--particle-label-alpha')) || labelAlpha;
     };
 
     // The sticky header (desktop) or the sticky table of contents (narrow screens) covers the top of the viewport.
@@ -225,7 +230,7 @@ export class ConstellationEngine implements ExperienceEngine {
         context.arc(body.x, body.y, 2.2 + body.glow * 2.8, 0, TAU);
         context.fill();
         if (narrow && body.glow < 0.6) continue;
-        context.fillStyle = `rgba(215, 222, 238, ${0.14 + body.glow * 0.8})`;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
         context.fillText(body.name, body.x, body.y - 12);
       }
     };

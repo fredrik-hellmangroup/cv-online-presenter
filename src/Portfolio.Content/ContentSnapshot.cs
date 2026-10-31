@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace Portfolio.Content;
 
-public sealed record SiteIdentity(IReadOnlyList<string> SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl);
+public sealed record SiteIdentity(IReadOnlyList<string> SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null);
 
 public sealed record ContentSnapshot(
     string Version,
@@ -51,7 +51,7 @@ public sealed class ContentSnapshotLoader
             source.Append('\n').Append(document.SourcePath).Append('\n').Append(document.Markdown).Append('\n')
                 .Append(JsonSerializer.Serialize(document.Metadata));
         var version = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString()))).ToLowerInvariant();
-        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl));
+        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName);
         return new(version, identity, immutableDocuments, sections);
     }
 
@@ -77,7 +77,7 @@ public sealed class ContentSnapshotLoader
         return new(before.Version, after.Version, added, removed, changed);
     }
 
-    private sealed record SiteIdentitySettings(string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl);
+    private sealed record SiteIdentitySettings(string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null);
 }
 
 public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapshotLoader loader)
