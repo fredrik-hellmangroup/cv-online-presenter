@@ -33,12 +33,12 @@ function Get-RemotePath {
 function Get-FtpUri {
     param(
         [string]$Path,
-        [string]$Host,
+        [string]$FtpServerHost,
         [int]$Port
     )
 
     $encodedPath = ($Path -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
-    return [Uri]::new("ftp://$Host`:$Port/$encodedPath")
+    return [Uri]::new("ftp://$FtpServerHost`:$Port/$encodedPath")
 }
 
 function Invoke-FtpRequest {
@@ -134,7 +134,7 @@ $directories = $files | ForEach-Object {
 } | Sort-Object -Unique
 
 $offlinePath = "$remoteRoot/app_offline.htm"
-$offlineUri = Get-FtpUri -Path $offlinePath -Host $ftpHostValue -Port $FtpPort
+$offlineUri = Get-FtpUri -Path $offlinePath -FtpServerHost $ftpHostValue -Port $FtpPort
 $offlineBody = [Text.Encoding]::UTF8.GetBytes('<!doctype html><title>Deploying</title><p>Temporarily offline for deployment.</p>')
 $offlineUploaded = $false
 $deploymentSucceeded = $false
@@ -145,7 +145,7 @@ try {
     $offlineUploaded = $true
 
     foreach ($directory in $directories) {
-        $directoryUri = Get-FtpUri -Path "$remoteRoot/$directory" -Host $ftpHostValue -Port $FtpPort
+        $directoryUri = Get-FtpUri -Path "$remoteRoot/$directory" -FtpServerHost $ftpHostValue -Port $FtpPort
         try {
             Invoke-FtpRequest -Uri $directoryUri -Method ([System.Net.WebRequestMethods+Ftp]::MakeDirectory) | Out-Null
         }
@@ -162,7 +162,7 @@ try {
     foreach ($file in $files) {
         $relativePath = $file.FullName.Substring($resolvedSourcePath.Length).TrimStart('\') -replace '\\', '/'
         $remoteFilePath = "$remoteRoot/$relativePath"
-        $fileUri = Get-FtpUri -Path $remoteFilePath -Host $ftpHostValue -Port $FtpPort
+        $fileUri = Get-FtpUri -Path $remoteFilePath -FtpServerHost $ftpHostValue -Port $FtpPort
         Write-Host "Uploading $relativePath."
         Invoke-FtpRequest -Uri $fileUri -Method ([System.Net.WebRequestMethods+Ftp]::UploadFile) -Body ([IO.File]::ReadAllBytes($file.FullName)) | Out-Null
     }
