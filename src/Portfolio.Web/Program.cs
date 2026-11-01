@@ -61,8 +61,14 @@ builder.Services.AddOpenTelemetry()
     });
 
 var releasesRoot = builder.Configuration["Content:ReleasesRoot"];
-var activationToken = builder.Configuration["Content:ActivationToken"];
-var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot) ? null : new ContentReleaseCatalog(releasesRoot);
+var configuredActivationToken = builder.Configuration["Content:ActivationToken"];
+// A relative root (appsettings.Production.json) resolves against the app folder, so no host-level environment variables are needed.
+var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot)
+    ? null
+    : new ContentReleaseCatalog(Path.GetFullPath(releasesRoot, builder.Environment.ContentRootPath));
+string? ResolveActivationToken() => !string.IsNullOrWhiteSpace(configuredActivationToken)
+    ? configuredActivationToken
+    : releaseCatalog?.ReadActivationToken();
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
 var loader = new ContentSnapshotLoader(PortfolioRoutes.CorePages.Values.ToArray());
 var (initialSnapshot, activeReleaseId, startupWarning) = await LoadInitialSnapshotAsync(loader, releaseCatalog, contentRoot);
@@ -211,11 +217,13 @@ app.MapGet("/robots.txt", (HttpContext context) =>
     }
     return Results.Text($"User-agent: *\nAllow: /\nSitemap: {siteContent.SiteUrl}/sitemap.xml\n", "text/plain; charset=utf-8");
 });
-if (releaseCatalog is not null && !string.IsNullOrWhiteSpace(activationToken))
+if (releaseCatalog is not null)
 {
     app.MapPost("/internal/content/{action}/{releaseId}", async (HttpContext context, string action, string releaseId) =>
     {
-        if (!context.Request.IsHttps || !IsAuthorized(context, activationToken)) return Results.NotFound();
+        // The token is read per request so provisioning the token file needs no app restart.
+        var activationToken = ResolveActivationToken();
+        if (string.IsNullOrWhiteSpace(activationToken) || !context.Request.IsHttps || !IsAuthorized(context, activationToken)) return Results.NotFound();
         if (action is not ("preview" or "activate") || !ContentReleaseCatalog.IsValidReleaseId(releaseId))
             return Results.BadRequest();
         var pages = releaseCatalog.PagesPath(releaseId);

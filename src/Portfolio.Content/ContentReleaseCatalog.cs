@@ -7,6 +7,8 @@ namespace Portfolio.Content;
 public sealed class ContentReleaseCatalog
 {
     public const string ActiveReleaseFileName = "active-release.txt";
+    public const string ActivationTokenFileName = "activation-token.txt";
+    public const int MinimumActivationTokenLength = 32;
 
     public ContentReleaseCatalog(string releasesRoot)
     {
@@ -24,6 +26,19 @@ public sealed class ContentReleaseCatalog
     {
         if (!IsValidReleaseId(releaseId)) throw new ArgumentException("The release id is invalid.", nameof(releaseId));
         return Path.Combine(Root, releaseId, "pages");
+    }
+
+    public string? ReadActivationToken()
+    {
+        try
+        {
+            var token = File.ReadAllText(Path.Combine(Root, ActivationTokenFileName)).Trim();
+            return token.Length >= MinimumActivationTokenLength ? token : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public string? ReadActiveReleaseId()

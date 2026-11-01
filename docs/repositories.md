@@ -34,7 +34,7 @@ flowchart TD
 
 ### One-time setup
 
-1. **Server.** Use `<site root>/App_Data/content-releases` as the releases folder. It is hidden from HTTP and the app deploy skips it, so it survives app releases; extra files elsewhere in the app folder are deleted. Make sure the app pool identity has modify rights on it, because the app writes `active-release.txt`. Set `Content__ReleasesRoot` (absolute physical path) and `Content__ActivationToken` as IIS or host-level environment variables, not only in `web.config`, since publish overwrites that file.
+1. **Server.** Nothing to configure in IIS. The app defaults to `<site root>/App_Data/content-releases` (hidden from HTTP, skipped by the app deploy, so it survives app releases). Make sure the app pool identity has modify rights on it, because the app writes `active-release.txt`. Create the file `App_Data/content-releases/activation-token.txt` once, containing the same value as the `CONTENT_ACTIVATION_TOKEN` secret (at least 32 characters). It is read on every request, so no restart is needed.
 2. **Web Deploy user.** The deployment user must be able to write below the releases folder through Web Deploy. Verify this before the first run.
 3. **GitHub environment `production-content`** in the private repo:
 
@@ -48,7 +48,7 @@ flowchart TD
 | `CONTENT_ACTIVATION_URL` | Variable | Public HTTPS base URL, for example `https://hellmangroup.se` |
 | `APP_REPO_REF` | Variable | Tag or commit of the public app repo used for tooling |
 | `DEPLOY_PASSWORD` | Secret | Web Deploy password |
-| `CONTENT_ACTIVATION_TOKEN` | Secret | Must equal the server's `Content__ActivationToken` |
+| `CONTENT_ACTIVATION_TOKEN` | Secret | Must equal the contents of `App_Data/content-releases/activation-token.txt` on the server |
 
 4. Protect `main` in the private repo and restrict `production-content` to `main`.
 
