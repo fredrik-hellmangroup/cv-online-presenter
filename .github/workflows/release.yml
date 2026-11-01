@@ -12,7 +12,7 @@ jobs:
   package:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           fetch-depth: 0
@@ -37,10 +37,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Release tags must point to a commit reachable from main.'
           }
-      - uses: actions/setup-dotnet@v6.0.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - run: npm ci --prefix client
@@ -60,13 +60,13 @@ jobs:
         run: |
           $package = "artifacts/cv-online-presenter-$env:RELEASE_TAG.zip"
           Compress-Archive -Path "artifacts/publish/*" -DestinationPath $package -CompressionLevel Optimal
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifacts/cv-online-presenter-${{ github.ref_name }}.zip
           if-no-files-found: error
           retention-days: 90
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-notes-${{ github.ref_name }}
           path: artifacts/release-notes.md
@@ -79,11 +79,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifact
-      - uses: actions/download-artifact@v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes-${{ github.ref_name }}
           path: release-notes
@@ -104,7 +104,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     environment:
-      name: production
+      name: production-msdeploy
       url: ${{ vars.DEPLOY_HEALTH_URL }}
     concurrency:
       group: production-deployment
@@ -113,18 +113,19 @@ jobs:
       actions: read
       contents: read
     env:
-      DEPLOY_FTP_HOST: ${{ vars.DEPLOY_SERVER_URL }}
-      DEPLOY_FTP_PORT: 21
-      DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}
+      MSDEPLOY_SERVER_URL: ${{ vars.MSDEPLOY_SERVER_URL }}
+      MSDEPLOY_SITE_NAME: ${{ vars.MSDEPLOY_SITE_NAME }}
+      MSDEPLOY_CERTIFICATE_SHA256: ${{ vars.MSDEPLOY_CERTIFICATE_SHA256 }}
+      MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/download-artifact@v8.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifact
-      - name: Extract versioned FTP package
+      - name: Extract versioned IIS package
         shell: pwsh
         run: |
           $package = Get-ChildItem -Path artifact -Filter '*.zip' -File | Select-Object -First 1
@@ -137,17 +138,27 @@ jobs:
               throw "Versioned package is missing required file '$requiredFile'."
             }
           }
-      - name: Deploy release over explicit FTPS
+      - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
+        run: .\scripts\ensure-webdeploy.ps1 -InstallerPath (Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi')
+      - name: Deploy release with MSDeploy
+        shell: powershell
         env:
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          .\scripts\deploy-beebyte-ftp.ps1 `
+          .\scripts\deploy-beebyte-iis.ps1 `
             -SourcePath 'artifact/publish' `
-            -FtpHost $env:DEPLOY_FTP_HOST `
-            -FtpPort $env:DEPLOY_FTP_PORT `
-            -RemotePath $env:DEPLOY_CONTENT_PATH `
-            -Username $env:DEPLOY_USERNAME
+            -DeployContentPath $env:MSDEPLOY_CONTENT_PATH `
+            -DeployServerUrl $env:MSDEPLOY_SERVER_URL `
+            -DeploySiteName $env:MSDEPLOY_SITE_NAME `
+            -DeployUsername $env:DEPLOY_USERNAME `
+            -DeployCertificateSha256 $env:MSDEPLOY_CERTIFICATE_SHA256 `
+            -OfflinePagePath '.\deployment\app_offline.htm'
       - name: Verify site health
         shell: pwsh
-        run: .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
+        run: |
+          .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
+          $metadataUrl = [Uri]::new([Uri]$env:DEPLOY_HEALTH_URL, '/build-metadata.json')
+          .\scripts\verify-build-metadata.ps1 `
+            -Url $metadataUrl.AbsoluteUri `
+            -ExpectedMetadataPath 'artifact/publish/wwwroot/build-metadata.json'

@@ -79,6 +79,23 @@ jobs:
           ROLLBACK_RELEASE_TAG: ${{ inputs.rollback_release_tag }}
         run: |
           New-Item -ItemType Directory -Path 'artifacts' -Force | Out-Null
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh origin/main before validating the rollback tag.'
+          }
+          git fetch --force origin "refs/tags/$($env:ROLLBACK_RELEASE_TAG):refs/tags/$($env:ROLLBACK_RELEASE_TAG)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch rollback tag '$env:ROLLBACK_RELEASE_TAG'."
+          }
+          $releaseCommit = (git rev-list -n 1 "refs/tags/$($env:ROLLBACK_RELEASE_TAG)").Trim()
+          if ($LASTEXITCODE -ne 0 -or $releaseCommit -notmatch '^[a-f0-9]{40}$') {
+            throw "Could not resolve rollback tag '$env:ROLLBACK_RELEASE_TAG' to a commit."
+          }
+          git merge-base --is-ancestor $releaseCommit origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Rollback tag '$env:ROLLBACK_RELEASE_TAG' must point to a commit reachable from main."
+          }
+
           $assetName = "cv-online-presenter-$env:ROLLBACK_RELEASE_TAG.zip"
           $release = gh release view $env:ROLLBACK_RELEASE_TAG `
             --repo $env:GITHUB_REPOSITORY `
@@ -163,59 +180,7 @@ jobs:
           }
       - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
-        run: |
-          $msDeployRoot = 'C:\Program Files\IIS\Microsoft Web Deploy V3'
-          $msDeployPath = Join-Path $msDeployRoot 'msdeploy.exe'
-          $assemblyPath = Join-Path $msDeployRoot 'Microsoft.Web.Deployment.dll'
-          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
-            $installerPath = Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi'
-            $installerUrl = 'https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi'
-            $expectedInstallerSha256 = '2150f9d1ab67e1b7b63559fb977ba9adc49f2b064fe2669a2e70d313a36b9a3d'
-            try {
-              Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -MaximumRedirection 0
-              $actualInstallerSha256 = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-              if ($actualInstallerSha256 -cne $expectedInstallerSha256) {
-                throw 'The Microsoft Web Deploy installer did not match the pinned SHA-256 digest.'
-              }
-              $installerSignature = Get-AuthenticodeSignature -LiteralPath $installerPath
-              if (
-                $installerSignature.Status -ne 'Valid' -or
-                $installerSignature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(, |$)'
-              ) {
-                throw 'The Microsoft Web Deploy installer does not have a valid Microsoft Authenticode signature.'
-              }
-              $installer = Start-Process msiexec.exe `
-                -ArgumentList @('/i', "`"$installerPath`"", '/qn', '/norestart', 'ADDLOCAL=ALL') `
-                -Wait `
-                -PassThru
-              if ($installer.ExitCode -notin @(0, 3010, 1641)) {
-                throw "Microsoft Web Deploy installation failed with exit code $($installer.ExitCode)."
-              }
-            }
-            finally {
-              Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
-            }
-          }
-
-          $expectedVersions = @{
-            $msDeployPath = '7.1.9419.0650'
-            $assemblyPath = '7.1.9419.0646'
-          }
-          foreach ($entry in $expectedVersions.GetEnumerator()) {
-            if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
-              throw "Verified Web Deploy file '$($entry.Key)' was not found."
-            }
-            if ((Get-Item -LiteralPath $entry.Key).VersionInfo.FileVersion -cne $entry.Value) {
-              throw "Web Deploy file '$($entry.Key)' does not match version '$($entry.Value)'."
-            }
-            $signature = Get-AuthenticodeSignature -LiteralPath $entry.Key
-            if (
-              $signature.Status -ne 'Valid' -or
-              $signature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(, |$)'
-            ) {
-              throw "Web Deploy file '$($entry.Key)' does not have a valid Microsoft Authenticode signature."
-            }
-          }
+        run: .\scripts\ensure-webdeploy.ps1 -InstallerPath (Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi')
       - name: Deploy package with MSDeploy
         shell: powershell
         env:

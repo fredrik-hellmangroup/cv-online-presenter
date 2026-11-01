@@ -7,6 +7,8 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $deployScriptPath = Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1'
 $offlinePagePath = Join-Path $repositoryRoot 'deployment\app_offline.htm'
 $workflowPath = Join-Path $repositoryRoot '.github\workflows\msdeploy-experiment.yml'
+$releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\release.yml'
+$installerScriptPath = Join-Path $PSScriptRoot 'ensure-webdeploy.ps1'
 $temporarySourcePath = Join-Path ([IO.Path]::GetTempPath()) "cv-online-presenter-msdeploy-test-$([guid]::NewGuid().ToString('N'))"
 
 function Invoke-Validation {
@@ -76,6 +78,7 @@ foreach ($requiredDeployFragment in @(
         "ProviderSettings['AppOfflineTemplate'].Value"
         "'App_Data\app_offline.template.htm'"
         '$templateSource.SyncTo('
+        '$syncOptions.DoNotDelete = $false'
     )) {
     if (-not $deployScript.Contains($requiredDeployFragment)) {
         throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."
@@ -92,7 +95,8 @@ $workflow = [IO.File]::ReadAllText($workflowPath)
 foreach ($requiredWorkflowFragment in @(
         'rollback_release_tag:'
         '$assets[0].digest'
-        '$expectedInstallerSha256'
+        'git merge-base --is-ancestor'
+        "ensure-webdeploy.ps1"
         'MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}'
         'verify-build-metadata.ps1'
         "-OfflinePagePath '.\deployment\app_offline.htm'"
@@ -106,6 +110,53 @@ if ($workflow.Contains('choco install')) {
 }
 if ($workflow.Contains('DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}')) {
     throw 'MSDeploy must not reuse the FTPS-only DEPLOY_CONTENT_PATH value.'
+}
+
+$releaseWorkflow = [IO.File]::ReadAllText($releaseWorkflowPath)
+foreach ($requiredReleaseFragment in @(
+        'name: production-msdeploy'
+        'MSDEPLOY_SERVER_URL: ${{ vars.MSDEPLOY_SERVER_URL }}'
+        'MSDEPLOY_SITE_NAME: ${{ vars.MSDEPLOY_SITE_NAME }}'
+        'MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}'
+        'MSDEPLOY_CERTIFICATE_SHA256: ${{ vars.MSDEPLOY_CERTIFICATE_SHA256 }}'
+        "ensure-webdeploy.ps1"
+        "deploy-beebyte-iis.ps1"
+        "verify-build-metadata.ps1"
+        "-OfflinePagePath '.\deployment\app_offline.htm'"
+    )) {
+    if (-not $releaseWorkflow.Contains($requiredReleaseFragment)) {
+        throw "The primary release workflow is missing '$requiredReleaseFragment'."
+    }
+}
+foreach ($forbiddenReleaseFragment in @(
+        'deploy-beebyte-ftp.ps1'
+        'DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}'
+        'Deploy release over explicit FTPS'
+        'uses: actions/checkout@v'
+        'uses: actions/setup-dotnet@v'
+        'uses: actions/setup-node@v'
+        'uses: actions/upload-artifact@v'
+        'uses: actions/download-artifact@v'
+    )) {
+    if ($releaseWorkflow.Contains($forbiddenReleaseFragment)) {
+        throw "The primary release workflow must not contain '$forbiddenReleaseFragment'."
+    }
+}
+
+if (-not (Test-Path -LiteralPath $installerScriptPath -PathType Leaf)) {
+    throw "The shared Web Deploy installer script does not exist at '$installerScriptPath'."
+}
+$installerScript = [IO.File]::ReadAllText($installerScriptPath)
+foreach ($requiredInstallerFragment in @(
+        '2150f9d1ab67e1b7b63559fb977ba9adc49f2b064fe2669a2e70d313a36b9a3d'
+        '7.1.9419.0650'
+        '7.1.9419.0646'
+        'Get-AuthenticodeSignature'
+        'O=Microsoft Corporation'
+    )) {
+    if (-not $installerScript.Contains($requiredInstallerFragment)) {
+        throw "The shared Web Deploy installer is missing '$requiredInstallerFragment'."
+    }
 }
 
 New-Item -ItemType Directory -Path $temporarySourcePath | Out-Null

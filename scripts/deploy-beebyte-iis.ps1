@@ -373,7 +373,7 @@ try {
     }
 
     $syncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
-    $syncOptions.DoNotDelete = $true
+    $syncOptions.DoNotDelete = $false
     $syncOptions.WhatIf = $WhatIf
     $appOfflineHandlerType = [Microsoft.Web.Deployment.DeploymentManager].Assembly.GetType(
         'Microsoft.Web.Deployment.AppOfflineRuleHandler',

@@ -16,3 +16,11 @@ A live MSDeploy and rollback exercise was completed on 2026-11-01 from an author
 6. `/`, `/cv`, `/projects`, and `/health` returned HTTP 200 afterward. The active offline file was gone, the persistent template under `App_Data` returned 404 publicly, and temporary certificate trust was absent.
 
 The exercise established that Beebyte's WMSvc `contentPath` is the IIS site name `hellmangroup.se`; the FTPS-only `httpdocs` path is not valid for Web Deploy. Production was intentionally left on `v1.0.8` after the exercise.
+
+## Primary workflow promotion
+
+After the live exercise, a second local cycle deployed app revision `765748441169aef8523496e6d7ec01bfe79c22f3`, captured the branded AppOffline response, verified health and exact metadata, and then restored the digest-verified `v1.0.8` package through the same helper. Health and metadata passed again after rollback.
+
+Before promotion, destination cleanup was hardened so stale release files are deleted instead of preserved. A new remote `WhatIf` reported 106 updates and 12 deletions. The corresponding live synchronization completed with the same counts, exact current-artifact metadata passed, and the hardened rollback completed with 106 updates and 2 deletions. Final health and exact `v1.0.8` metadata passed, temporary certificate trust was absent, and production was again left on `v1.0.8`.
+
+MSDeploy was then promoted to the tag-driven primary release workflow; the manual workflow remains the immutable-package rollback path and FTPS remains break-glass only.
