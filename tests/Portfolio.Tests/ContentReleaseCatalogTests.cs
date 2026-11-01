@@ -83,6 +83,18 @@ public sealed class ContentReleaseCatalogTests : IDisposable
     }
 
     [Fact]
+    public async Task ReleaseWithoutRequiredPublishedPagesIsRejected()
+    {
+        WriteRelease("partial", "Partial Person");
+        File.Delete(Path.Combine(root, "partial", "pages", "cv.md"));
+        var loader = new ContentSnapshotLoader(["home", "cv"]);
+
+        var exception = await Assert.ThrowsAsync<ContentValidationException>(() => loader.LoadAsync(Path.Combine(root, "partial", "pages")));
+
+        Assert.Contains(exception.Errors, error => error.Message.Contains("'cv'"));
+    }
+
+    [Fact]
     public void MissingPointerMeansNoActiveRelease() =>
         Assert.Null(new ContentReleaseCatalog(root).ReadActiveReleaseId());
 
