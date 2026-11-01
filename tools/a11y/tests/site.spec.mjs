@@ -136,13 +136,13 @@ test('/cv search is a floating panel and /search no longer exists as a page', as
   await page.keyboard.press('Control+k');
   const input = page.getByRole('searchbox', { name: 'Sök i CV:t' });
   await expect(input).toBeFocused();
-  await input.fill('Fredrik');
+  await input.fill('Alex');
   await expect(page.locator('#cv-search-results a').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(input).toBeHidden();
   await expect(toggle).toBeFocused();
 
-  await page.goto('/search?q=Fredrik');
+  await page.goto('/search?q=Alex');
   await expect(page).toHaveURL(/\/cv$/);
 });
 

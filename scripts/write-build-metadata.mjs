@@ -5,7 +5,8 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const revision = (args, cwd = root) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 const appRevision = revision(['rev-parse', 'HEAD']);
-const contentRevision = revision(['rev-parse', 'HEAD'], path.join(root, 'content'));
+// The bundled template content is versioned with the app; its tree hash identifies it. Real content is a separate runtime release.
+const contentRevision = revision(['rev-parse', 'HEAD:content']);
 const metadata = {
   appRevision,
   contentRevision,

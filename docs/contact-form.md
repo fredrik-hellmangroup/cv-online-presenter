@@ -23,7 +23,7 @@ Set these as environment variables (double underscore as separator) or user secr
 | `Contact__Smtp__UserName` / `Contact__Smtp__Password` | SMTP credentials (optional for relays without authentication) |
 | `Contact__Smtp__From` | Sender address; must be allowed by the SMTP server |
 
-The recipient is `contactEmail` in `content/content/site.json`. The visitor's address is set as `Reply-To`.
+The recipient is `contactEmail` in `content/site.json`. The visitor's address is set as `Reply-To`.
 
 Create the site key and secret in the Cloudflare dashboard (Turnstile) and add the production hostname to the allowed domains. Cloudflare also publishes test keys for local development.
 

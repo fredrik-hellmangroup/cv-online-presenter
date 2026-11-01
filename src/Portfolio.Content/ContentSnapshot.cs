@@ -20,7 +20,7 @@ public sealed record ContentStructuralDiff(
     IReadOnlyList<string> Removed,
     IReadOnlyList<string> Changed);
 
-public sealed class ContentSnapshotLoader
+public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredPublishedSlugs = null)
 {
     private readonly MarkdownContentService contentService = new();
     private readonly ContentSectionClassifier classifier = new();
@@ -35,7 +35,15 @@ public sealed class ContentSnapshotLoader
             throw new InvalidOperationException("The content/site.json identity is incomplete.");
 
         var documents = await contentService.LoadDirectoryAsync(pagesRoot, cancellationToken);
-        var errors = contentService.Validate(documents, settings.SupportedLocales.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        var locales = settings.SupportedLocales.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var errors = contentService.Validate(documents, locales).ToList();
+        foreach (var slug in requiredPublishedSlugs ?? [])
+        {
+            if (!documents.Any(document => document.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase)
+                && document.Status.Equals("published", StringComparison.OrdinalIgnoreCase) && locales.Contains(document.Locale)))
+                errors.Add(new(Path.Combine(pagesRoot, slug + ".md"), $"A published page '{slug}' is required."));
+        }
+
         if (errors.Count > 0) throw new ContentValidationException(errors);
 
         var immutableDocuments = documents.Select(document => document with
@@ -87,13 +95,15 @@ public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapsho
 
     public ContentSnapshot Current => Volatile.Read(ref current);
 
-    public async Task<ContentStructuralDiff> ActivateAsync(string pagesRoot, CancellationToken cancellationToken = default)
+    public async Task<ContentStructuralDiff> ActivateAsync(string pagesRoot, CancellationToken cancellationToken = default, Action? persist = null)
     {
         var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
         await activationLock.WaitAsync(cancellationToken);
         try
         {
             var diff = ContentSnapshotLoader.Compare(current, candidate);
+            // Persisting inside the lock, with no awaits before the swap, keeps the stored pointer and the served snapshot in the same order.
+            persist?.Invoke();
             Volatile.Write(ref current, candidate);
             return diff;
         }

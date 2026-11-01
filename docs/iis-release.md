@@ -14,7 +14,7 @@ flowchart LR
 
 ## GitHub Environment
 
-Release and rollback use the `production-msdeploy` environment. Deployment is allowed from `main` (rollback) and protected `v*.*.*` tags (releases). Add required reviewers if deployment needs approval.
+Release and rollback use the `production-msdeploy` environment. Content updates use a separate `production-content` environment in the private content repository, see [repositories.md](repositories.md). Deployment is allowed from `main` (rollback) and protected `v*.*.*` tags (releases). Add required reviewers if deployment needs approval.
 
 | Name | Kind | Purpose |
 | --- | --- | --- |

@@ -60,15 +60,20 @@ builder.Services.AddOpenTelemetry()
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"])) metrics.AddOtlpExporter();
     });
 
+var releasesRoot = builder.Configuration["Content:ReleasesRoot"];
+var activationToken = builder.Configuration["Content:ActivationToken"];
+var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot) ? null : new ContentReleaseCatalog(releasesRoot);
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
-var loader = new ContentSnapshotLoader();
-var initialSnapshot = await loader.LoadAsync(contentRoot);
+var loader = new ContentSnapshotLoader(PortfolioRoutes.CorePages.Values.ToArray());
+var (initialSnapshot, activeReleaseId, startupWarning) = await LoadInitialSnapshotAsync(loader, releaseCatalog, contentRoot);
 var store = new ContentSnapshotStore(initialSnapshot, loader);
 var service = new MarkdownContentService();
 builder.Services.AddSingleton(store);
 builder.Services.AddSingleton(provider => new SiteContent(store, provider.GetRequiredService<IHttpContextAccessor>(), service));
 
 var app = builder.Build();
+if (startupWarning is not null) app.Logger.LogWarning("{Message}", startupWarning);
+app.Logger.LogInformation("Serving content {Source} with snapshot {Version}", activeReleaseId is null ? "bundled with the app" : $"release {activeReleaseId}", initialSnapshot.Version);
 var siteContent = app.Services.GetRequiredService<SiteContent>();
 var contactForm = app.Services.GetRequiredService<ContactFormSettings>();
 const string baseCsp = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -206,30 +211,28 @@ app.MapGet("/robots.txt", (HttpContext context) =>
     }
     return Results.Text($"User-agent: *\nAllow: /\nSitemap: {siteContent.SiteUrl}/sitemap.xml\n", "text/plain; charset=utf-8");
 });
-var releasesRoot = builder.Configuration["Content:ReleasesRoot"];
-var activationToken = builder.Configuration["Content:ActivationToken"];
-if (!string.IsNullOrWhiteSpace(releasesRoot) && !string.IsNullOrWhiteSpace(activationToken))
+if (releaseCatalog is not null && !string.IsNullOrWhiteSpace(activationToken))
 {
-    var releaseDirectory = Path.GetFullPath(releasesRoot);
     app.MapPost("/internal/content/{action}/{releaseId}", async (HttpContext context, string action, string releaseId) =>
     {
         if (!context.Request.IsHttps || !IsAuthorized(context, activationToken)) return Results.NotFound();
-        if (action is not ("preview" or "activate") || releaseId.Length == 0
-            || releaseId.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_')))
+        if (action is not ("preview" or "activate") || !ContentReleaseCatalog.IsValidReleaseId(releaseId))
             return Results.BadRequest();
-        var pages = Path.Combine(releaseDirectory, releaseId, "pages");
+        var pages = releaseCatalog.PagesPath(releaseId);
         try
         {
             var candidate = await loader.LoadAsync(pages, context.RequestAborted);
             var diff = ContentSnapshotLoader.Compare(store.Current, candidate);
             if (action == "activate")
             {
-                diff = await store.ActivateAsync(pages, context.RequestAborted);
+                // The pointer is persisted inside the store's activation lock and only after the candidate loaded,
+                // so a restart never selects an invalid release and concurrent activations stay ordered.
+                diff = await store.ActivateAsync(pages, context.RequestAborted, () => releaseCatalog.WriteActiveReleaseId(releaseId));
                 app.Logger.LogInformation("Activated content release {ReleaseId} with snapshot {Version}", releaseId, diff.ToVersion);
             }
             return Results.Json(diff);
         }
-        catch (Exception exception) when (exception is ContentValidationException or IOException or InvalidOperationException or System.Text.Json.JsonException)
+        catch (Exception exception) when (exception is ContentValidationException or IOException or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
             return Results.BadRequest(new { error = exception.Message });
         }
@@ -262,11 +265,30 @@ static bool IsCacheableStaticAsset(string path) => Path.GetExtension(path).ToLow
     ".css" or ".js" or ".mjs" or ".woff" or ".woff2" or ".ttf" or ".otf"
         or ".svg" or ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".avif" or ".ico";
 
+static async Task<(ContentSnapshot Snapshot, string? ActiveReleaseId, string? Warning)> LoadInitialSnapshotAsync(
+    ContentSnapshotLoader loader, ContentReleaseCatalog? catalog, string bundledPages)
+{
+    string? warning = null;
+    if (catalog is not null)
+    {
+        try
+        {
+            if (catalog.ReadActiveReleaseId() is { } releaseId)
+                return (await loader.LoadAsync(catalog.PagesPath(releaseId)), releaseId, null);
+        }
+        catch (Exception exception) when (exception is ContentValidationException or IOException or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException)
+        {
+            warning = $"The active content release could not be loaded; falling back to the bundled content: {exception.Message}";
+        }
+    }
+    return (await loader.LoadAsync(bundledPages), null, warning);
+}
+
 static string ResolveContentRoot(string webRoot)
 {
     var candidates = new[]
     {
-        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "content", "pages")),
+        Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "pages")),
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "content", "pages")),
         Path.GetFullPath(Path.Combine(webRoot, "content", "pages"))
     };

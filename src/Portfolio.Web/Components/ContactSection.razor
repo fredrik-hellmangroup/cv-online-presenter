@@ -93,7 +93,7 @@ else if (hasEmail)
     private bool hasEmail => !string.IsNullOrWhiteSpace(Email)
         && System.Net.Mail.MailAddress.TryCreate(Email, out var address) && address.Address == Email;
     private const string MailSubject = "Kaffe och en .NET-fråga?";
-    private const string MailBody = "Hej Fredrik! Jag såg din portfolio och skulle gärna prata om…";
+    private const string MailBody = "Hej! Jag såg din portfolio och skulle gärna prata om…";
     private string MailtoHref => $"mailto:{Email}?subject={Uri.EscapeDataString(MailSubject)}&body={Uri.EscapeDataString(MailBody)}";
 
     private string? Invalid(ContactField field) => invalidFields.Contains(field) ? "true" : null;

@@ -6,7 +6,7 @@
     "build": "npm --prefix client run build && node scripts/copy-client-assets.mjs",
     "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release",
     "build:metadata": "node scripts/write-build-metadata.mjs",
-    "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/content/pages",
+    "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages",
     "test:a11y": "npm run build && npm --prefix tools/a11y test"
   }
 }

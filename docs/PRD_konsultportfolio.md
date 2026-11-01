@@ -101,7 +101,7 @@ Originaltexten för samtliga beslut återfanns i `ADR-001-018_Sammanstallning.md
 
 ### Senare owner-bekräftelser och avstämning
 
-- ADR-005 och ADR-011 beskriver ursprungligen ett privat CV-repo. De senare OQ-02/OQ-04-bekräftelserna valde det publika `cv-online-presenter-content`-repot, med content commit pinnad som app-submodule, och godkände nuvarande CV-innehåll för publicering. Den bekräftade repo- och publiceringslösningen styr implementationen; håll produktions-CD/secrets separerade. App- och content-versioner/releaser ska fortfarande kunna hanteras separat.
+- ADR-005 och ADR-011 beskriver ett privat CV-repo. Ett tidigare OQ-02/OQ-04-beslut valde ett publikt content-repo med submodule; det är **ersatt**: det riktiga CV-innehållet ligger i det privata `cv-online-presenter-content`-repot och levereras som content-release (se [repositories.md](repositories.md)). Det publika appen innehåller bara en syntetisk `content/`-mall. Håll produktions-CD/secrets separerade. App- och content-versioner/releaser hanteras separat.
 - ADR-014 gör lösningen flerspråksredo för svenska och engelska, men den senare OQ-03-bekräftelsen begränsar första releasen till svenska eftersom ingen engelsk CV-fil är godkänd.
 - ADR-017 lämnade licensen öppen i originaltexten. OQ-06 fastställde senare MIT för båda repona.
 - OQ-05 fastställer `https://hellmangroup.se`, HTTPS samt att hostingprovidern hanterar IIS och TLS. Den valfria app-side IIS-pipelinen förblir separat och inaktiv tills staging har konfigurerats.
@@ -208,11 +208,11 @@ flowchart TD
   Health -->|fel| Rollback[Återställ föregående artefakt]
 ```
 ## 9. Publicering och CI/CD
-ADR-016 anger en forkbar open-source-applikation med oberoende CI. Senare owner-beslut OQ-02 fastställer de publika repona `cv-online-presenter` och `cv-online-presenter-content`; content commit pinnas som app-submodule. App och content har separata versioner/releases. Se avsnitt 4 för avstämningen mot ADR-005/011:s ursprungliga avsikt att hålla CV-data privat.
+ADR-016 anger en forkbar open-source-applikation med oberoende CI. Beslut OQ-02 (reviderat) fastställer ett publikt app-repo `cv-online-presenter` med syntetisk `content/`-mall och ett privat repo `cv-online-presenter-content` för det riktiga innehållet, som deployas som content-release utan app-release. Se avsnitt 4 för avstämningen mot ADR-005/011.
 | Repo | Ansvar | CI-minimikrav |
 | --- | --- | --- |
-| `cv-online-presenter` | Publik app: moduler, TypeScript, tester, skript, ADR, deploymentdefinition och pinnad content-submodule | Application CI: restore/build, format/lint, unit-/integration-/browser tests, säkerhetsscanning och paketering. |
-| `cv-online-presenter-content` | Publikt innehållsrepo enligt senare OQ-02-beslut; CV-filer, språkversioner, schema och godkänt innehåll | Content CI: schema/länkar, klassificering, språkstatus, metadata, AST-/textdiff och sekretesskontroll. |
+| `cv-online-presenter` | Publik app: moduler, TypeScript, tester, skript, ADR, deploymentdefinition och syntetisk `content/`-mall | Application CI: restore/build, format/lint, unit-/integration-/browser tests, säkerhetsscanning och paketering. |
+| `cv-online-presenter-content` | **Privat** innehållsrepo; CV-filer, källdokument, språkversioner och godkänt innehåll | Content CI: schema/länkar, klassificering, språkstatus, metadata och sekretesskontroll. Deploy-workflow levererar content-release till IIS. |
 - PR kräver gröna checks; publicera från skyddad branch/tagg.
 - Deployment Verification validerar privat preview, explicit releaseval, health check och rollback; app/content-versioner spåras separat.
 - Artefakt/release registrerar app commit, content commit, build-ID och icke-hemlig config.
@@ -276,14 +276,14 @@ Visuell riktning är Immersive Dark (ersätter tidigare Scandinavian Editorial, 
 | ID | Fråga |
 | --- | --- |
 | OQ-01 | **Löst:** originaltext för ADR-001–018 återfunnen i `ADR-001-018_Sammanstallning.md`, införd i Bilaga B och mappad till krav i avsnitt 4/Bilaga A. |
-| OQ-02 | **Löst:** publika repon `cv-online-presenter` och `cv-online-presenter-content`; content commit pinnas som app submodule och versioneras separat. |
+| OQ-02 | **Löst (reviderat):** publikt app-repo med syntetisk `content/`-mall; privat content-repo med det riktiga CV:t; content levereras som content-release och versioneras separat. |
 | OQ-03 | **Löst för första release:** svenska (`sv-SE`) endast; arkitekturen är redo att visa engelska när en godkänd CV-fil finns. |
 | OQ-04 | **Löst för nuvarande CV:** ägaren har godkänt att nuvarande CV-innehåll visas publikt. Nya uppgifter, kontaktadresser och externa länkar kräver separat godkännande; demo-CV förblir syntetiskt och draft-only. |
 | OQ-05 | Beslut: `https://hellmangroup.se` är standarddomän och hostingprovidern ansvarar för IIS samt TLS/certifikat; webbplatsen ska använda HTTPS. Staging-URL, nätverksåtkomst och runner-konfiguration behövs endast om app-repots valfria IIS-pipeline aktiveras. |
 | OQ-06 | **Löst:** MIT för båda repona; demo-CV är tydligt syntetisk och skild från godkänt innehåll. |
 | OQ-07 | **Avstängd som säkert standardläge:** ingen analytics-vendor eller tracking är konfigurerad. Aktivering kräver leverantör, ändamål, events, samtycke och retention. |
 | OQ-08 | **Delvis löst:** ägaren tillhandahåller `logo.svg` före deployment. System-font stack används; nuvarande palett är designutkast. Extra fotografier/illustrationer ingår inte utan rättighetsgodkännande. |
-| OQ-09 | **Löst:** kontakt sker via e-postlänk (`mailto:`), och ett kontaktformulär med Cloudflare Turnstile är godkänt av ägaren. Formuläret visas först när Turnstile och SMTP är konfigurerade; annars visas ett kontaktkort med e-postlänk. `contactEmail` är satt till `fredrik@hellmangroup.se` i `content/content/site.json`. Se [contact-form.md](contact-form.md). |
+| OQ-09 | **Löst:** kontakt sker via e-postlänk (`mailto:`), och ett kontaktformulär med Cloudflare Turnstile är godkänt av ägaren. Formuläret visas först när Turnstile och SMTP är konfigurerade; annars visas ett kontaktkort med e-postlänk. `contactEmail` sätts i `site.json` i det privata content-repot (`demo@example.com` i den publika mallen). Se [contact-form.md](contact-form.md). |
 | OQ-10 | **Defererat/out of scope:** produktions-SLO, backup/retention och incidentansvar fastställs innan produktionstjänst med dessa driftkrav tas i scope. |
 ## 13. Releaseplan och definition av klart
 Releaseplanen består av vertikala slices med fungerande flöde från innehåll till sida. Estimat lämnas öppna tills kapacitet och hosting är kända.
