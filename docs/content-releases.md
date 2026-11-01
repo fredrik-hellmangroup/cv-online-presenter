@@ -6,8 +6,8 @@ The app loads one content snapshot at startup. `ContentSnapshotLoader` parses Ma
 
 | Situation | Source |
 | --- | --- |
-| `Content__ReleasesRoot` is set and `active-release.txt` names a valid release | `<ReleasesRoot>/<releaseId>/` (the real, private content) |
-| `Content__ReleasesRoot` is not set, or no release is active yet | The bundled public template in `content/` (synthetic demo data) |
+| `Content:ReleasesRoot` is configured (default in Production) and `active-release.txt` names a valid release | `<ReleasesRoot>/<releaseId>/` (the real, private content) |
+| `Content:ReleasesRoot` is not configured (for example in Development), or no release is active yet | The bundled public template in `content/` (synthetic demo data) |
 | The active release is missing or invalid | The bundled template, with a warning in the log |
 
 The startup log states which source was used.
@@ -15,7 +15,7 @@ The startup log states which source was used.
 ## Release layout and activation
 
 ```text
-<ReleasesRoot>/            outside the IIS app folder
+<ReleasesRoot>/            e.g. <site root>/App_Data/content-releases (skipped by the app deploy)
   active-release.txt       single line: the active release id
   2026-11-01-ab12cd3/
     site.json
@@ -24,7 +24,7 @@ The startup log states which source was used.
 
 A release id may contain letters, digits, `-` and `_` (max 100 characters). Releases are produced from a reviewed commit in the private content repository by its `Deploy content` workflow, see [repositories.md](repositories.md).
 
-Runtime selection requires both `Content__ReleasesRoot` and `Content__ActivationToken`. Over HTTPS, with the header `X-Content-Activation-Token`:
+Runtime selection requires a releases root and an activation token (see the operational requirements below). Over HTTPS, with the header `X-Content-Activation-Token`:
 
 - `POST /internal/content/preview/{releaseId}` validates the release and returns the diff against the active snapshot without switching.
 - `POST /internal/content/activate/{releaseId}` validates, writes `active-release.txt` atomically, then switches the snapshot.
@@ -33,9 +33,10 @@ Invalid candidates leave the current snapshot and pointer unchanged. Because the
 
 ## Operational requirements
 
-- `ReleasesRoot` must be outside the IIS application folder. The app deploy removes extra files there.
+- `ReleasesRoot` must not be wiped by the app deploy. On the shared Beebyte host, Web Deploy can only reach the site root, so use `<site root>/App_Data/content-releases` (Web Deploy path `<MSDEPLOY_CONTENT_PATH>/App_Data/content-releases`). IIS never serves `App_Data` over HTTP, and the app deploy explicitly skips that folder (`deploy-beebyte-iis.ps1`). Any other location inside the app folder is deleted on the next app deploy.
 - The app pool identity needs modify rights on `ReleasesRoot` to write `active-release.txt`.
-- Set the two environment variables at IIS or host level, not only in `web.config`, because publishing overwrites it.
+- On Production the app uses the relative `Content:ReleasesRoot` = `App_Data/content-releases` from `appsettings.Production.json` (resolved against the app folder), so no host-level environment variables are needed. `Content__ReleasesRoot` / `Content__ActivationToken` still work as overrides (environment variables, `web.config`).
+- The activation token is read per request from `ReleasesRoot/activation-token.txt` (at least 32 characters) unless `Content:ActivationToken` is configured. Create that file once on the server (it sits in the folder the app deploy skips); no restart is needed. Without a token the endpoints return 404.
 - Keep the token secret and restrict filesystem access to the releases folder.
 - Draft content stays excluded from routes, indexing and search.
 

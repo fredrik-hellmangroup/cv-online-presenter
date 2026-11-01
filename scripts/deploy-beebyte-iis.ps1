@@ -371,6 +371,10 @@ try {
     $destinationOptions.RetryAttempts = 10
     $destinationOptions.RetryInterval = 5000
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
+    if (-not $ContentRelease) {
+        # Private content releases live inside the site (hidden from HTTP under App_Data); an app deploy must never delete them.
+        $destinationOptions.SkipDirectory('(?:^|[\\/])App_Data[\\/]content-releases(?:[\\/]|$)')
+    }
 
     $offlineTemplateRelativePath = 'App_Data\app_offline.template.htm'
     $destinationProviderOptions = [Microsoft.Web.Deployment.DeploymentProviderOptions]::new(

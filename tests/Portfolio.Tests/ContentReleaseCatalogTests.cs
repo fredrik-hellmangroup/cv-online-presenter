@@ -98,6 +98,51 @@ public sealed class ContentReleaseCatalogTests : IDisposable
     public void MissingPointerMeansNoActiveRelease() =>
         Assert.Null(new ContentReleaseCatalog(root).ReadActiveReleaseId());
 
+    [Fact]
+    public void ActivationTokenFileIsTrimmedAndMustBeLongEnough()
+    {
+        var catalog = new ContentReleaseCatalog(root);
+        Assert.Null(catalog.ReadActivationToken());
+
+        Directory.CreateDirectory(root);
+        var tokenFile = Path.Combine(root, ContentReleaseCatalog.ActivationTokenFileName);
+        File.WriteAllText(tokenFile, "short\n");
+        Assert.Null(catalog.ReadActivationToken());
+
+        var token = new string('a', ContentReleaseCatalog.MinimumActivationTokenLength);
+        File.WriteAllText(tokenFile, token + "\r\n");
+        Assert.Equal(token, catalog.ReadActivationToken());
+    }
+
+    [Fact]
+    public async Task ActivationEndpointUsesTheTokenFileAndAFolderRelativeToTheApp()
+    {
+        WriteRelease("good", "Release Person");
+        var token = new string('t', ContentReleaseCatalog.MinimumActivationTokenLength);
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("Content:ReleasesRoot", root));
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/internal/content/activate/good"))
+        {
+            request.Headers.Add("X-Content-Activation-Token", token);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(request)).StatusCode);
+        }
+
+        File.WriteAllText(Path.Combine(root, ContentReleaseCatalog.ActivationTokenFileName), token);
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/internal/content/activate/good"))
+        {
+            request.Headers.Add("X-Content-Activation-Token", token);
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
+        }
+
+        using (var request = new HttpRequestMessage(HttpMethod.Post, "/internal/content/activate/good"))
+        {
+            request.Headers.Add("X-Content-Activation-Token", "wrong");
+            Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(request)).StatusCode);
+        }
+        Assert.Equal("good", new ContentReleaseCatalog(root).ReadActiveReleaseId());
+    }
+
     private void WriteRelease(string releaseId, string siteName)
     {
         var pages = Path.Combine(root, releaseId, "pages");
