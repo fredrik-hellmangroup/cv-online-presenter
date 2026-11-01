@@ -80,7 +80,7 @@ foreach ($requiredDeployFragment in @(
         '$templateSource.SyncTo('
         '$syncOptions.DoNotDelete = $false'
         '$ContentRelease'
-        'App_Data[\\/]content-releases'
+        'App_Data(?:[\\/]|$)'
     )) {
     if (-not $deployScript.Contains($requiredDeployFragment)) {
         throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."

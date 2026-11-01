@@ -372,8 +372,9 @@ try {
     $destinationOptions.RetryInterval = 5000
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
     if (-not $ContentRelease) {
-        # Private content releases live inside the site (hidden from HTTP under App_Data); an app deploy must never delete them.
-        $destinationOptions.SkipDirectory('(?:^|[\\/])App_Data[\\/]content-releases(?:[\\/]|$)')
+        # The app ships no App_Data content: the offline template and the private content releases live there.
+        # Skipping the whole folder keeps Web Deploy from trying to delete App_Data, which fails while it still holds releases.
+        $destinationOptions.SkipDirectory('(?:^|[\\/])App_Data(?:[\\/]|$)')
     }
 
     $offlineTemplateRelativePath = 'App_Data\app_offline.template.htm'
