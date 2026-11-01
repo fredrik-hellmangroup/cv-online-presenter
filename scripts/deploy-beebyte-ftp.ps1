@@ -7,6 +7,8 @@ param(
 
     [int]$FtpPort = 21,
 
+    [string]$CurlPath = 'curl.exe',
+
     [Parameter(Mandatory = $true)]
     [string]$RemotePath,
 
@@ -41,109 +43,61 @@ function Get-FtpUri {
     return [Uri]::new("ftp://$FtpServerHost`:$Port/$encodedPath")
 }
 
-function Invoke-FtpRequest {
+function Format-CurlConfigValue {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    if ($Value -match '[\x00-\x1F\x7F]') {
+        throw 'curl configuration values must not contain control characters.'
+    }
+
+    return $Value.Replace('\', '\\').Replace('"', '\"')
+}
+
+function Invoke-FtpsUpload {
     param(
         [Parameter(Mandatory = $true)]
         [Uri]$Uri,
 
         [Parameter(Mandatory = $true)]
-        [string]$Method,
-
-        [byte[]]$Body,
-
-        [switch]$ReadResponseBody
+        [string]$SourceFile
     )
 
+    $configuration = @(
+        'silent'
+        'show-error'
+        'fail'
+        'ssl-reqd'
+        'ftp-create-dirs'
+        'connect-timeout = 30'
+        'max-time = 120'
+        "user = `"$(Format-CurlConfigValue -Value "$Username`:$password")`""
+        "upload-file = `"$(Format-CurlConfigValue -Value $SourceFile)`""
+        "url = `"$($Uri.AbsoluteUri)`""
+    )
+    $output = $configuration | & $CurlPath -q --config - 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "FTPS upload failed for '$Uri': $output"
+    }
+}
+
+function Remove-FtpsFile {
+    param([Parameter(Mandatory = $true)][Uri]$Uri)
+
     $request = [System.Net.FtpWebRequest]::Create($Uri)
-    $request.Method = $Method
+    $request.Method = [System.Net.WebRequestMethods+Ftp]::DeleteFile
     $request.EnableSsl = $true
     $request.UsePassive = $true
-    $request.UseBinary = $true
     $request.KeepAlive = $false
     $request.Credentials = [System.Net.NetworkCredential]::new($Username, $password)
     $request.Timeout = 30000
-    $request.ReadWriteTimeout = 30000
-
-    if ($null -ne $Body) {
-        $request.ContentLength = $Body.Length
-        $stream = $null
-        try {
-            $stream = $request.GetRequestStream()
-            $stream.Write($Body, 0, $Body.Length)
-        }
-        finally {
-            if ($null -ne $stream) {
-                $stream.Dispose()
-            }
-        }
-    }
-
     $response = $null
     try {
         $response = [System.Net.FtpWebResponse]$request.GetResponse()
-        if ($ReadResponseBody) {
-            $reader = [IO.StreamReader]::new($response.GetResponseStream())
-            try {
-                $maximumCharacters = 1MB
-                $buffer = [char[]]::new(4096)
-                $content = [Text.StringBuilder]::new()
-                while (($charactersRead = $reader.Read($buffer, 0, $buffer.Length)) -gt 0) {
-                    if ($content.Length + $charactersRead -gt $maximumCharacters) {
-                        throw "FTP response from '$Uri' exceeded $maximumCharacters characters."
-                    }
-                    [void]$content.Append($buffer, 0, $charactersRead)
-                }
-                return $content.ToString()
-            }
-            finally {
-                $reader.Dispose()
-            }
-        }
-
-        return $response.StatusDescription
     }
     finally {
         if ($null -ne $response) {
             $response.Dispose()
         }
-    }
-}
-
-function Remove-FtpFileIfExists {
-    param([Parameter(Mandatory = $true)][Uri]$Uri)
-
-    try {
-        Invoke-FtpRequest -Uri $Uri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
-        return
-    }
-    catch [System.Net.WebException] {
-        $deleteError = $_.Exception
-        $fileName = [Uri]::UnescapeDataString($Uri.Segments[-1].TrimEnd('/'))
-        $parentPath = $Uri.AbsolutePath.Substring(0, $Uri.AbsolutePath.Length - $Uri.Segments[-1].Length)
-        $parentBuilder = [UriBuilder]$Uri
-        $parentBuilder.Path = $parentPath
-
-        try {
-            $listing = Invoke-FtpRequest `
-                -Uri $parentBuilder.Uri `
-                -Method ([System.Net.WebRequestMethods+Ftp]::ListDirectory) `
-                -ReadResponseBody
-        }
-        catch {
-            throw "Could not determine whether remote file '$Uri' exists after delete failed: $($_.Exception.Message)"
-        }
-
-        $listedNames = $listing -split '\r?\n' |
-            ForEach-Object {
-                if ($_.Length -gt 0) {
-                    ($_ -split '/')[-1]
-                }
-            }
-        if ($listedNames -notcontains $fileName) {
-            return
-        }
-
-        throw "Could not delete existing remote file '$Uri': $($deleteError.Message)"
     }
 }
 
@@ -186,69 +140,55 @@ if ($ValidateOnly) {
     exit 0
 }
 
-$files = Get-ChildItem -LiteralPath $resolvedSourcePath -File -Recurse
-$directorySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($file in $files) {
-    $relativeDirectory = $file.Directory.FullName.Substring($resolvedSourcePath.Length).TrimStart('\')
-    if ($relativeDirectory) {
-        $parts = $relativeDirectory -replace '\\', '/' -split '/'
-        $pathParts = [System.Collections.Generic.List[string]]::new()
-        foreach ($part in $parts) {
-            [void]$pathParts.Add($part)
-            [void]$directorySet.Add(($pathParts -join '/'))
-        }
-    }
+$curlCommand = Get-Command -Name $CurlPath -CommandType Application -ErrorAction SilentlyContinue
+if ($null -eq $curlCommand) {
+    throw "curl executable '$CurlPath' was not found."
 }
-$directories = $directorySet | Sort-Object
+$CurlPath = $curlCommand.Source
 
+$files = Get-ChildItem -LiteralPath $resolvedSourcePath -File -Recurse
 $offlinePath = "$remoteRoot/app_offline.htm"
 $offlineUri = Get-FtpUri -Path $offlinePath -FtpServerHost $ftpHostValue -Port $FtpPort
-$offlineBody = [Text.Encoding]::UTF8.GetBytes('<!doctype html><title>Deploying</title><p>Temporarily offline for deployment.</p>')
+$offlineLocalPath = Join-Path ([IO.Path]::GetTempPath()) "cv-online-presenter-$([guid]::NewGuid().ToString('N'))-app_offline.htm"
+[IO.File]::WriteAllText(
+    $offlineLocalPath,
+    '<!doctype html><title>Deploying</title><p>Temporarily offline for deployment.</p>',
+    [Text.UTF8Encoding]::new($false)
+)
 $offlineUploaded = $false
 $deploymentSucceeded = $false
 
 try {
     Write-Host "Connecting to $ftpHostValue on explicit FTPS port $FtpPort."
-    Invoke-FtpRequest -Uri $offlineUri -Method ([System.Net.WebRequestMethods+Ftp]::UploadFile) -Body $offlineBody | Out-Null
+    Invoke-FtpsUpload -Uri $offlineUri -SourceFile $offlineLocalPath
     $offlineUploaded = $true
     Wait-ForRemoteApplicationStop
-
-    foreach ($directory in $directories) {
-        $directoryUri = Get-FtpUri -Path "$remoteRoot/$directory" -FtpServerHost $ftpHostValue -Port $FtpPort
-        try {
-            Invoke-FtpRequest -Uri $directoryUri -Method ([System.Net.WebRequestMethods+Ftp]::MakeDirectory) | Out-Null
-        }
-        catch [System.Net.WebException] {
-            try {
-                Invoke-FtpRequest -Uri $directoryUri -Method ([System.Net.WebRequestMethods+Ftp]::ListDirectory) | Out-Null
-            }
-            catch {
-                throw "Could not create or verify remote directory '$directory': $($_.Exception.Message)"
-            }
-        }
-    }
 
     foreach ($file in $files) {
         $relativePath = $file.FullName.Substring($resolvedSourcePath.Length).TrimStart('\') -replace '\\', '/'
         $remoteFilePath = "$remoteRoot/$relativePath"
         $fileUri = Get-FtpUri -Path $remoteFilePath -FtpServerHost $ftpHostValue -Port $FtpPort
         Write-Host "Uploading $relativePath."
-        Remove-FtpFileIfExists -Uri $fileUri
-        Invoke-FtpRequest -Uri $fileUri -Method ([System.Net.WebRequestMethods+Ftp]::UploadFile) -Body ([IO.File]::ReadAllBytes($file.FullName)) | Out-Null
+        Invoke-FtpsUpload -Uri $fileUri -SourceFile $file.FullName
     }
     $deploymentSucceeded = $true
 }
 finally {
-    if ($offlineUploaded -and $deploymentSucceeded) {
-        try {
-            Invoke-FtpRequest -Uri $offlineUri -Method ([System.Net.WebRequestMethods+Ftp]::DeleteFile) | Out-Null
+    try {
+        if ($offlineUploaded -and $deploymentSucceeded) {
+            try {
+                Remove-FtpsFile -Uri $offlineUri
+            }
+            catch {
+                throw "Deployment completed but app_offline.htm could not be removed: $($_.Exception.Message)"
+            }
         }
-        catch {
-            throw "Deployment completed but app_offline.htm could not be removed: $($_.Exception.Message)"
+        elseif ($offlineUploaded) {
+            Write-Warning 'Deployment failed after app_offline.htm was uploaded; it was left in place for recovery.'
         }
     }
-    elseif ($offlineUploaded) {
-        Write-Warning 'Deployment failed after app_offline.htm was uploaded; it was left in place for recovery.'
+    finally {
+        Remove-Item -LiteralPath $offlineLocalPath -Force -ErrorAction SilentlyContinue
     }
 }
 
