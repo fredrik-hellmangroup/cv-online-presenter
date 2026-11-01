@@ -444,11 +444,23 @@ try {
             $resolvedSourcePath,
             $sourceOptions
         )
-        $result = $source.SyncTo(
-            $destinationProviderOptions,
-            $destinationOptions,
-            $syncOptions
-        )
+        $result = $null
+        try {
+            $result = $source.SyncTo(
+                $destinationProviderOptions,
+                $destinationOptions,
+                $syncOptions
+            )
+        }
+        catch {
+            # Web Deploy hides the real remote cause in nested exceptions; surface it for diagnosis.
+            $nested = $_.Exception
+            while ($null -ne $nested) {
+                Write-Output ("MSDeploy error detail: [{0}] {1}" -f $nested.GetType().Name, $nested.Message)
+                $nested = $nested.InnerException
+            }
+            throw
+        }
         if ($result.Errors -gt 0) {
             throw "MSDeploy reported $($result.Errors) synchronization error(s)."
         }
