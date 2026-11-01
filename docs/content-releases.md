@@ -15,7 +15,7 @@ The startup log states which source was used.
 ## Release layout and activation
 
 ```text
-<ReleasesRoot>/            outside the IIS app folder
+<ReleasesRoot>/            e.g. <site root>/App_Data/content-releases (skipped by the app deploy)
   active-release.txt       single line: the active release id
   2026-11-01-ab12cd3/
     site.json
@@ -33,7 +33,7 @@ Invalid candidates leave the current snapshot and pointer unchanged. Because the
 
 ## Operational requirements
 
-- `ReleasesRoot` must be outside the IIS application folder. The app deploy removes extra files there.
+- `ReleasesRoot` must not be wiped by the app deploy. On the shared Beebyte host, Web Deploy can only reach the site root, so use `<site root>/App_Data/content-releases` (Web Deploy path `<MSDEPLOY_CONTENT_PATH>/App_Data/content-releases`). IIS never serves `App_Data` over HTTP, and the app deploy explicitly skips that folder (`deploy-beebyte-iis.ps1`). Any other location inside the app folder is deleted on the next app deploy.
 - The app pool identity needs modify rights on `ReleasesRoot` to write `active-release.txt`.
 - Set the two environment variables at IIS or host level, not only in `web.config`, because publishing overwrites it.
 - Keep the token secret and restrict filesystem access to the releases folder.
