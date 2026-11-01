@@ -32,14 +32,49 @@ Run accessibility and responsive checks with `npm ci --prefix tools/a11y` follow
 
 See [docs/architecture.md](docs/architecture.md) for project responsibilities and the allowed dependency direction. Architecture decisions available to this baseline are recorded in [docs/adr](docs/adr/README.md).
 
-## Content, deployment, and licensing
+## How content reaches the website
 
-Content schemas and templates live in the content repository, with its own validation workflow. Updating content means merging a content change, then updating this repository's submodule pointer in a separate app PR. The submodule commit records the exact content revision used by an app build. Deployment requires approved environment configuration; no domain, credentials, or production endpoint is included here. Both repositories use the MIT license.
+```mermaid
+flowchart TD
+    subgraph CONTENT["Content repository"]
+        C1["Edit master CV"] --> C2["PR: validate and scan"]
+        C2 --> C3["Merge to main"]
+        C3 --> C4["Bot opens generated-content PR"]
+        C4 --> C5["Review generated pages"]
+        C5 --> C6["Merge"]
+        C6 --> C7["Handoff: dispatch to app"]
+    end
+    subgraph APP["App repository"]
+        A1["Verify event (read-only)"] --> A2["Bot opens app PR: content pointer only"]
+        A2 --> A3["Quality gates and human approval"]
+        A3 --> A4["Merge to main"]
+        A4 --> A5["Tag vX.Y.Z"]
+        A5 --> A6["Release workflow: build and GitHub Release"]
+        A6 --> A7["MSDeploy to IIS: health and metadata check"]
+        A7 --> A8(["Live website"])
+    end
+    C7 --> A1
+```
 
-Version tags create an IIS-ready package with app/content revisions and a health endpoint. See [docs/iis-release.md](docs/iis-release.md) for staging setup and the deployment gate.
+- Edit content in the content repository only. Generated pages are never edited by hand.
+- The app pins one content commit. An app PR moves that pointer, and a person reviews and merges it.
+- Nothing is released or deployed automatically. A release is a manual `vMAJOR.MINOR.PATCH` tag on `main`.
 
-Owner-provided release decisions and current safe defaults are tracked in [docs/decision-register.md](docs/decision-register.md).
+## Documentation
 
-## Generated-content reconciliation
+| Read | To learn |
+| --- | --- |
+| [repositories.md](docs/repositories.md) | How the two repositories connect, and the one-time setup |
+| [iis-release.md](docs/iis-release.md) | How a release reaches the IIS site |
+| [rollback-runbook.md](docs/rollback-runbook.md) | How to roll back to an earlier release |
+| [quality-gates.md](docs/quality-gates.md) | Which checks run before merge and release |
+| [content.md](docs/content.md) | Markdown format for content pages |
+| [cv-structure.md](docs/cv-structure.md) | How the CV page is structured |
+| [content-releases.md](docs/content-releases.md) | Runtime content snapshots and activation |
+| [contact-form.md](docs/contact-form.md) | Contact form setup and privacy |
+| [accessibility.md](docs/accessibility.md) | Accessibility and responsive checks |
+| [architecture.md](docs/architecture.md) | Module layout and dependency rules |
+| [decision-register.md](docs/decision-register.md) | Open owner decisions |
+| [adr](docs/adr/README.md) | Architecture decision records |
 
-See [docs/repositories.md](docs/repositories.md) for the handoff contract. Setup is mandatory: create the `generated-content-reconciler` GitHub Environment, restrict deployments to protected `main`, and store `APP_PR_APP_ID` and `APP_PR_APP_PRIVATE_KEY` only in that Environment. Protect `main` with strict up-to-date required checks and human review. Reconciliation first verifies the event and referenced candidate with read-only `GITHUB_TOKEN`; only then does the main-gated Environment writer mint its App token, reverify the candidate, select the newest eligible PR, and proceed toward writes. For manual recovery, run **Reconcile generated content PR** from **Actions**, select `main` under **Use workflow from**, and provide the source `pr_number` as a wake-up; set `reopen_closed` and the matching `app_pr_number` only to reopen that exact closed app PR, and `mark_ready` only when explicitly intended.
+Both repositories are MIT licensed.

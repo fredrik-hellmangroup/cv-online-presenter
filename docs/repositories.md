@@ -5,24 +5,55 @@
 | [`cv-online-presenter`](https://github.com/fredrik-hellmangroup/cv-online-presenter) | .NET application, TypeScript client, web publishing and deployment | MIT | `Quality gates` workflow |
 | [`cv-online-presenter-content`](https://github.com/fredrik-hellmangroup/cv-online-presenter-content) | Markdown pages, locale configuration, content schema and synthetic draft example | MIT | `Content validation` workflow |
 
-The app pins content as a Git submodule. Its gitlink stores the exact content commit used for each app revision; changing content creates a content PR and then an app PR that updates the pointer. `npm run build:metadata` writes both commits and the build ID to `build-metadata.json`, which is included in the published web assets. `git clone --recurse-submodules` reproduces that pair. Neither CI workflow depends on the other repository's workflow result.
+The app pins the content repository as a submodule. The gitlink stores the exact content commit for each app revision, and `build-metadata.json` records both commit IDs. `git clone --recurse-submodules` reproduces that pair. The two CI workflows are independent.
 
-The content repository owns contact metadata and locale configuration in its root `content/site.json` (the submodule path from this app's root is `content/content/site.json`). Its configurable canonical `siteUrl` defaults to `https://hellmangroup.se`. The example profile remains draft-only and explicitly synthetic.
+Contact metadata and locale settings live in the content repository's `content/site.json` (from the app root: `content/content/site.json`). The example profile is synthetic and draft-only.
 
 ## Generated-content handoff
 
-The content generator creates the seven published page files and `content/generated-provenance.json`; its PR stages only those generated outputs. After a generated-content PR is merged to its `main`, it may send this app repository the `content-generated-pr-merged-v1` `repository_dispatch`. The notification payload includes `content_repository`, `pr_number`, `head_sha`, and `merge_commit_sha`; the app treats those values only as claims. First, a read-only `GITHUB_TOKEN` verifies the event and its referenced candidate: the merged PR, repository, branches, label, SHAs, changed files, merge-commit reachability, and progression from the current app pointer. This verification needs no GitHub App secret. Only after it succeeds does the writer job, gated to protected `main` and its `generated-content-reconciler` Environment, mint the scoped App token. The writer then re-verifies the event, paginates the closed content PR listing to completion (with a fail-closed safety limit), selects and validates the newest eligible generated-content PR by `merged_at`, and compares that candidate with the current app pointer before any branch or PR write. Thus candidate re-verification and latest-PR selection happen after token minting, not before it. The event is only a wake-up; an older surviving dispatch therefore reconciles the newest eligible PR, not the event's SHA. If the listing cannot prove which eligible PR is newest, the workflow fails closed with rerun guidance. Manual recovery uses **Actions → Reconcile generated content PR → Run workflow**; explicitly select the protected app `main` branch in **Use workflow from**, then provide a merged generated-content PR number as the wake-up. `reopen_closed` defaults to `false`.
+```mermaid
+flowchart TD
+    M["Generated-content PR merged in content repo"] --> D["repository_dispatch (wake-up only)"]
+    D --> V["Verify job: read-only token<br/>checks PR, SHAs, label, files"]
+    V -->|fails| X1(["Stop, no writes"])
+    V -->|passes| W["Writer job: main only<br/>mints App token"]
+    W --> S["Select newest eligible content PR<br/>compare with app pointer"]
+    S -->|not newer| X2(["No-op"])
+    S -->|newer| P["Create or update<br/>automation/content-pointer-sha PR"]
+    P --> H["Human review, required checks, merge"]
+```
 
-The app's current generated-content path allowlist is exact: `content/pages/cv.md`, `content/pages/home.md`, `content/pages/services.md`, `content/pages/projects.md`, `content/pages/projects/nordhem.md`, `content/pages/projects/stockholmsmassan.md`, `content/pages/projects/asira.md`, and `content/generated-provenance.json`. It excludes `content/site.json`, the source file `content/sources/master-cv.md`, the legacy manifest `content/manifest.json`, and `PROVENANCE.md`, as none are staged by the generator workflow. Changes to any other path—including synthetic draft examples, schemas, workflows, scripts, dependencies, or repository documentation—are rejected. Keep this allowlist aligned with the content generator's declared output contract.
+- The dispatch is only a wake-up. The newest eligible content PR wins, so an old event never creates an older PR.
+- Verification runs first with a read-only token. The App token is minted only afterwards, and only on protected `main`.
+- The content PR may touch only the generated files: the seven `content/pages/...` pages and `content/generated-provenance.json`. Any other path is rejected.
+- The app PR changes only the `content` pointer.
+- At most one open pointer PR is kept. Stale and superseded PRs are closed.
+- A closed, unmerged PR stays closed. Reopen it only with a manual run that sets `reopen_closed=true` and the exact `app_pr_number`.
+- Nothing merges, releases, or deploys automatically.
 
-The app workflow uses a candidate-specific bot-owned branch, `automation/content-pointer-<full-content-merge-sha>`, so each verified content commit has a deterministic app PR identity. Before creating or reopening a PR, it enumerates all open candidate-pointer PRs (including the earlier `automation/content-pointer-<sha>` and `automation/content-update-<sha>` branch forms, plus the former stable `automation/content-pointer` and `automation/content-update` branches). For every branch it validates the exact `content` gitlink and mode, checks that the PR changes no other path, and proves content ancestry against app `main` and the dispatched candidate. Invalid or divergent refs fail closed. It closes stable legacy branches and pointers equal to or older than app `main` and superseded open candidates, preserving the newest valid candidate—including a newer legacy candidate—so a delayed dispatch cannot create an older PR. A repeated dispatch for an already-open candidate is also a no-op. At most one open content-pointer app PR is retained.
+## Permissions
 
-A closed, unmerged PR for a candidate SHA remains closed by default, and reconciliation fails with that PR's URL. Reopening is allowed only from a manual **workflow_dispatch** run with `reopen_closed=true` and `app_pr_number` set to the exact closed app PR number for that candidate. Reopened drafts remain drafts unless the same run explicitly sets `mark_ready=true`; when requested, the workflow verifies the PR is ready. `mark_ready` defaults to `false`. There are no PR body markers, labels, or other user-editable metadata that authorize reopening. A later distinct content SHA receives its own branch and PR and never reopens an older candidate's PR. Every newly created or explicitly reopened PR is based on the latest app `main` and is asserted to differ from it at exactly one path: `content`, mode `160000`, pointing to the exact verified candidate SHA. Newly created PRs are created ready. The workflow rechecks app `main` immediately before pushing and after pushing/creating the PR; a stale or divergent candidate is not advanced or merged.
+| Token | Scope | Used by |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | Read contents and pull requests | Verify job |
+| GitHub App token | Contents and pull requests read/write | Writer job, `generated-content-reconciler` environment (main only) |
 
-An open legacy `automation/content-update-<sha>` PR participates in newest-candidate ordering and is preserved when it points to the newest valid forward content commit; it is closed only when stale or superseded. The bare legacy `automation/content-update` and `automation/content-pointer` branches are explicitly discovered and closed. A closed, unmerged legacy candidate PR is not reopened because its head branch is not the canonical candidate-specific `automation/content-pointer-<sha>` ref; resolve that legacy PR manually before retrying that same candidate.
+- Store `APP_PR_APP_ID` and `APP_PR_APP_PRIVATE_KEY` only as secrets in the `generated-content-reconciler` environment. Do not create repository-level secrets with those names.
+- Allow only protected `main` as the deployment branch for that environment.
+- Protect app `main` with strict up-to-date checks, required checks, and human approval. The App gets no bypass or force-push rights on `main`.
 
-The app workflow uses an installed GitHub App configured only for this app repository, with **Contents: read/write** and **Pull requests: read/write**. Store `APP_PR_APP_ID` and `APP_PR_APP_PRIVATE_KEY` only as secrets in the GitHub Environment named `generated-content-reconciler`; do not create or use repository-level secrets with these names. Configure that Environment's deployment branches to allow only the protected `main` branch, and retain required branch protection on `main`. The writer job is explicitly guarded by `github.ref == 'refs/heads/main'`, so a manual run on another ref cannot mint an App installation token. `GITHUB_TOKEN` retains read-only contents and pull-request permissions; only the App installation token receives write permissions. Reconciliation runs in this order: the `GITHUB_TOKEN` verification job checks the event and referenced candidate without App credentials; after it succeeds, the main-only Environment writer mints the scoped App token; then the writer re-verifies the event, discovers/selects the newest eligible content PR, and compares the candidate with the app pointer before any branch or PR write. Candidate re-verification and latest-PR selection are not pre-token checks. The workflow never changes application code, merges the app PR, publishes a release, or deploys.
+## Manual recovery
 
-Require strict up-to-date branches in app `main` protection: an app PR must be current with `main` before it can merge. Configure required app checks and human approval as usual, including dismissal of stale approvals or approval of the latest push. Restrict candidate branch updates to the reconciler App if repository rules require it; do not grant the App bypass or force-push rights on `main` or broad `automation/*` patterns. Candidate branch pushes use a full-SHA-specific ref and a lease when replacing an existing branch.
+1. Go to **Actions → Reconcile generated content PR → Run workflow**.
+2. Set **Use workflow from** to `main`.
+3. Enter the merged content PR number as `pr_number`.
+4. Set `reopen_closed` and `app_pr_number` only to reopen one exact closed app PR. Set `mark_ready` only if that is intended.
 
-Review the content PR and app PR independently. The app PR must pass the normal required app checks and receive human approval before merge; strict up-to-date branch protection remains the final merge guard, and the handoff does not bypass release gates. A closed unmerged candidate PR blocks the same candidate until a manual run names that exact app PR number; a distinct forward content SHA uses a separate PR. The automation has no auto-merge, release, or deployment behavior.
+## Troubleshooting
+
+| Symptom | Likely cause | Action |
+| --- | --- | --- |
+| Verify job fails | Event does not match a merged, labeled content PR | Check the PR, label, and SHAs, then rerun |
+| Writer job skipped | Run was not started from `main` | Rerun from `main` |
+| Run fails with a closed PR URL | The candidate's app PR was closed unmerged | Reopen it manually, or resolve it by hand |
+| Old `content-update-*` PR blocks | Legacy branch naming | Resolve the legacy PR before retrying that candidate |
