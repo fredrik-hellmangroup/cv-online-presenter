@@ -24,3 +24,15 @@ The hosted Windows runner uses `curl` to upload the package over explicit FTPS w
 The package targets .NET 10. Beebyte must have a compatible .NET 10 Hosting Bundle installed; it supplies the ASP.NET Core Module and runtime required by IIS. See Microsoft's [IIS publishing guide](https://learn.microsoft.com/en-us/aspnet/core/tutorials/publish-to-iis?view=aspnetcore-10.0).
 
 Protect release tags and confirm the Beebyte FTP hostname, FTPS access, content path, credentials, HTTPS URL, and .NET 10 runtime before pushing a release tag.
+
+## Manual MSDeploy experiment
+
+The tag-driven FTPS release remains the normal production path. A separate **MSDeploy experiment** workflow can be started manually from `main`; it does not create a GitHub Release and never falls back to FTPS automatically. The workflow requires the `confirm_production` input, uses a dedicated `production-msdeploy` Environment restricted to `main`, and shares the `production-deployment` concurrency group with FTPS so the transports cannot run at the same time.
+
+Copy `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_PASSWORD`, and `DEPLOY_HEALTH_URL` from the FTPS production configuration into `production-msdeploy`. Configure these additional **Environment variables** there:
+
+- `MSDEPLOY_SERVER_URL`: HTTPS WMSvc endpoint or hostname. Port 8172 is used when no port is specified.
+- `MSDEPLOY_SITE_NAME`: IIS site name used in the `msdeploy.axd` query.
+- `MSDEPLOY_CERTIFICATE_SHA256`: SHA-256 fingerprint for the exact WMSvc certificate.
+
+The hosted runner verifies the remote certificate fingerprint before credentials are used, maps the certificate's internal DNS name to the verified endpoint address, and temporarily trusts only that pinned certificate in the runner's machine root store. The deployment uses the `Microsoft.Web.Deployment` managed API so the password is not placed in process arguments. MSDeploy then performs normal TLS validation; `-allowUntrusted` is not used. Destination-only files are preserved with `DoNotDelete`, and `.well-known` is explicitly skipped. Temporary trust and hosts-file changes are removed after the attempt. This is an experimental path until a successful run, health check, and deployed build metadata have been verified. Keep FTPS available for recovery.
