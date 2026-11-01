@@ -22,9 +22,9 @@ Påhittad senior konsult med över 10 års erfarenhet av backendutveckling, lös
 - CI/CD och plattformsarbete
 
 **Nyckelteknik**
-- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server
-- Integration: REST, RabbitMQ, gRPC
-- Moln och DevOps: GitHub Actions, Docker, Bicep
+- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server, Entity Framework
+- Integration: REST, RabbitMQ, gRPC, OpenAPI
+- Moln och DevOps: GitHub Actions, Docker, Bicep, Azure
 
 ## Branscherfarenhet
 Offentlig sektor, logistik, finans
@@ -66,3 +66,39 @@ Syntetiskt resultat.
 
 #### Nyckelord
 REST, gRPC, Docker, Bicep
+
+### Demologistiken
+**Period:** 2021 - 2023\
+**Roll:** Lösningsarkitekt (demo)
+
+Påhittat uppdrag inom logistik.
+
+#### Resultat
+Syntetiskt resultat.
+
+#### Nyckelord
+.NET, Azure, RabbitMQ, SQL Server
+
+### Demobanken
+**Period:** 2014 - 2016\
+**Roll:** Backendutvecklare (demo)
+
+Påhittat uppdrag inom finans.
+
+#### Resultat
+Syntetiskt resultat.
+
+#### Nyckelord
+C#, SQL Server, REST, GitHub Actions
+
+### Demokommunen
+**Period:** 2012 - 2014\
+**Roll:** Integrationsutvecklare (demo)
+
+Påhittat uppdrag inom offentlig sektor.
+
+#### Resultat
+Syntetiskt resultat.
+
+#### Nyckelord
+.NET, REST, Docker, Bicep

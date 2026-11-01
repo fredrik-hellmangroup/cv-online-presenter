@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same PR supersedes the older run; runs on main always complete.
+concurrency:
+  group: quality-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-security:
     runs-on: ubuntu-24.04
@@ -43,6 +48,8 @@ jobs:
       - run: dotnet list CvOnlinePresenter.sln package --vulnerable --include-transitive
 
   browser-quality:
+    # The three-browser matrix already ran on the PR. After merge, main only re-runs the fast build/security gate.
+    if: github.event_name == 'pull_request'
     needs: build-and-security
     timeout-minutes: 20
     runs-on: ${{ matrix.runner }}
