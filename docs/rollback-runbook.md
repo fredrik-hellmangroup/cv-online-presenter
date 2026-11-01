@@ -6,7 +6,7 @@ The Beebyte deployment synchronizes a versioned GitHub Release package to the re
 
 1. Download the previous `cv-online-presenter-<tag>.zip` from GitHub Releases.
 2. Extract it to a clean local folder.
-3. Use an authorized Windows machine with PowerShell and network access to Beebyte explicit FTPS.
+3. Use an authorized Windows machine with PowerShell, `curl`, and network access to Beebyte explicit FTPS.
 4. Run `scripts/deploy-beebyte-ftp.ps1` with the same Beebyte FTP target values configured in the `production` GitHub Environment and the extracted folder as `SourcePath`.
 5. Run `scripts/health-check.ps1` against the configured HTTPS `/health` URL.
 6. Verify `build-metadata.json` reports the expected app/content revision pair.
