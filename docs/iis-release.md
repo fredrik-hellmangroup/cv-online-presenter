@@ -58,3 +58,9 @@ Safety rules:
 4. The workflow checks the release asset's GitHub SHA-256 digest, then runs the same deploy and checks as a release.
 
 Leave `rollback_release_tag` empty only for an intentional redeploy of `main`. FTPS is a separate break-glass option, used only if WMSvc itself is unavailable.
+
+## Production deployment verification (2026-11-02)
+
+Release `v1.0.10` from app commit `fb858d63b25e98058b3bd538b11d755c41951e96` passed full deployment and health/metadata verification in run `41362144486`; production `/health` returned HTTP 200. After that deploy, authenticated preview and activation run `41362455305` proved the `App_Data/content-releases` root and token remained usable. Immutable-package redeploy run `41362579683` also passed. Follow-up run `41362687186` previewed 0 added, 0 removed, and 0 changed content sections and reactivated `20261101-210215-1a6df58`. This verifies content persistence across an app redeploy. A deliberate IIS app-pool restart has not been tested; redeploy evidence is not restart evidence.
+
+For a token-provisioning incident, follow the [content provisioning incident runbook](content-releases.md#provisioning-incident-runbook). Do not tag an app release based only on app health: require a successful token-only synchronization and, after deployment, a successful authenticated content preview.
