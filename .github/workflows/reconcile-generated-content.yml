@@ -1,0 +1,592 @@
+name: Reconcile generated content PR
+
+on:
+  repository_dispatch:
+    types: [content-generated-pr-merged-v1]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Merged generated-content PR number in cv-online-presenter-content
+        required: true
+        type: string
+      reopen_closed:
+        description: Explicitly reopen the closed app PR for this exact content SHA
+        required: false
+        default: false
+        type: boolean
+      mark_ready:
+        description: Mark a reopened draft app PR ready (only applies with reopen_closed)
+        required: false
+        default: false
+        type: boolean
+      app_pr_number:
+        description: Closed app PR number (required only when reopen_closed is true)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: generated-content-app-pr
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify merged content PR
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      wake_pr_number: ${{ steps.verify.outputs.pr_number }}
+      wake_merge_sha: ${{ steps.verify.outputs.merge_sha }}
+      wake_no_change: ${{ steps.verify.outputs.no_change }}
+      reopen_closed: ${{ steps.verify.outputs.reopen_closed }}
+      reopen_pr_number: ${{ steps.verify.outputs.reopen_pr_number }}
+      mark_ready: ${{ steps.verify.outputs.mark_ready }}
+      wake_source_pr_url: ${{ steps.verify.outputs.source_pr_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+          submodules: false
+      - name: Verify source PR and gitlink progression without secrets
+        id: verify
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_LATEST: 'false'
+        run: node .github/scripts/verify-generated-content-dispatch.mjs
+
+  reconcile:
+    name: Create or reconcile app PR
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      candidate_pr_number: ${{ steps.reverify.outputs.candidate_pr_number }}
+      candidate_head_sha: ${{ steps.reverify.outputs.candidate_head_sha }}
+      candidate_merge_sha: ${{ steps.reverify.outputs.candidate_merge_sha }}
+      candidate_pr_url: ${{ steps.reverify.outputs.candidate_pr_url }}
+      candidate_no_change: ${{ steps.reverify.outputs.no_change }}
+    environment:
+      name: generated-content-reconciler
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+      - name: Mint least-privilege app installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.APP_PR_APP_ID }}
+          private-key: ${{ secrets.APP_PR_APP_PRIVATE_KEY }}
+          owner: fredrik-hellmangroup
+          repositories: cv-online-presenter
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Reverify authoritative source with scoped App token
+        id: reverify
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERIFY_LATEST: 'true'
+        run: node .github/scripts/verify-generated-content-dispatch.mjs
+      - name: Reconcile candidate-specific content-pointer PR
+        id: prepare
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          CANDIDATE_SHA: ${{ steps.reverify.outputs.candidate_merge_sha }}
+          SOURCE_PR: ${{ steps.reverify.outputs.candidate_pr_number }}
+          REOPEN_CLOSED: ${{ steps.reverify.outputs.reopen_closed }}
+          REOPEN_PR_NUMBER: ${{ steps.reverify.outputs.reopen_pr_number }}
+          MARK_READY: ${{ steps.reverify.outputs.mark_ready }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="automation/content-pointer-${CANDIDATE_SHA}"
+          content_relation() {
+            local current_sha="$1"
+            local new_sha="$2"
+            if ! [[ "$current_sha" =~ ^[0-9a-f]{40}$ ]] ||
+              ! [[ "$new_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Content refs must be full lowercase 40-character SHAs."
+              return 1
+            fi
+            if [ "$current_sha" = "$new_sha" ]; then
+              printf 'identical'
+            elif git -C content merge-base --is-ancestor "$current_sha" "$new_sha"; then
+              printf 'forward'
+            elif git -C content merge-base --is-ancestor "$new_sha" "$current_sha"; then
+              printf 'older'
+            else
+              echo "::error::Content refs ${current_sha} and ${new_sha} are divergent."
+              return 1
+            fi
+          }
+
+          fetch_main() {
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            latest_main="$(git rev-parse refs/remotes/origin/main)"
+            local entry mode sha
+            entry="$(git ls-tree refs/remotes/origin/main content)"
+            read -r mode _ sha _ <<< "$entry"
+            if [ "$mode" != "160000" ] || ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::App main does not contain a valid content submodule gitlink."
+              return 1
+            fi
+            latest_content_sha="$sha"
+            git -C content fetch --no-tags origin "$latest_content_sha"
+          }
+
+          validate_tree_diff() {
+            local ref="$1"
+            local relation="$2"
+            local merge_base paths raw
+            merge_base="$(git merge-base refs/remotes/origin/main "$ref")"
+            paths="$(git diff --name-only "$merge_base" "$ref" --no-renames)"
+            if [ "$relation" = "forward" ] && [ "$paths" != "content" ]; then
+              echo "::error::Open pointer branch ${ref} must change exactly the content gitlink; found: ${paths:-<no paths>}."
+              return 1
+            fi
+            if [ "$relation" != "forward" ] && [ -n "$paths" ] && [ "$paths" != "content" ]; then
+              echo "::error::Stale pointer branch ${ref} contains unexpected paths: ${paths}."
+              return 1
+            fi
+            if [ "$paths" = "content" ]; then
+              raw="$(git diff --raw "$merge_base" "$ref" --no-renames)"
+              if ! printf '%s\n' "$raw" | grep -Eq '^:160000 160000 [0-9a-f]{40} [0-9a-f]{40} M[[:space:]]+content$'; then
+                echo "::error::Pointer branch ${ref} does not change content as a mode-160000 gitlink."
+                return 1
+              fi
+            fi
+          }
+
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git submodule update --init content
+          if ! [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Candidate content ref must be a full lowercase 40-character SHA."
+            exit 1
+          fi
+          git -C content fetch --no-tags origin "$CANDIDATE_SHA"
+          git -C content cat-file -e "${CANDIDATE_SHA}^{commit}"
+          fetch_main
+          candidate_relation_to_main="$(content_relation "$latest_content_sha" "$CANDIDATE_SHA")"
+
+          open_all="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 \
+            --json number,url,headRefName,headRepository,createdAt,baseRefName)"
+          if [ "$(printf '%s' "$open_all" | jq 'length')" -ge 1000 ]; then
+            echo "::error::Open PR listing reached its 1,000-item safety limit."
+            exit 1
+          fi
+          open_prs="$(printf '%s' "$open_all" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { discoverContentPointerPullRequests } from "./.github/scripts/content-pointer-lifecycle.mjs";
+            process.stdout.write(JSON.stringify(discoverContentPointerPullRequests(JSON.parse(readFileSync(0, "utf8")))));
+          ')"
+
+          numbers=()
+          shas=()
+          main_relations=()
+          candidate_relations=()
+          diffs=()
+          created=()
+          open_count="$(printf '%s' "$open_prs" | jq 'length')"
+          for ((i=0; i<open_count; i++)); do
+            number="$(printf '%s' "$open_prs" | jq -r ".[$i].number")"
+            url="$(printf '%s' "$open_prs" | jq -r ".[$i].url")"
+            head_repo="$(printf '%s' "$open_prs" | jq -r ".[$i].headRepository.nameWithOwner // \"\"")"
+            head_ref="$(printf '%s' "$open_prs" | jq -r ".[$i].headRefName")"
+            base_ref="$(printf '%s' "$open_prs" | jq -r ".[$i].baseRefName")"
+            created_at="$(printf '%s' "$open_prs" | jq -r ".[$i].createdAt")"
+            if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+              echo "::error::Open content-pointer PR ${url} comes from ${head_repo:-an unknown repository}; refusing to ignore it."
+              exit 1
+            fi
+            if [ "$base_ref" != "main" ]; then
+              echo "::error::Open content-pointer PR ${url} targets ${base_ref}, not app main; refusing to ignore or alter it."
+              exit 1
+            fi
+            if ! git check-ref-format --branch "$head_ref" >/dev/null; then
+              echo "::error::Open pointer PR ${url} has an invalid legacy/candidate branch name: ${head_ref}."
+              exit 1
+            fi
+            ref="refs/remotes/origin/content-pointer-pr-${number}"
+            git fetch --no-tags origin "+refs/heads/${head_ref}:${ref}"
+            entry="$(git ls-tree "$ref" content)"
+            read -r mode object_type pointer_sha path <<< "$entry"
+            if [ "$mode" != "160000" ] || [ "$object_type" != "commit" ] ||
+              [ "$path" != "content" ] || ! [[ "$pointer_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Open pointer PR ${url} has an invalid content gitlink."
+              exit 1
+            fi
+            git -C content fetch --no-tags origin "$pointer_sha"
+            main_relation="$(content_relation "$latest_content_sha" "$pointer_sha")"
+            candidate_relation="$(content_relation "$CANDIDATE_SHA" "$pointer_sha")"
+            validate_tree_diff "$ref" "$main_relation"
+            numbers+=("$number")
+            shas+=("$pointer_sha")
+            main_relations+=("$main_relation")
+            candidate_relations+=("$candidate_relation")
+            diffs+=("$(git diff --name-only "$(git merge-base refs/remotes/origin/main "$ref")" "$ref" --no-renames)")
+            created+=("$created_at")
+          done
+
+          open_plan='[]'
+          for ((i=0; i<open_count; i++)); do
+            peers='{}'
+            for ((j=0; j<open_count; j++)); do
+              if [ "$i" -ne "$j" ]; then
+                peer_relation="$(content_relation "${shas[$j]}" "${shas[$i]}")"
+                peers="$(printf '%s' "$peers" | jq -c --arg key "${numbers[$j]}" --arg value "$peer_relation" '. + {($key): $value}')"
+              fi
+            done
+            pr_json="$(printf '%s' "$open_prs" | jq -c ".[$i]")"
+            open_plan="$(printf '%s' "$open_plan" | jq -c \
+              --argjson pr "$pr_json" --arg sha "${shas[$i]}" --arg mode "160000" \
+              --arg main_relation "${main_relations[$i]}" --arg candidate_relation "${candidate_relations[$i]}" \
+              --arg diff "${diffs[$i]}" --arg created "${created[$i]}" --argjson peers "$peers" \
+              '. + [{number:$pr.number,url:$pr.url,branchName:$pr.headRefName,contentSha:$sha,mode:$mode,
+                relationToMain:$main_relation,relationToCandidate:$candidate_relation,
+                diffPaths:(if $diff == "" then [] else [$diff] end),createdAt:$created,relationToOthers:$peers}]')"
+          done
+
+          legacy_candidate_branch="automation/content-update-${CANDIDATE_SHA}"
+          closed_canonical="$(gh pr list --repo "$GITHUB_REPOSITORY" --state closed \
+            --head "${GITHUB_REPOSITORY_OWNER}:${branch}" --limit 1000 \
+            --json number,url,headRefName,mergedAt,baseRefName)"
+          closed_legacy="$(gh pr list --repo "$GITHUB_REPOSITORY" --state closed \
+            --head "${GITHUB_REPOSITORY_OWNER}:${legacy_candidate_branch}" --limit 1000 \
+            --json number,url,headRefName,mergedAt,baseRefName)"
+          closed_candidates="$(jq -cn --argjson canonical "$closed_canonical" --argjson legacy "$closed_legacy" \
+            --arg branch "$branch" --arg legacy_branch "$legacy_candidate_branch" \
+            '($canonical + $legacy) | map(select(.mergedAt == null and
+              (.headRefName == $branch or .headRefName == $legacy_branch)) |
+              {number,url,branchName:.headRefName,mergedAt,baseRefName})')"
+          if [ "$(printf '%s' "$closed_candidates" | jq '[.[] | select(.baseRefName != "main")] | length')" -gt 0 ]; then
+            closed_url="$(printf '%s' "$closed_candidates" | jq -r '.[0].url')"
+            echo "::error::Closed candidate PR ${closed_url} does not target app main; refusing recovery."
+            exit 1
+          fi
+          if [ "$REOPEN_CLOSED" != "true" ] && [ -n "$REOPEN_PR_NUMBER" ]; then
+            echo "::error::app_pr_number is only valid with reopen_closed=true."
+            exit 1
+          fi
+          if [ "$REOPEN_CLOSED" = "true" ]; then
+            matching_closed="$(printf '%s' "$closed_candidates" | jq --argjson number "$REOPEN_PR_NUMBER" \
+              '[.[] | select(.number == $number)] | length')"
+            if [ "$matching_closed" -ne 1 ]; then
+              echo "::error::App PR #${REOPEN_PR_NUMBER} is not the closed, unmerged PR for ${CANDIDATE_SHA}."
+              exit 1
+            fi
+          fi
+
+          request_json="$(jq -cn --argjson requested "$REOPEN_CLOSED" --argjson number "${REOPEN_PR_NUMBER:-0}" \
+            --argjson markReady "$MARK_READY" \
+            '{requested:$requested,pullRequest:(if $requested then $number else "" end),markReady:$markReady}')"
+          plan_input="$(jq -cn --arg candidate "$CANDIDATE_SHA" \
+            --arg candidateRelationToMain "$candidate_relation_to_main" \
+            --argjson open "$open_plan" --argjson closed "$closed_candidates" --argjson request "$request_json" \
+            '{candidateSha:$candidate,candidateRelationToMain:$candidateRelationToMain,openPullRequests:$open,
+              closedCandidatePullRequests:$closed,reopenRequest:$request}')"
+          plan="$(printf '%s' "$plan_input" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { decideContentPointerLifecycle } from "./.github/scripts/content-pointer-lifecycle.mjs";
+            process.stdout.write(JSON.stringify(decideContentPointerLifecycle(JSON.parse(readFileSync(0, "utf8")))));
+          ')"
+
+          close_numbers="$(printf '%s' "$plan" | jq -r '.closeNumbers[]?')"
+          while IFS= read -r number; do
+            [ -n "$number" ] || continue
+            url="$(printf '%s' "$open_prs" | jq -r --argjson number "$number" '.[] | select(.number == $number) | .url')"
+            sha="$(printf '%s' "$open_plan" | jq -r --argjson number "$number" '.[] | select(.number == $number) | .contentSha')"
+            gh pr close "$number" --repo "$GITHUB_REPOSITORY" \
+              --comment "Closed as stale or superseded: this branch points to content \`${sha}\`. Candidate-specific content-pointer PRs retain only the newest forward content revision."
+            echo "- Closed superseded app PR: ${url} (content ${sha})" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$close_numbers"
+
+          action="$(printf '%s' "$plan" | jq -r '.action')"
+          if [ "$action" = "noop" ]; then
+            preserved="$(printf '%s' "$plan" | jq -r '.preserveNumber')"
+            open_after_close_all="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 \
+              --json number,url,headRefName,headRepository,createdAt,baseRefName)"
+            if [ "$(printf '%s' "$open_after_close_all" | jq 'length')" -ge 1000 ]; then
+              echo "::error::Post-cleanup open PR listing reached its 1,000-item safety limit."
+              exit 1
+            fi
+            open_after_close="$(printf '%s' "$open_after_close_all" | node --input-type=module -e '
+                import { readFileSync } from "node:fs";
+                import { discoverContentPointerPullRequests } from "./.github/scripts/content-pointer-lifecycle.mjs";
+                process.stdout.write(JSON.stringify(discoverContentPointerPullRequests(JSON.parse(readFileSync(0, "utf8")))));
+              ')"
+            remaining_count="$(printf '%s' "$open_after_close" | jq 'length')"
+            if [ "$remaining_count" -gt 1 ] ||
+              { [ -n "$preserved" ] && { [ "$remaining_count" -ne 1 ] ||
+                [ "$(printf '%s' "$open_after_close" | jq -r '.[0].number')" != "$preserved" ] ||
+                [ "$(printf '%s' "$open_after_close" | jq -r '.[0].baseRefName')" != "main" ] ||
+                [ "$(printf '%s' "$open_after_close" | jq -r '.[0].headRepository.nameWithOwner // \"\"')" != "$GITHUB_REPOSITORY" ]; }; } ||
+              { [ -z "$preserved" ] && [ "$remaining_count" -ne 0 ]; }; then
+              echo "::error::More than one open content-pointer app PR remains after stale-PR cleanup."
+              exit 1
+            fi
+            if [ -n "$preserved" ]; then
+              echo "::notice::Preserving newest valid open app PR #${preserved}; no duplicate or older candidate PR will be created."
+              pr_url="$(printf '%s' "$open_prs" | jq -r --argjson number "$preserved" '.[] | select(.number == $number) | .url')"
+              echo "- Preserved app PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::notice::Requested content ${CANDIDATE_SHA} is equal to or older than app main."
+              pr_url=""
+            fi
+            echo "app_pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          fetch_main
+          pre_push_relation="$(content_relation "$latest_content_sha" "$CANDIDATE_SHA")"
+          if [ "$pre_push_relation" != "forward" ]; then
+            echo "::notice::Latest app main already contains an equal or newer content pointer; no app PR is needed."
+            echo "app_pr_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base_sha="$latest_main"
+          build_candidate() {
+            git checkout --force -B "candidate-pointer-work" refs/remotes/origin/main
+            git -C content checkout --detach "$CANDIDATE_SHA"
+            test "$(git -C content rev-parse HEAD)" = "$CANDIDATE_SHA"
+            git add -- content
+            paths="$(git diff --cached --name-only --no-renames)"
+            if [ -n "$paths" ]; then
+              test "$paths" = "content"
+              test "$(git ls-files --stage -- content)" = "160000 ${CANDIDATE_SHA} 0	content"
+              raw="$(git diff --cached --raw --no-renames)"
+              printf '%s\n' "$raw" | grep -Eq '^:160000 160000 [0-9a-f]{40} [0-9a-f]{40} M[[:space:]]+content$'
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git commit -m "Update content pointer to ${CANDIDATE_SHA}"
+            fi
+            paths="$(git diff --name-only refs/remotes/origin/main HEAD --no-renames)"
+            test "$paths" = "content"
+            raw="$(git diff --raw refs/remotes/origin/main HEAD --no-renames)"
+            printf '%s\n' "$raw" | grep -Eq '^:160000 160000 [0-9a-f]{40} [0-9a-f]{40} M[[:space:]]+content$'
+            test "$(git ls-tree HEAD content | awk '{print $1, $3, $4}')" = "160000 ${CANDIDATE_SHA} content"
+            test "$(printf '%s\n' "$raw" | wc -l)" -eq 1
+          }
+          build_candidate
+
+          remote_branch_sha="$(git ls-remote origin "refs/heads/${branch}" | awk '{print $1}')"
+          if [ -n "$remote_branch_sha" ]; then
+            git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/candidate-pointer-existing"
+            existing_entry="$(git ls-tree refs/remotes/origin/candidate-pointer-existing content)"
+            read -r existing_mode existing_type existing_sha existing_path <<< "$existing_entry"
+            if [ "$existing_mode" != "160000" ] || [ "$existing_type" != "commit" ] ||
+              [ "$existing_sha" != "$CANDIDATE_SHA" ] || [ "$existing_path" != "content" ]; then
+              echo "::error::Existing candidate branch ${branch} does not point exactly to ${CANDIDATE_SHA}; refusing to overwrite it."
+              exit 1
+            fi
+            existing_base="$(git merge-base refs/remotes/origin/main refs/remotes/origin/candidate-pointer-existing)"
+            existing_paths="$(git diff --name-only "$existing_base" refs/remotes/origin/candidate-pointer-existing --no-renames)"
+            if [ "$existing_paths" != "content" ]; then
+              echo "::error::Existing candidate branch ${branch} contains unexpected paths."
+              exit 1
+            fi
+          fi
+
+          fetch_main
+          if [ "$latest_main" != "$base_sha" ]; then
+            pre_push_relation="$(content_relation "$latest_content_sha" "$CANDIDATE_SHA")"
+            if [ "$pre_push_relation" != "forward" ]; then
+              echo "::notice::App main advanced to an equal or newer content pointer immediately before push; refusing to create a stale PR."
+              echo "app_pr_url=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            base_sha="$latest_main"
+            build_candidate
+          fi
+
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"
+          if [ -n "$remote_branch_sha" ]; then
+            git -c http.extraheader="$auth_header" push \
+              --force-with-lease="refs/heads/${branch}:${remote_branch_sha}" \
+              origin "HEAD:refs/heads/${branch}"
+          else
+            git -c http.extraheader="$auth_header" push origin "HEAD:refs/heads/${branch}"
+          fi
+
+          git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/content-pointer-pushed"
+          pushed_entry="$(git ls-tree refs/remotes/origin/content-pointer-pushed content)"
+          read -r pushed_mode pushed_type pushed_sha pushed_path <<< "$pushed_entry"
+          if [ "$pushed_mode" != "160000" ] || [ "$pushed_type" != "commit" ] ||
+            [ "$pushed_sha" != "$CANDIDATE_SHA" ] || [ "$pushed_path" != "content" ]; then
+            echo "::error::Pushed candidate branch does not point exactly to the verified content SHA."
+            exit 1
+          fi
+          pushed_base="$(git merge-base refs/remotes/origin/main refs/remotes/origin/content-pointer-pushed)"
+          pushed_paths="$(git diff --name-only "$pushed_base" refs/remotes/origin/content-pointer-pushed --no-renames)"
+          pushed_raw="$(git diff --raw "$pushed_base" refs/remotes/origin/content-pointer-pushed --no-renames)"
+          if [ "$pushed_paths" != "content" ] ||
+            ! printf '%s\n' "$pushed_raw" | grep -Eq '^:160000 160000 [0-9a-f]{40} [0-9a-f]{40} M[[:space:]]+content$' ||
+            [ "$(printf '%s\n' "$pushed_raw" | wc -l)" -ne 1 ]; then
+            echo "::error::Pushed app PR branch does not have the required single-path gitlink diff."
+            exit 1
+          fi
+
+          fetch_main
+          post_push_relation="$(content_relation "$latest_content_sha" "$CANDIDATE_SHA")"
+          if [ "$post_push_relation" != "forward" ]; then
+            echo "::error::App main advanced to an equal or newer candidate after push; candidate branch left for inspection."
+            exit 1
+          fi
+          if [ "$latest_main" != "$base_sha" ]; then
+            echo "::error::App main advanced after push; rerun reconciliation so the candidate branch is based on current main."
+            exit 1
+          fi
+
+          title="Update content from PR #${SOURCE_PR}"
+          body="Reconciles the latest eligible merged generated-content PR (#${SOURCE_PR}) by updating only the \`content\` submodule gitlink to \`${CANDIDATE_SHA}\`. This candidate was selected from the complete merged content-PR listing by \`merged_at\`, independently of the dispatch event. Review the content revision and required app checks before merging. App main branch protection must require the PR branch to be up to date; this workflow does not merge or release."
+          if [ "$action" = "reopen" ]; then
+            pr_number="$(printf '%s' "$plan" | jq -r '.pullRequestNumber')"
+            gh pr reopen "$pr_number" --repo "$GITHUB_REPOSITORY"
+            gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            pr_url="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json url --jq '.url')"
+            is_draft="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+            ready_error=""
+            if [ "$is_draft" = "true" ] && [ "$MARK_READY" = "true" ]; then
+              if ! gh pr ready "$pr_number" --repo "$GITHUB_REPOSITORY"; then
+                ready_error="The \`gh pr ready\` command failed."
+              fi
+            fi
+            if [ "$is_draft" = "true" ] && [ "$MARK_READY" != "true" ]; then
+              echo "::notice::Reopened app PR #${pr_number} remains a draft because mark_ready was not requested."
+              {
+                echo "## Reopened draft app PR preserved"
+                echo
+                echo "- App PR: [#${pr_number}](${pr_url})"
+                echo "- The PR remains a draft. Set \`mark_ready=true\` on a manual reopen run to explicitly mark it ready."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if ! is_draft="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"; then
+              echo "::error::Could not verify whether app PR #${pr_number} is ready."
+              {
+                echo "## App PR readiness verification failed"
+                echo
+                echo "- Could not verify whether [PR #${pr_number}](${pr_url}) is draft or ready."
+                echo "- Action: check GitHub CLI/API access, mark the PR ready if appropriate, then rerun reconciliation."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            if [ "$MARK_READY" = "true" ] && [ "$is_draft" != "false" ]; then
+              echo "::error::App PR #${pr_number} is not confirmed ready. ${ready_error}"
+              {
+                echo "## App PR readiness failed"
+                echo
+                echo "- App PR: [#${pr_number}](${pr_url})"
+                echo "- Draft status after the readiness request: \`${is_draft}\`."
+                echo "- Explicit mark_ready request: \`${MARK_READY}\`."
+                if [ -n "$ready_error" ]; then
+                  echo "- ${ready_error}"
+                fi
+                echo "- Action: verify the workflow token can mark this PR ready, mark it ready manually if appropriate, then rerun reconciliation."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            if [ "$is_draft" = "false" ]; then
+              echo "- Reopened app PR is ready: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --title "$title" --body "$body"
+            pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json number,url,isDraft)"
+            pr_number="$(printf '%s' "$pr_json" | jq -r '.number')"
+            pr_url="$(printf '%s' "$pr_json" | jq -r '.url')"
+            if [ "$(printf '%s' "$pr_json" | jq -r '.isDraft')" != "false" ]; then
+              echo "::error::New generated-content PR ${pr_url} was not created ready."
+              exit 1
+            fi
+          fi
+
+          pr_head="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" \
+            --json headRefName,baseRefName,headRepository,headRefOid)"
+          if [ "$(printf '%s' "$pr_head" | jq -r '.headRefName')" != "$branch" ] ||
+            [ "$(printf '%s' "$pr_head" | jq -r '.baseRefName')" != "main" ] ||
+            [ "$(printf '%s' "$pr_head" | jq -r '.headRepository.nameWithOwner')" != "$GITHUB_REPOSITORY" ] ||
+            [ "$(printf '%s' "$pr_head" | jq -r '.headRefOid')" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::App PR #${pr_number} does not point to the exact pushed candidate branch and commit."
+            exit 1
+          fi
+
+          fetch_main
+          post_create_relation="$(content_relation "$latest_content_sha" "$CANDIDATE_SHA")"
+          if [ "$post_create_relation" != "forward" ]; then
+            gh pr close "$pr_number" --repo "$GITHUB_REPOSITORY" \
+              --comment "Closed as stale because app main now points to content \`${latest_content_sha}\`, equal to or newer than this candidate."
+            echo "::notice::App main advanced to the candidate after PR creation; closed the now-stale PR."
+            echo "app_pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$latest_main" != "$base_sha" ]; then
+            echo "::notice::App main advanced after PR creation; strict up-to-date branch protection will block merge until the PR branch is current."
+          fi
+
+          open_after_all="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 \
+            --json number,url,headRefName,headRepository,createdAt,baseRefName)"
+          if [ "$(printf '%s' "$open_after_all" | jq 'length')" -ge 1000 ]; then
+            echo "::error::Post-reconciliation open PR listing reached its 1,000-item safety limit."
+            exit 1
+          fi
+          open_after="$(printf '%s' "$open_after_all" | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { discoverContentPointerPullRequests } from "./.github/scripts/content-pointer-lifecycle.mjs";
+            process.stdout.write(JSON.stringify(discoverContentPointerPullRequests(JSON.parse(readFileSync(0, "utf8")))));
+          ')"
+          if [ "$(printf '%s' "$open_after" | jq 'length')" -ne 1 ] ||
+            [ "$(printf '%s' "$open_after" | jq -r '.[0].headRefName')" != "$branch" ] ||
+            [ "$(printf '%s' "$open_after" | jq -r '.[0].baseRefName')" != "main" ] ||
+            [ "$(printf '%s' "$open_after" | jq -r '.[0].headRepository.nameWithOwner // \"\"')" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::Expected exactly one open content-pointer app PR after reconciliation."
+            exit 1
+          fi
+          echo "app_pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+          echo "## App content-pointer PR" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "- Content commit: \`${CANDIDATE_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- App PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Candidate branch: \`${branch}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PR diff is asserted to be exactly \`content\`, mode \`160000\`, at the verified candidate SHA." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Strict up-to-date branch protection on app main is required before merge." >> "$GITHUB_STEP_SUMMARY"
+          echo "- No auto-merge, release, or deployment is performed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Report workflow outcome
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          SOURCE_PR: ${{ steps.reverify.outputs.candidate_pr_number }}
+          CONTENT_SHA: ${{ steps.reverify.outputs.candidate_merge_sha }}
+          SOURCE_PR_URL: ${{ steps.reverify.outputs.candidate_pr_url }}
+          APP_PR_URL: ${{ steps.prepare.outputs.app_pr_url }}
+        shell: bash
+        run: |
+          {
+            echo "## Reconciliation outcome"
+            echo
+            echo "- Job status: **${JOB_STATUS}**"
+            echo "- Content PR: [#${SOURCE_PR}](${SOURCE_PR_URL})"
+            echo "- Content commit: \`${CONTENT_SHA}\`"
+            if [ -n "${APP_PR_URL}" ]; then
+              echo "- App PR: ${APP_PR_URL}"
+            fi
+            if [ "${JOB_STATUS}" != "success" ]; then
+              echo "- Action: inspect the failed step logs. Closed unmerged candidate PRs require an explicit manual run with \`reopen_closed=true\` and that exact app PR number."
+            fi
+            echo "- No automatic merge, release, or deployment is performed."
+          } >> "$GITHUB_STEP_SUMMARY"

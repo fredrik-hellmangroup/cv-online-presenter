@@ -39,3 +39,7 @@ Content schemas and templates live in the content repository, with its own valid
 Version tags create an IIS-ready package with app/content revisions and a health endpoint. See [docs/iis-release.md](docs/iis-release.md) for staging setup and the deployment gate.
 
 Owner-provided release decisions and current safe defaults are tracked in [docs/decision-register.md](docs/decision-register.md).
+
+## Generated-content reconciliation
+
+See [docs/repositories.md](docs/repositories.md) for the handoff contract. Setup is mandatory: create the `generated-content-reconciler` GitHub Environment, restrict deployments to protected `main`, and store `APP_PR_APP_ID` and `APP_PR_APP_PRIVATE_KEY` only in that Environment. Protect `main` with strict up-to-date required checks and human review. Reconciliation first verifies the event and referenced candidate with read-only `GITHUB_TOKEN`; only then does the main-gated Environment writer mint its App token, reverify the candidate, select the newest eligible PR, and proceed toward writes. For manual recovery, run **Reconcile generated content PR** from **Actions**, select `main` under **Use workflow from**, and provide the source `pr_number` as a wake-up; set `reopen_closed` and the matching `app_pr_number` only to reopen that exact closed app PR, and `mark_ready` only when explicitly intended.
