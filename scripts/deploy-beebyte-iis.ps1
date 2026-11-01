@@ -17,10 +17,13 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DeployCertificateSha256,
 
-    [Parameter(Mandatory = $true)]
     [string]$OfflinePagePath,
 
     [string]$WebDeployAssemblyPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\Microsoft.Web.Deployment.dll',
+
+    # Content-release mode: SourcePath holds site.json + pages/, DeployContentPath is the
+    # (new) release folder. Sync is additive and never touches the app, web.config or app_offline.
+    [switch]$ContentRelease,
 
     [switch]$WhatIf,
 
@@ -259,9 +262,19 @@ $deploySiteName = $DeploySiteName.Trim()
 $deployUsername = $DeployUsername.Trim()
 $certificateSha256 = $DeployCertificateSha256.Replace(':', '').Replace(' ', '').Trim()
 
-foreach ($requiredFile in @('web.config', 'Portfolio.Web.dll')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath $requiredFile) -PathType Leaf)) {
-        throw "SourcePath is missing required file '$requiredFile'."
+if ($ContentRelease) {
+    if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath 'site.json') -PathType Leaf)) {
+        throw "SourcePath is missing required file 'site.json'."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath 'pages') -PathType Container)) {
+        throw "SourcePath is missing required folder 'pages'."
+    }
+}
+else {
+    foreach ($requiredFile in @('web.config', 'Portfolio.Web.dll')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath $requiredFile) -PathType Leaf)) {
+            throw "SourcePath is missing required file '$requiredFile'."
+        }
     }
 }
 if ([string]::IsNullOrWhiteSpace($deployContentPath)) {
@@ -276,13 +289,17 @@ if ([string]::IsNullOrWhiteSpace($deployUsername)) {
 if ([string]::IsNullOrWhiteSpace($password)) {
     throw 'DEPLOY_PASSWORD is required for MSDeploy.'
 }
-if (-not (Test-Path -LiteralPath $OfflinePagePath -PathType Leaf)) {
-    throw "OfflinePagePath '$OfflinePagePath' must be a file."
-}
-$resolvedOfflinePagePath = (Resolve-Path -LiteralPath $OfflinePagePath).Path
-$offlinePageLength = (Get-Item -LiteralPath $resolvedOfflinePagePath).Length
-if ($offlinePageLength -lt 1 -or $offlinePageLength -gt 1MB) {
-    throw 'OfflinePagePath must contain a non-empty HTML file no larger than 1 MB.'
+$resolvedOfflinePagePath = $null
+if (-not $ContentRelease) {
+    if ([string]::IsNullOrWhiteSpace($OfflinePagePath) -or
+        -not (Test-Path -LiteralPath $OfflinePagePath -PathType Leaf)) {
+        throw "OfflinePagePath '$OfflinePagePath' must be a file."
+    }
+    $resolvedOfflinePagePath = (Resolve-Path -LiteralPath $OfflinePagePath).Path
+    $offlinePageLength = (Get-Item -LiteralPath $resolvedOfflinePagePath).Length
+    if ($offlinePageLength -lt 1 -or $offlinePageLength -gt 1MB) {
+        throw 'OfflinePagePath must contain a non-empty HTML file no larger than 1 MB.'
+    }
 }
 if ($certificateSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
     throw 'MSDEPLOY_CERTIFICATE_SHA256 must contain a SHA-256 certificate fingerprint.'
@@ -360,7 +377,9 @@ try {
         [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath
     )
     $destinationProviderOptions.Path = $deployContentPath
-    $destinationProviderOptions.ProviderSettings['AppOfflineTemplate'].Value = $offlineTemplateRelativePath
+    if (-not $ContentRelease) {
+        $destinationProviderOptions.ProviderSettings['AppOfflineTemplate'].Value = $offlineTemplateRelativePath
+    }
 
     $templateDestinationProviderOptions = [Microsoft.Web.Deployment.DeploymentProviderOptions]::new(
         [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath
@@ -375,13 +394,18 @@ try {
     $syncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
     $syncOptions.DoNotDelete = $false
     $syncOptions.WhatIf = $WhatIf
-    $appOfflineHandlerType = [Microsoft.Web.Deployment.DeploymentManager].Assembly.GetType(
-        'Microsoft.Web.Deployment.AppOfflineRuleHandler',
-        $true
-    )
-    $appOfflineHandler = [Activator]::CreateInstance($appOfflineHandlerType, $true)
-    $appOfflineRule = [Microsoft.Web.Deployment.DeploymentRule]::new('AppOffline', $appOfflineHandler)
-    $syncOptions.Rules.Add($appOfflineRule)
+    if ($ContentRelease) {
+        $syncOptions.DoNotDelete = $true
+    }
+    else {
+        $appOfflineHandlerType = [Microsoft.Web.Deployment.DeploymentManager].Assembly.GetType(
+            'Microsoft.Web.Deployment.AppOfflineRuleHandler',
+            $true
+        )
+        $appOfflineHandler = [Activator]::CreateInstance($appOfflineHandlerType, $true)
+        $appOfflineRule = [Microsoft.Web.Deployment.DeploymentRule]::new('AppOffline', $appOfflineHandler)
+        $syncOptions.Rules.Add($appOfflineRule)
+    }
 
     $templateSyncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
     $templateSyncOptions.DoNotDelete = $true
@@ -391,23 +415,25 @@ try {
     $source = $null
     $destinationOptions.Password = $password
     try {
-        $templateSource = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
-            [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
-            $resolvedOfflinePagePath,
-            $sourceOptions
-        )
-        $templateResult = $templateSource.SyncTo(
-            $templateDestinationProviderOptions,
-            $destinationOptions,
-            $templateSyncOptions
-        )
-        if ($templateResult.Errors -gt 0) {
-            throw "MSDeploy reported $($templateResult.Errors) offline-template synchronization error(s)."
+        if (-not $ContentRelease) {
+            $templateSource = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
+                [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
+                $resolvedOfflinePagePath,
+                $sourceOptions
+            )
+            $templateResult = $templateSource.SyncTo(
+                $templateDestinationProviderOptions,
+                $destinationOptions,
+                $templateSyncOptions
+            )
+            if ($templateResult.Errors -gt 0) {
+                throw "MSDeploy reported $($templateResult.Errors) offline-template synchronization error(s)."
+            }
+            Write-Output (
+                "MSDeploy synchronized the offline template with {0} change(s)." -f
+                $templateResult.TotalChanges
+            )
         }
-        Write-Output (
-            "MSDeploy synchronized the offline template with {0} change(s)." -f
-            $templateResult.TotalChanges
-        )
 
         $source = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
             [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,

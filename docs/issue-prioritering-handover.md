@@ -18,7 +18,7 @@ Genomgången hittade 11 öppna issues: #7, #8, #11 och #25–#32. Issue #11 är 
 | 1 | [#25 – Align server rendering with ADR-003](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/25) | P0 / beslut först | Bestäm och dokumentera om appen ska gå över till Blazor Static SSR enligt ADR-003, eller om en uttrycklig ägargodkänd avstämning ska ändra ADR/PRD. Detta påverkar sidrendering och detaljvyer i #27. |
 | 2 | [#32 – Enforce module boundaries](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/32) | P0 / grund | Ge behållna projekt tydliga ansvar, lägg till automatiska beroenderegler och ersätt/ta bort `Class1`-platshållare. Gör verkliga kontrakt synliga innan fler moduler byggs. |
 | 3 | [#29 – Add application quality gates](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/29) | P0 / grund | Lägg testprojekt och CI-grindar för parser, validering/sanering, routes och kritiska flöden tidigt så kommande vertikala ändringar skyddas. |
-| 4 | [#31 – Publish owner-approved CV content](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/31) | P0 / innehåll | Granska och publicera godkända fakta i content-repot, bevara proveniens, och uppdatera submodulepekaren. Säkerställ att inga extra kontaktuppgifter eller länkar följer med. Kan göras parallellt med steg 2–3. |
+| 4 | [#31 – Publish owner-approved CV content](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/31) | P0 / innehåll | Granska och publicera godkända fakta i det privata content-repot och bevara proveniens; content-deployen aktiverar ny content-release. Säkerställ att inga extra kontaktuppgifter eller länkar följer med. Kan göras parallellt med steg 2–3. |
 | 5 | [#26 – Classified snapshots and runtime activation](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/26) | P0 / innehållsplattform | Implementera deterministisk Markdig AST-klassificering, validerade immutable snapshots, atomär aktivering samt samstämmig identitet/SEO. Detta är bas för publicerat innehåll och discovery. |
 | 6 | [#27 – Full CV view and discovery](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/27) | P0 / produkt | Bygg komplett dokumentvy, sökning, Command Palette, stabila detaljrutter och deep links. Indexera endast publicerat och validerat innehåll. Bygger på #25 och innehållsmodellen i #26; använd godkänt innehåll från #31. |
 | 7 | [#28 – Modular theme and easter-egg engines](https://github.com/fredrik-hellmangroup/cv-online-presenter/issues/28) | P1 / upplevelse | Separera motorer med manifest, regler och lager; verifiera kontrast och reduced motion. Kan utvecklas parallellt med #26–#27 när gränserna från #32 finns. |
@@ -43,10 +43,10 @@ Fundamenten #29 och #32, innehållsgranskningen #31 samt renderingbeslutet #25 k
 
 ## Kända beslut och blockerare
 
-- Owner-beslut i #11: app- och content-repon är publika; svenska (`sv-SE`) är enda godkända första locale; befintliga CV-fakta är godkända för publicering. Ytterligare kontaktuppgifter och länkar kräver separat godkännande.
+- Owner-beslut i #11 (reviderat): app-repot är publikt med syntetisk `content/`-mall; content-repot är privat; svenska (`sv-SE`) är enda godkända första locale; befintliga CV-fakta är godkända för publicering. Ytterligare kontaktuppgifter och länkar kräver separat godkännande.
 - Standard canonical URL är `https://hellmangroup.se`. Hostingprovidern ansvarar för IIS/TLS. Analytics och strukturerad data hålls avstängda tills de godkänts; `logo.svg` är fortfarande en releaseförutsättning.
 - #25 behöver uttryckligt beslut om dokumenterad arkitekturkonflikt innan valet implementeras.
-- #31 kräver verifiering av fakta och proveniens samt granskad content-commit innan appens submodulepekare uppdateras.
+- #31 kräver verifiering av fakta och proveniens samt granskad content-commit i det privata repot innan content-release aktiveras.
 - #7 väntar på verifierad Beebyte explicit FTPS-deploy i GitHub Environment `production` (`DEPLOY_SERVER_URL`, `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_HEALTH_URL`), hemligheten `DEPLOY_PASSWORD` och .NET 10 Hosting Bundle.
 - #8 kan inte avslutas med enbart lokalt test; den kräver minst två versionsmärkta releaser och genomförd health check/rollback mot Beebyte.
 

@@ -1,59 +1,57 @@
-# Repository boundaries and version linkage
+# Repository boundaries and content delivery
 
-| Repository | Responsibility | License | Validation |
+| Repository | Visibility | Responsibility | Validation |
 | --- | --- | --- | --- |
-| [`cv-online-presenter`](https://github.com/fredrik-hellmangroup/cv-online-presenter) | .NET application, TypeScript client, web publishing and deployment | MIT | `Quality gates` workflow |
-| [`cv-online-presenter-content`](https://github.com/fredrik-hellmangroup/cv-online-presenter-content) | Markdown pages, locale configuration, content schema and synthetic draft example | MIT | `Content validation` workflow |
+| [`cv-online-presenter`](https://github.com/fredrik-hellmangroup/cv-online-presenter) | Public, MIT | .NET application, TypeScript client, deployment, and the [`content/`](../content/README.md) template with synthetic demo data | `Quality gates` workflow |
+| [`cv-online-presenter-content`](https://github.com/fredrik-hellmangroup/cv-online-presenter-content) | **Private** | The real CV: `site.json`, `pages/`, source documents, provenance | `Content validation` and `Deploy content` workflows |
 
-The app pins the content repository as a submodule. The gitlink stores the exact content commit for each app revision, and `build-metadata.json` records both commit IDs. `git clone --recurse-submodules` reproduces that pair. The two CI workflows are independent.
+The two repositories are not linked by a submodule or a pinned commit. The app builds and tests against its own `content/` template. The real content reaches the live site as a **content release**: a folder `<ReleasesRoot>/<releaseId>/{site.json,pages/}` that the running app activates without an app redeploy. See [content-releases.md](content-releases.md).
 
-Contact metadata and locale settings live in the content repository's `content/site.json` (from the app root: `content/content/site.json`). The example profile is synthetic and draft-only.
+Contact metadata and locale settings live in `site.json` of whichever content is active (`content/site.json` in the template). The template is synthetic and uses `demo@example.com`.
 
-## Generated-content handoff
+## What goes where
+
+| Content | Public app repo | Private content repo |
+| --- | --- | --- |
+| Folder structure, schema, validator | Yes (`content/`, `tools/Portfolio.Content.Validator`) | Copied layout |
+| Demo persona "Alex Exempel" | Yes | No |
+| Real name, contact address, CV, projects | Never | Yes |
+| Source documents (master CV, PRD) | Never (ignored via `.gitignore`) | Yes |
+
+## Content deploy (private repo)
 
 ```mermaid
 flowchart TD
-    M["Generated-content PR merged in content repo"] --> D["repository_dispatch (wake-up only)"]
-    D --> V["Verify job: read-only token<br/>checks PR, SHAs, label, files"]
-    V -->|fails| X1(["Stop, no writes"])
-    V -->|passes| W["Writer job: main only<br/>mints App token"]
-    W --> S["Select newest eligible content PR<br/>compare with app pointer"]
-    S -->|not newer| X2(["No-op"])
-    S -->|newer| P["Create or update<br/>automation/content-pointer-sha PR"]
-    P --> H["Human review, required checks, merge"]
+    M["Push to main in content repo"] --> V["Validate with the app repo's validator"]
+    V --> P["Package site.json + pages/"]
+    P --> W["Web Deploy (additive) to ReleasesRoot/releaseId"]
+    W --> PR["POST /internal/content/preview/releaseId"]
+    PR --> A["POST /internal/content/activate/releaseId"]
+    A --> L(["Live; active-release.txt updated"])
 ```
 
-- The dispatch is only a wake-up. The newest eligible content PR wins, so an old event never creates an older PR.
-- Verification runs first with a read-only token. The App token is minted only afterwards, and only on protected `main`.
-- The content PR may touch only the generated files: the seven `content/pages/...` pages and `content/generated-provenance.json`. Any other path is rejected.
-- The app PR changes only the `content` pointer.
-- At most one open pointer PR is kept. Stale and superseded PRs are closed.
-- A closed, unmerged PR stays closed. Reopen it only with a manual run that sets `reopen_closed=true` and the exact `app_pr_number`.
-- Nothing merges, releases, or deploys automatically.
+`releaseId` is `<UTC date>-<short sha>`. The deploy reuses `scripts/deploy-beebyte-iis.ps1 -ContentRelease`, which syncs into a new folder, never deletes, never writes `web.config` and never takes the site offline. The workflow checks out the public app repo at a pinned ref to get the validator and the deploy scripts.
 
-## Permissions
+### One-time setup
 
-| Token | Scope | Used by |
+1. **Server.** Create a releases folder **outside** the app folder (the app deploy deletes extra files in the app folder). Give the app pool identity modify rights on it, because the app writes `active-release.txt`. Set `Content__ReleasesRoot` (absolute path) and `Content__ActivationToken` as IIS or host-level environment variables, not only in `web.config`, since publish overwrites that file.
+2. **Web Deploy user.** The deployment user must be able to write below the releases folder through Web Deploy. Verify this before the first run.
+3. **GitHub environment `production-content`** in the private repo:
+
+| Name | Kind | Purpose |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | Read contents and pull requests | Verify job |
-| GitHub App token | Contents and pull requests read/write | Writer job, `generated-content-reconciler` environment (main only) |
+| `MSDEPLOY_SERVER_URL` | Variable | HTTPS WMSvc endpoint, same as the app deploy |
+| `MSDEPLOY_SITE_NAME` | Variable | IIS site name |
+| `MSDEPLOY_CERTIFICATE_SHA256` | Variable | Pinned WMSvc certificate fingerprint |
+| `DEPLOY_USERNAME` | Variable | Web Deploy user |
+| `MSDEPLOY_CONTENT_RELEASES_PATH` | Variable | Web Deploy path of the releases folder |
+| `CONTENT_ACTIVATION_URL` | Variable | Public HTTPS base URL, for example `https://hellmangroup.se` |
+| `APP_REPO_REF` | Variable | Tag or commit of the public app repo used for tooling |
+| `DEPLOY_PASSWORD` | Secret | Web Deploy password |
+| `CONTENT_ACTIVATION_TOKEN` | Secret | Must equal the server's `Content__ActivationToken` |
 
-- Store `APP_PR_APP_ID` and `APP_PR_APP_PRIVATE_KEY` only as secrets in the `generated-content-reconciler` environment. Do not create repository-level secrets with those names.
-- Allow only protected `main` as the deployment branch for that environment.
-- Protect app `main` with strict up-to-date checks, required checks, and human approval. The App gets no bypass or force-push rights on `main`.
+4. Protect `main` in the private repo and restrict `production-content` to `main`.
 
-## Manual recovery
+### Rollback
 
-1. Go to **Actions → Reconcile generated content PR → Run workflow**.
-2. Set **Use workflow from** to `main`.
-3. Enter the merged content PR number as `pr_number`.
-4. Set `reopen_closed` and `app_pr_number` only to reopen one exact closed app PR. Set `mark_ready` only if that is intended.
-
-## Troubleshooting
-
-| Symptom | Likely cause | Action |
-| --- | --- | --- |
-| Verify job fails | Event does not match a merged, labeled content PR | Check the PR, label, and SHAs, then rerun |
-| Writer job skipped | Run was not started from `main` | Rerun from `main` |
-| Run fails with a closed PR URL | The candidate's app PR was closed unmerged | Reopen it manually, or resolve it by hand |
-| Old `content-update-*` PR blocks | Legacy branch naming | Resolve the legacy PR before retrying that candidate |
+Run **Deploy content** manually with `activate_release_id` set to an earlier release id. This activates that folder again without uploading.

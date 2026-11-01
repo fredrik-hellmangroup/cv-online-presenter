@@ -22,8 +22,8 @@ ${changes.length ? changes.join('\n') : '- No commits found for this tag range.'
 
 ## Content changes and migration
 
-- Content revision: \`${metadata.contentRevision}\`.
-- Review the content submodule diff for this release. No content migration is configured; document any required migration before production promotion.
+- Bundled template content tree: \`${metadata.contentRevision}\`. Real content is delivered separately as a content release from the private content repository.
+- Content releases are activated at runtime and do not change with this app release. No content migration is configured; document any required migration before production promotion.
 
 ## Rollback
 

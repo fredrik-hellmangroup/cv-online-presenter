@@ -62,7 +62,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             .ToArray();
         Assert.Contains($"{siteUrl}/", locations);
         Assert.Contains($"{siteUrl}/cv", locations);
-        Assert.Contains($"{siteUrl}/projects/asira", locations);
+        Assert.Contains($"{siteUrl}/projects/demo-platform", locations);
         Assert.DoesNotContain(locations, location => location!.Contains("demo-profile", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -183,9 +183,9 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         var siteUrl = factory.Services.GetRequiredService<SiteContent>().SiteUrl!;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("# Fredrik Haller\u00f6s", body);
+        Assert.Contains("# Alex Exempel", body);
         Assert.Contains($"{siteUrl}/cv", body);
-        Assert.Contains("senior .NET-konsult", body);
+        Assert.Contains("lösningsarkitekt och senior konsult", body);
         Assert.DoesNotContain("demo-profile", body);
         Assert.DoesNotContain("Synthetic example", body);
     }
@@ -272,7 +272,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task SearchReturnsPublishedContentButNotDrafts()
     {
-        var response = await client.GetAsync("/api/search?q=Fredrik");
+        var response = await client.GetAsync("/api/search?q=Alex");
         var json = await response.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("/cv", json);
@@ -282,18 +282,18 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task SearchReturnsMatchingSectionWithAnchorAndSnippet()
     {
-        var response = await client.GetAsync("/api/search?q=Fredrik");
+        var response = await client.GetAsync("/api/search?q=Alex");
         var results = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Contains(results.EnumerateArray(), item =>
             item.GetProperty("path").GetString()!.StartsWith("/cv#", StringComparison.Ordinal)
-            && item.GetProperty("description").GetString()!.Contains("Fredrik", StringComparison.OrdinalIgnoreCase));
+            && item.GetProperty("description").GetString()!.Contains("Alex", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public async Task LegacySearchPageRedirectsToCv()
     {
         var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var response = await noRedirect.GetAsync("/search?q=Fredrik");
+        var response = await noRedirect.GetAsync("        /search?q=Alex");
         Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
         Assert.Equal("/cv", response.Headers.Location?.OriginalString);
     }
@@ -305,12 +305,12 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         {
             var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync(path));
             var title = System.Text.RegularExpressions.Regex.Match(html, "<title>(.*?)</title>").Groups[1].Value;
-            Assert.Single(System.Text.RegularExpressions.Regex.Matches(title, "Hallerös"));
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(title, "Alex Exempel"));
             var header = System.Text.RegularExpressions.Regex.Match(html, "<header class=\"site-header\">.*?</header>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
-            Assert.Contains(">FH</a>", header);
-            Assert.Contains("aria-label=\"Fredrik Hallerös – startsida\"", header);
+            Assert.Contains(">AE</a>", header);
+            Assert.Contains("aria-label=\"Alex Exempel – startsida\"", header);
             var footer = System.Text.RegularExpressions.Regex.Match(html, "<footer>.*?</footer>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
-            Assert.DoesNotContain("Hallerös", footer);
+            Assert.DoesNotContain("Alex Exempel", footer);
         }
     }
 

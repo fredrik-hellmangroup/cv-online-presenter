@@ -79,6 +79,7 @@ foreach ($requiredDeployFragment in @(
         "'App_Data\app_offline.template.htm'"
         '$templateSource.SyncTo('
         '$syncOptions.DoNotDelete = $false'
+        '$ContentRelease'
     )) {
     if (-not $deployScript.Contains($requiredDeployFragment)) {
         throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."
