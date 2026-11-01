@@ -25,6 +25,10 @@ param(
     # (new) release folder. Sync is additive and never touches the app, web.config or app_offline.
     [switch]$ContentRelease,
 
+    # Activation-token mode: SourcePath contains only activation-token.txt and DeployContentPath
+    # is the content-releases root. Sync is additive and never deletes existing releases.
+    [switch]$ActivationTokenOnly,
+
     [switch]$WhatIf,
 
     [switch]$ValidateOnly
@@ -257,17 +261,70 @@ if (-not (Test-Path -LiteralPath $SourcePath -PathType Container)) {
 }
 
 $resolvedSourcePath = (Resolve-Path -LiteralPath $SourcePath).Path
-$deployContentPath = $DeployContentPath.Trim()
+$deployContentPath = $DeployContentPath
 $deploySiteName = $DeploySiteName.Trim()
 $deployUsername = $DeployUsername.Trim()
 $certificateSha256 = $DeployCertificateSha256.Replace(':', '').Replace(' ', '').Trim()
 
+if ($ContentRelease -and $ActivationTokenOnly) {
+    throw 'ContentRelease and ActivationTokenOnly are mutually exclusive.'
+}
+
+$isContentOnlyMode = $ContentRelease -or $ActivationTokenOnly
 if ($ContentRelease) {
     if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath 'site.json') -PathType Leaf)) {
         throw "SourcePath is missing required file 'site.json'."
     }
     if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourcePath 'pages') -PathType Container)) {
         throw "SourcePath is missing required folder 'pages'."
+    }
+}
+elseif ($ActivationTokenOnly) {
+    if (
+        $DeploySiteName -cne $deploySiteName -or
+        $deploySiteName -match '[\\/:]' -or
+        $deploySiteName -match '[\x00-\x1F]' -or
+        $deploySiteName -in @('.', '..')
+    ) {
+        throw 'ActivationTokenOnly DeploySiteName must be a single site name without surrounding whitespace, control characters, or path separators.'
+    }
+
+    $sourceEntries = @(Get-ChildItem -LiteralPath $resolvedSourcePath -Force -Recurse)
+    if ($sourceEntries.Count -ne 1) {
+        throw "ActivationTokenOnly SourcePath must contain exactly one regular file named 'activation-token.txt' and no other entries."
+    }
+    $sourceEntry = $sourceEntries[0]
+    if (
+        $sourceEntry.PSIsContainer -or
+        $sourceEntry.Name -cne 'activation-token.txt' -or
+        $sourceEntry.FullName -cne (Join-Path $resolvedSourcePath 'activation-token.txt') -or
+        ($sourceEntry.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    ) {
+        throw "ActivationTokenOnly SourcePath must contain exactly one regular file named 'activation-token.txt' and no other entries."
+    }
+
+    $activationToken = $null
+    try {
+        $activationToken = [IO.File]::ReadAllText($sourceEntry.FullName)
+        if ($activationToken.Length -lt 32) {
+            throw 'activation-token.txt must contain a token with at least 32 characters and no leading or trailing whitespace.'
+        }
+        if ($activationToken -cne $activationToken.Trim()) {
+            throw 'activation-token.txt must not have leading or trailing whitespace.'
+        }
+    }
+    finally {
+        $activationToken = $null
+    }
+
+    $normalizedDeployContentPath = $deployContentPath.Replace('\', '/')
+    $expectedDeployContentPath = "$deploySiteName/App_Data/content-releases"
+    if (
+        $normalizedDeployContentPath -match '(^|/)\.{1,2}(/|$)' -or
+        $normalizedDeployContentPath -match '^(?:/|[A-Za-z]:|//)' -or
+        $normalizedDeployContentPath -ine $expectedDeployContentPath
+    ) {
+        throw 'ActivationTokenOnly DeployContentPath must exactly match DeploySiteName/App_Data/content-releases.'
     }
 }
 else {
@@ -286,11 +343,11 @@ if ([string]::IsNullOrWhiteSpace($deploySiteName)) {
 if ([string]::IsNullOrWhiteSpace($deployUsername)) {
     throw 'DEPLOY_USERNAME is required for MSDeploy.'
 }
-if ([string]::IsNullOrWhiteSpace($password)) {
+if (-not ($ValidateOnly -and $ActivationTokenOnly) -and [string]::IsNullOrWhiteSpace($password)) {
     throw 'DEPLOY_PASSWORD is required for MSDeploy.'
 }
 $resolvedOfflinePagePath = $null
-if (-not $ContentRelease) {
+if (-not $isContentOnlyMode) {
     if ([string]::IsNullOrWhiteSpace($OfflinePagePath) -or
         -not (Test-Path -LiteralPath $OfflinePagePath -PathType Leaf)) {
         throw "OfflinePagePath '$OfflinePagePath' must be a file."
@@ -307,6 +364,10 @@ if ($certificateSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
 
 $endpoint = Resolve-WebDeployEndpoint -ServerUrl $DeployServerUrl -SiteName $deploySiteName
 if ($ValidateOnly) {
+    if ($ActivationTokenOnly) {
+        Write-Output "Validated activation-token provisioning inputs for site '$deploySiteName'; deletion is disabled."
+        return
+    }
     if (-not (Test-Path -LiteralPath $WebDeployAssemblyPath -PathType Leaf)) {
         throw "Microsoft.Web.Deployment.dll was not found at '$WebDeployAssemblyPath'."
     }
@@ -371,7 +432,7 @@ try {
     $destinationOptions.RetryAttempts = 10
     $destinationOptions.RetryInterval = 5000
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
-    if (-not $ContentRelease) {
+    if (-not $isContentOnlyMode) {
         # The app ships no App_Data content: the offline template and the private content releases live there.
         # Skipping the whole folder keeps Web Deploy from trying to delete App_Data, which fails while it still holds releases.
         $destinationOptions.SkipDirectory('(?:^|[\\/])App_Data(?:[\\/]|$)')
@@ -382,7 +443,7 @@ try {
         [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath
     )
     $destinationProviderOptions.Path = $deployContentPath
-    if (-not $ContentRelease) {
+    if (-not $isContentOnlyMode) {
         $destinationProviderOptions.ProviderSettings['AppOfflineTemplate'].Value = $offlineTemplateRelativePath
     }
 
@@ -399,7 +460,7 @@ try {
     $syncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
     $syncOptions.DoNotDelete = $false
     $syncOptions.WhatIf = $WhatIf
-    if ($ContentRelease) {
+    if ($isContentOnlyMode) {
         $syncOptions.DoNotDelete = $true
     }
     else {
@@ -420,7 +481,7 @@ try {
     $source = $null
     $destinationOptions.Password = $password
     try {
-        if (-not $ContentRelease) {
+        if (-not $isContentOnlyMode) {
             $templateSource = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
                 [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
                 $resolvedOfflinePagePath,

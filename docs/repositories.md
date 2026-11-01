@@ -46,11 +46,12 @@ flowchart TD
 | `DEPLOY_USERNAME` | Variable | Web Deploy user |
 | `MSDEPLOY_CONTENT_RELEASES_PATH` | Variable | Web Deploy path of the releases folder, for example `hellmangroup.se/App_Data/content-releases` |
 | `CONTENT_ACTIVATION_URL` | Variable | Public HTTPS base URL, for example `https://hellmangroup.se` |
-| `APP_REPO_REF` | Variable | Tag or commit of the public app repo used for tooling |
+| `APP_REPO_REF` | Variable | Required value `main` for these protected workflows; normal content uploads fail closed unless the public app repo ref is exactly `main` |
 | `DEPLOY_PASSWORD` | Secret | Web Deploy password |
 | `CONTENT_ACTIVATION_TOKEN` | Secret | Must equal the contents of `App_Data/content-releases/activation-token.txt` on the server |
+| `CONTENT_ACTIVATION_TOKEN_NEXT` | Secret | Temporary staged-rotation/recovery secret only; remove it after successful rotation |
 
-4. Protect `main` in the private repo and restrict `production-content` to `main`.
+For rollback runs, `APP_REPO_REF` is not used because the app repository is not checked out. Keep token values out of documentation and logs. Protect `main` in the private repo and restrict `production-content` to `main`.
 
 ### Rollback
 
