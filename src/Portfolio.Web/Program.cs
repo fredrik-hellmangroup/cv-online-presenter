@@ -225,9 +225,9 @@ if (releaseCatalog is not null && !string.IsNullOrWhiteSpace(activationToken))
             var diff = ContentSnapshotLoader.Compare(store.Current, candidate);
             if (action == "activate")
             {
-                // The pointer is persisted only after the candidate validated, so a restart never selects an invalid release.
-                releaseCatalog.WriteActiveReleaseId(releaseId);
-                diff = await store.ActivateAsync(pages, context.RequestAborted);
+                // The pointer is persisted inside the store's activation lock and only after the candidate loaded,
+                // so a restart never selects an invalid release and concurrent activations stay ordered.
+                diff = await store.ActivateAsync(pages, context.RequestAborted, () => releaseCatalog.WriteActiveReleaseId(releaseId));
                 app.Logger.LogInformation("Activated content release {ReleaseId} with snapshot {Version}", releaseId, diff.ToVersion);
             }
             return Results.Json(diff);

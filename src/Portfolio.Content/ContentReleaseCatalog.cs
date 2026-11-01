@@ -29,8 +29,17 @@ public sealed class ContentReleaseCatalog
     public string? ReadActiveReleaseId()
     {
         var pointer = Path.Combine(Root, ActiveReleaseFileName);
-        if (!File.Exists(pointer)) return null;
-        var releaseId = File.ReadAllText(pointer).Trim();
+        string content;
+        try
+        {
+            content = File.ReadAllText(pointer);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+
+        var releaseId = content.Trim();
         return IsValidReleaseId(releaseId) ? releaseId : throw new InvalidOperationException($"{ActiveReleaseFileName} does not contain a valid release id.");
     }
 

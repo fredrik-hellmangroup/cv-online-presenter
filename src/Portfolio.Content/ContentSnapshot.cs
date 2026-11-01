@@ -87,13 +87,15 @@ public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapsho
 
     public ContentSnapshot Current => Volatile.Read(ref current);
 
-    public async Task<ContentStructuralDiff> ActivateAsync(string pagesRoot, CancellationToken cancellationToken = default)
+    public async Task<ContentStructuralDiff> ActivateAsync(string pagesRoot, CancellationToken cancellationToken = default, Action? persist = null)
     {
         var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
         await activationLock.WaitAsync(cancellationToken);
         try
         {
             var diff = ContentSnapshotLoader.Compare(current, candidate);
+            // Persisting inside the lock, with no awaits before the swap, keeps the stored pointer and the served snapshot in the same order.
+            persist?.Invoke();
             Volatile.Write(ref current, candidate);
             return diff;
         }

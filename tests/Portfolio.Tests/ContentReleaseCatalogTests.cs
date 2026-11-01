@@ -68,6 +68,24 @@ public sealed class ContentReleaseCatalogTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task FailedPersistLeavesTheServedSnapshotUnchanged()
+    {
+        WriteRelease("first", "First Person");
+        WriteRelease("second", "Second Person");
+        var loader = new ContentSnapshotLoader();
+        var store = new ContentSnapshotStore(await loader.LoadAsync(Path.Combine(root, "first", "pages")), loader);
+        var before = store.Current.Version;
+
+        await Assert.ThrowsAsync<IOException>(() => store.ActivateAsync(Path.Combine(root, "second", "pages"), persist: () => throw new IOException("disk full")));
+
+        Assert.Equal(before, store.Current.Version);
+    }
+
+    [Fact]
+    public void MissingPointerMeansNoActiveRelease() =>
+        Assert.Null(new ContentReleaseCatalog(root).ReadActiveReleaseId());
+
     private void WriteRelease(string releaseId, string siteName)
     {
         var pages = Path.Combine(root, releaseId, "pages");
