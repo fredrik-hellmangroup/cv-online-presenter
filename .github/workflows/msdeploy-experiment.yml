@@ -143,7 +143,7 @@ jobs:
       MSDEPLOY_SERVER_URL: ${{ vars.MSDEPLOY_SERVER_URL }}
       MSDEPLOY_SITE_NAME: ${{ vars.MSDEPLOY_SITE_NAME }}
       MSDEPLOY_CERTIFICATE_SHA256: ${{ vars.MSDEPLOY_CERTIFICATE_SHA256 }}
-      DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}
+      MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
     steps:
@@ -223,7 +223,7 @@ jobs:
         run: |
           .\scripts\deploy-beebyte-iis.ps1 `
             -SourcePath 'artifact/publish' `
-            -DeployContentPath $env:DEPLOY_CONTENT_PATH `
+            -DeployContentPath $env:MSDEPLOY_CONTENT_PATH `
             -DeployServerUrl $env:MSDEPLOY_SERVER_URL `
             -DeploySiteName $env:MSDEPLOY_SITE_NAME `
             -DeployUsername $env:DEPLOY_USERNAME `

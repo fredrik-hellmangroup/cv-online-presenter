@@ -29,17 +29,18 @@ Protect release tags and confirm the Beebyte FTP hostname, FTPS access, content 
 
 The tag-driven FTPS release remains the normal production path until MSDeploy has passed a live deployment and rollback exercise. A separate **MSDeploy experiment** workflow can be started manually from `main`; it does not create a GitHub Release and never falls back to FTPS automatically. The workflow requires the `confirm_production` input, uses a dedicated `production-msdeploy` Environment restricted to `main`, and shares the `production-deployment` concurrency group with FTPS so the transports cannot run at the same time.
 
-Copy `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_PASSWORD`, and `DEPLOY_HEALTH_URL` from the FTPS production configuration into `production-msdeploy`. Configure these additional **Environment variables** there:
+Copy `DEPLOY_USERNAME`, `DEPLOY_PASSWORD`, and `DEPLOY_HEALTH_URL` from the FTPS production configuration into `production-msdeploy`. Do not copy the FTPS-only `DEPLOY_CONTENT_PATH=httpdocs`; Web Deploy addresses the IIS site rather than its FTP directory. Configure these additional **Environment variables** there:
 
 - `MSDEPLOY_SERVER_URL`: HTTPS WMSvc endpoint or hostname. Port 8172 is used when no port is specified.
 - `MSDEPLOY_SITE_NAME`: IIS site name used in the `msdeploy.axd` query.
+- `MSDEPLOY_CONTENT_PATH`: Web Deploy provider path. For Beebyte this is the IIS site name, `hellmangroup.se`, not `httpdocs`.
 - `MSDEPLOY_CERTIFICATE_SHA256`: SHA-256 fingerprint for the exact WMSvc certificate.
 
 The hosted runner uses the preinstalled Microsoft Web Deploy client when it matches the expected Microsoft-signed version. If it is absent, the runner downloads the official Microsoft MSI, verifies its pinned SHA-256 digest and Microsoft Authenticode signature, installs it, and then verifies the installed executable and assembly before the password is made available to the deployment step.
 
-The runner verifies the remote certificate fingerprint before credentials are used, maps the certificate's internal DNS name to the verified endpoint address, and temporarily trusts only that pinned certificate in the runner's machine root store. The deployment uses the `Microsoft.Web.Deployment` managed API so the password is not placed in process arguments. MSDeploy then performs normal TLS validation; `-allowUntrusted` is not used.
+The runner verifies the remote certificate fingerprint before credentials are used and temporarily trusts only that pinned certificate in the runner's machine root store. Beebyte exposes WMSvc by IP while its self-signed certificate contains only an internal DNS name, so the actual MSDeploy session permits only that expected hostname mismatch. Certificate chain errors and every non-pinned certificate remain rejected. The deployment uses the `Microsoft.Web.Deployment` managed API so the password is not placed in process arguments; `-allowUntrusted` is not used.
 
-Before synchronization, the AppOffline rule serves the self-contained branded `deployment/app_offline.htm` template. The template has inline styles and no application or third-party dependencies. MSDeploy removes it when synchronization finishes. Destination-only files are preserved with `DoNotDelete`, and `.well-known` is explicitly skipped. Temporary trust and hosts-file changes are removed after the attempt.
+Before the main synchronization, the helper bootstraps the self-contained branded `deployment/app_offline.htm` file to the non-public destination path `App_Data/app_offline.template.htm`. The AppOffline rule then uses that destination-relative template while the application is stopped and removes only the active root `app_offline.htm` when synchronization finishes. The template has inline styles and no application or third-party dependencies. Destination-only files are preserved with `DoNotDelete`, and `.well-known` is explicitly skipped. Temporary certificate trust and the process-wide pin callback are removed after the attempt.
 
 After the site comes online, the workflow requires both `/health` and `/build-metadata.json` to match the exact deployed artifact. A failed verification is a failed deployment and must be followed by an explicit rollback; it never triggers FTPS automatically.
 

@@ -22,6 +22,8 @@ param(
 
     [string]$WebDeployAssemblyPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\Microsoft.Web.Deployment.dll',
 
+    [switch]$WhatIf,
+
     [switch]$ValidateOnly
 )
 
@@ -60,7 +62,8 @@ namespace CvOnlinePresenter.Deployment
             X509Chain chain,
             SslPolicyErrors errors)
         {
-            if (certificate == null || errors != SslPolicyErrors.None || string.IsNullOrEmpty(ExpectedSha256))
+            SslPolicyErrors disallowedErrors = errors & ~SslPolicyErrors.RemoteCertificateNameMismatch;
+            if (certificate == null || disallowedErrors != SslPolicyErrors.None || string.IsNullOrEmpty(ExpectedSha256))
             {
                 return false;
             }
@@ -129,10 +132,15 @@ function Get-PinnedRemoteCertificate {
     $stream = $null
     try {
         $connectTask = $client.ConnectAsync($Endpoint.Host, $Endpoint.Port)
-        if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
-            throw "Timed out connecting to the Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+        try {
+            if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
+                throw "Timed out connecting to the Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+            }
+            $connectTask.GetAwaiter().GetResult()
         }
-        $connectTask.GetAwaiter().GetResult()
+        catch {
+            throw "Could not connect to Web Deploy endpoint '$($Endpoint.Host):$($Endpoint.Port)': $($_.Exception.GetBaseException().Message)"
+        }
         $stream = [System.Net.Security.SslStream]::new(
             $client.GetStream(),
             $false,
@@ -161,6 +169,53 @@ function Get-PinnedRemoteCertificate {
     }
 }
 
+function Assert-CertificateValidationPolicy {
+    param([Parameter(Mandatory = $true)][System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate)
+
+    $actualSha256 = $Certificate.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    try {
+        [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = $actualSha256
+        $callback = [CvOnlinePresenter.Deployment.CertificateValidation]::RequirePinned
+        if (-not $callback.Invoke($null, $Certificate, $null, [System.Net.Security.SslPolicyErrors]::None)) {
+            throw 'Certificate validation policy rejected a clean, correctly pinned certificate.'
+        }
+        if (-not $callback.Invoke(
+                $null,
+                $Certificate,
+                $null,
+                [System.Net.Security.SslPolicyErrors]::RemoteCertificateNameMismatch
+            )) {
+            throw 'Certificate validation policy rejected the expected IP hostname mismatch.'
+        }
+        if ($callback.Invoke(
+                $null,
+                $Certificate,
+                $null,
+                [System.Net.Security.SslPolicyErrors]::RemoteCertificateChainErrors
+            )) {
+            throw 'Certificate validation policy accepted certificate chain errors.'
+        }
+        if ($callback.Invoke(
+                $null,
+                $Certificate,
+                $null,
+                [System.Net.Security.SslPolicyErrors]::RemoteCertificateNameMismatch -bor
+                    [System.Net.Security.SslPolicyErrors]::RemoteCertificateChainErrors
+            )) {
+            throw 'Certificate validation policy accepted chain errors combined with a hostname mismatch.'
+        }
+        [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = '0' * 64
+        if ($callback.Invoke($null, $Certificate, $null, [System.Net.Security.SslPolicyErrors]::None)) {
+            throw 'Certificate validation policy accepted an incorrect SHA-256 pin.'
+        }
+    }
+    finally {
+        [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = $null
+    }
+
+    Write-Output 'Certificate validation policy self-test passed.'
+}
+
 function Assert-TrustedEndpoint {
     param([Parameter(Mandatory = $true)][Uri]$Endpoint)
 
@@ -168,11 +223,20 @@ function Assert-TrustedEndpoint {
     $stream = $null
     try {
         $connectTask = $client.ConnectAsync($Endpoint.Host, $Endpoint.Port)
-        if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
-            throw "Timed out connecting to the trusted Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+        try {
+            if (-not $connectTask.Wait($socketTimeoutMilliseconds)) {
+                throw "Timed out connecting to the trusted Web Deploy endpoint after $socketTimeoutMilliseconds ms."
+            }
+            $connectTask.GetAwaiter().GetResult()
         }
-        $connectTask.GetAwaiter().GetResult()
-        $stream = [System.Net.Security.SslStream]::new($client.GetStream(), $false)
+        catch {
+            throw "Could not connect to trusted Web Deploy endpoint '$($Endpoint.Host):$($Endpoint.Port)': $($_.Exception.GetBaseException().Message)"
+        }
+        $stream = [System.Net.Security.SslStream]::new(
+            $client.GetStream(),
+            $false,
+            [CvOnlinePresenter.Deployment.CertificateValidation]::RequirePinned
+        )
         Invoke-TlsAuthentication `
             -Stream $stream `
             -TargetHost $Endpoint.Host
@@ -231,6 +295,11 @@ if ($ValidateOnly) {
     }
     Add-Type -Path $WebDeployAssemblyPath
     [void][Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
+    $assemblySignature = Get-AuthenticodeSignature -LiteralPath $WebDeployAssemblyPath
+    if ($assemblySignature.Status -ne 'Valid' -or $null -eq $assemblySignature.SignerCertificate) {
+        throw 'Microsoft.Web.Deployment.dll must have a valid Authenticode signature.'
+    }
+    Assert-CertificateValidationPolicy -Certificate $assemblySignature.SignerCertificate
     Write-Output "Validated MSDeploy experiment inputs for site '$deploySiteName'."
     return
 }
@@ -241,20 +310,6 @@ Add-Type -Path $WebDeployAssemblyPath
 
 $pinnedConnection = Get-PinnedRemoteCertificate -Endpoint $endpoint -ExpectedSha256 $certificateSha256
 $certificate = $pinnedConnection.Certificate
-$certificateDnsName = $certificate.GetNameInfo(
-    [System.Security.Cryptography.X509Certificates.X509NameType]::DnsName,
-    $false
-).Trim()
-if ($certificateDnsName -notmatch '^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$') {
-    $certificate.Dispose()
-    throw 'The pinned Web Deploy certificate must use a valid DNS name without wildcards.'
-}
-
-$trustedEndpoint = [UriBuilder]$endpoint
-$trustedEndpoint.Host = $certificateDnsName
-$hostsPath = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'
-$hostsEntry = "$($pinnedConnection.Address)`t$certificateDnsName`t# cv-online-presenter MSDeploy experiment"
-$hostsEntryAdded = $false
 $certificateAdded = $false
 $pinCallbackInstalled = $false
 $previousCertificateCallback = $null
@@ -265,21 +320,6 @@ $store = [System.Security.Cryptography.X509Certificates.X509Store]::new(
 )
 
 try {
-    $existingAliases = Get-Content -LiteralPath $hostsPath | Where-Object {
-        $tokens = (($_ -split '#', 2)[0] -split '\s+') | Where-Object { $_ }
-        $tokens.Count -gt 1 -and $tokens[1..($tokens.Count - 1)] -contains $certificateDnsName
-    }
-    foreach ($alias in $existingAliases) {
-        $existingAddress = ((($alias -split '#', 2)[0] -split '\s+')[0])
-        if ($existingAddress -ne $pinnedConnection.Address) {
-            throw "The certificate DNS name '$certificateDnsName' already resolves to another address in the hosts file."
-        }
-    }
-    if (-not $existingAliases) {
-        Add-Content -LiteralPath $hostsPath -Value $hostsEntry -Encoding ascii
-        $hostsEntryAdded = $true
-    }
-
     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
     $alreadyTrusted = $store.Certificates.Find(
         [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
@@ -298,8 +338,8 @@ try {
         $certificateAdded = $true
     }
 
-    Assert-TrustedEndpoint -Endpoint $trustedEndpoint.Uri
     [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = $certificateSha256
+    Assert-TrustedEndpoint -Endpoint $endpoint
     $previousCertificateCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
     [System.Net.ServicePointManager]::ServerCertificateValidationCallback =
         [CvOnlinePresenter.Deployment.CertificateValidation]::RequirePinned
@@ -307,18 +347,25 @@ try {
 
     $sourceOptions = [Microsoft.Web.Deployment.DeploymentBaseOptions]::new()
     $destinationOptions = [Microsoft.Web.Deployment.DeploymentBaseOptions]::new()
-    $destinationOptions.ComputerName = $trustedEndpoint.Uri.AbsoluteUri
+    $destinationOptions.ComputerName = $endpoint.AbsoluteUri
     $destinationOptions.UserName = $deployUsername
     $destinationOptions.AuthenticationType = 'Basic'
     $destinationOptions.IncludeAcls = $false
     $destinationOptions.RetryAttempts = 10
     $destinationOptions.RetryInterval = 5000
-    $destinationOptions.AddDefaultProviderSetting(
-        'contentPath',
-        'appOfflineTemplate',
-        $resolvedOfflinePagePath
-    )
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
+
+    $offlineTemplateRelativePath = 'App_Data\app_offline.template.htm'
+    $destinationProviderOptions = [Microsoft.Web.Deployment.DeploymentProviderOptions]::new(
+        [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath
+    )
+    $destinationProviderOptions.Path = $deployContentPath
+    $destinationProviderOptions.ProviderSettings['AppOfflineTemplate'].Value = $offlineTemplateRelativePath
+
+    $templateDestinationProviderOptions = [Microsoft.Web.Deployment.DeploymentProviderOptions]::new(
+        [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath
+    )
+    $templateDestinationProviderOptions.Path = "$deployContentPath/$($offlineTemplateRelativePath -replace '\\', '/')"
     foreach ($link in $destinationOptions.LinkExtensions) {
         if ($link.Name -in @('AppPoolExtension', 'ContentExtension', 'CertificateExtension')) {
             $link.Enabled = $false
@@ -327,6 +374,7 @@ try {
 
     $syncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
     $syncOptions.DoNotDelete = $true
+    $syncOptions.WhatIf = $WhatIf
     $appOfflineHandlerType = [Microsoft.Web.Deployment.DeploymentManager].Assembly.GetType(
         'Microsoft.Web.Deployment.AppOfflineRuleHandler',
         $true
@@ -335,17 +383,39 @@ try {
     $appOfflineRule = [Microsoft.Web.Deployment.DeploymentRule]::new('AppOffline', $appOfflineHandler)
     $syncOptions.Rules.Add($appOfflineRule)
 
+    $templateSyncOptions = [Microsoft.Web.Deployment.DeploymentSyncOptions]::new()
+    $templateSyncOptions.DoNotDelete = $true
+    $templateSyncOptions.WhatIf = $WhatIf
+
+    $templateSource = $null
     $source = $null
     $destinationOptions.Password = $password
     try {
+        $templateSource = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
+            [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
+            $resolvedOfflinePagePath,
+            $sourceOptions
+        )
+        $templateResult = $templateSource.SyncTo(
+            $templateDestinationProviderOptions,
+            $destinationOptions,
+            $templateSyncOptions
+        )
+        if ($templateResult.Errors -gt 0) {
+            throw "MSDeploy reported $($templateResult.Errors) offline-template synchronization error(s)."
+        }
+        Write-Output (
+            "MSDeploy synchronized the offline template with {0} change(s)." -f
+            $templateResult.TotalChanges
+        )
+
         $source = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
             [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
             $resolvedSourcePath,
             $sourceOptions
         )
         $result = $source.SyncTo(
-            [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
-            $deployContentPath,
+            $destinationProviderOptions,
             $destinationOptions,
             $syncOptions
         )
@@ -364,6 +434,9 @@ try {
         if ($null -ne $source) {
             $source.Dispose()
         }
+        if ($null -ne $templateSource) {
+            $templateSource.Dispose()
+        }
         $destinationOptions.Password = $null
     }
 }
@@ -371,8 +444,8 @@ finally {
     try {
         if ($pinCallbackInstalled) {
             [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCertificateCallback
-            [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = $null
         }
+        [CvOnlinePresenter.Deployment.CertificateValidation]::ExpectedSha256 = $null
         if ($certificateAdded) {
             & certutil.exe -delstore Root $certificate.Thumbprint
             if ($LASTEXITCODE -ne 0) {
@@ -385,17 +458,9 @@ finally {
             $store.Close()
         }
         finally {
-            try {
-                if ($hostsEntryAdded) {
-                    $remainingHostsEntries = Get-Content -LiteralPath $hostsPath | Where-Object { $_ -ne $hostsEntry }
-                    Set-Content -LiteralPath $hostsPath -Value $remainingHostsEntries -Encoding ascii
-                }
-            }
-            finally {
-                Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
-                $certificate.Dispose()
-                $password = $null
-            }
+            Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+            $certificate.Dispose()
+            $password = $null
         }
     }
 }

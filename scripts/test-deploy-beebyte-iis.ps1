@@ -71,11 +71,29 @@ if ($offlineHtml -match '(?i)<script\b|(?:src|href)\s*=\s*["''](?:https?:)?//') 
     throw 'The branded offline page must not depend on scripts or remote resources.'
 }
 
+$deployScript = [IO.File]::ReadAllText($deployScriptPath)
+foreach ($requiredDeployFragment in @(
+        "ProviderSettings['AppOfflineTemplate'].Value"
+        "'App_Data\app_offline.template.htm'"
+        '$templateSource.SyncTo('
+    )) {
+    if (-not $deployScript.Contains($requiredDeployFragment)) {
+        throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."
+    }
+}
+if ($deployScript.Contains(".Value = `$resolvedOfflinePagePath")) {
+    throw 'AppOfflineTemplate must be a destination-relative path, not a local absolute path.'
+}
+if ($deployScript.Contains("AddDefaultProviderSetting(`r`n        'contentPath',`r`n        'appOfflineTemplate'")) {
+    throw 'The helper must not rely on an unbound default AppOffline template setting.'
+}
+
 $workflow = [IO.File]::ReadAllText($workflowPath)
 foreach ($requiredWorkflowFragment in @(
         'rollback_release_tag:'
         '$assets[0].digest'
         '$expectedInstallerSha256'
+        'MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}'
         'verify-build-metadata.ps1'
         "-OfflinePagePath '.\deployment\app_offline.htm'"
     )) {
@@ -85,6 +103,9 @@ foreach ($requiredWorkflowFragment in @(
 }
 if ($workflow.Contains('choco install')) {
     throw 'The production deploy job must not execute an unverified Chocolatey package.'
+}
+if ($workflow.Contains('DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}')) {
+    throw 'MSDeploy must not reuse the FTPS-only DEPLOY_CONTENT_PATH value.'
 }
 
 New-Item -ItemType Directory -Path $temporarySourcePath | Out-Null
@@ -102,8 +123,11 @@ try {
     if ($validPage.ExitCode -ne 0) {
         throw "Valid MSDeploy inputs were rejected. Output: $($validPage.Output)"
     }
-    if ($validPage.Output -notmatch 'Validated MSDeploy experiment inputs') {
-        throw "Validation did not report success. Output: $($validPage.Output)"
+    if (
+        $validPage.Output -notmatch 'Certificate validation policy self-test passed' -or
+        $validPage.Output -notmatch 'Validated MSDeploy experiment inputs'
+    ) {
+        throw "Validation did not report certificate-policy and input success. Output: $($validPage.Output)"
     }
 }
 finally {
