@@ -9,7 +9,55 @@ $offlinePagePath = Join-Path $repositoryRoot 'deployment\app_offline.htm'
 $workflowPath = Join-Path $repositoryRoot '.github\workflows\msdeploy-experiment.yml'
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\release.yml'
 $installerScriptPath = Join-Path $PSScriptRoot 'ensure-webdeploy.ps1'
-$temporarySourcePath = Join-Path ([IO.Path]::GetTempPath()) "cv-online-presenter-msdeploy-test-$([guid]::NewGuid().ToString('N'))"
+$temporarySourcePath = Join-Path $repositoryRoot ".test-state-msdeploy-$([guid]::NewGuid().ToString('N'))"
+
+function Invoke-TokenValidation {
+    param(
+        [Parameter(Mandatory = $true)][string]$TokenSourcePath,
+        [string]$DestinationPath = 'test.example/App_Data/content-releases',
+        [string]$SiteName = 'test.example',
+        [switch]$AlsoContentRelease
+    )
+
+    $arguments = @(
+        '-NoProfile'
+        '-NonInteractive'
+        '-File'
+        $deployScriptPath
+        '-SourcePath'
+        $TokenSourcePath
+        '-DeployContentPath'
+        $DestinationPath
+        '-DeployServerUrl'
+        'https://127.0.0.1:1'
+        '-DeploySiteName'
+        $SiteName
+        '-DeployUsername'
+        'validation-user'
+        '-DeployCertificateSha256'
+        ('A' * 64)
+        '-ActivationTokenOnly'
+        '-ValidateOnly'
+    )
+    if ($AlsoContentRelease) {
+        $arguments += '-ContentRelease'
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = & powershell.exe @arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return [PSCustomObject]@{
+        ExitCode = $exitCode
+        Output = ($output -join [Environment]::NewLine)
+    }
+}
 
 function Invoke-Validation {
     param([Parameter(Mandatory = $true)][string]$PagePath)
@@ -80,6 +128,10 @@ foreach ($requiredDeployFragment in @(
         '$templateSource.SyncTo('
         '$syncOptions.DoNotDelete = $false'
         '$ContentRelease'
+        '$ActivationTokenOnly'
+        "must contain exactly one regular file named 'activation-token.txt'"
+        'ActivationTokenOnly DeployContentPath must exactly match DeploySiteName/App_Data/content-releases.'
+        'activation-token.txt must not have leading or trailing whitespace.'
         'App_Data(?:[\\/]|$)'
     )) {
     if (-not $deployScript.Contains($requiredDeployFragment)) {
@@ -91,6 +143,9 @@ if ($deployScript.Contains(".Value = `$resolvedOfflinePagePath")) {
 }
 if ($deployScript.Contains("AddDefaultProviderSetting(`r`n        'contentPath',`r`n        'appOfflineTemplate'")) {
     throw 'The helper must not rely on an unbound default AppOffline template setting.'
+}
+if (-not $deployScript.Contains('if ($isContentOnlyMode) {' + [Environment]::NewLine + '        $syncOptions.DoNotDelete = $true')) {
+    throw 'Content-only modes, including token provisioning, must disable deletion.'
 }
 
 $workflow = [IO.File]::ReadAllText($workflowPath)
@@ -183,8 +238,113 @@ try {
         throw "Validation did not report certificate-policy and input success. Output: $($validPage.Output)"
     }
 }
+catch {
+    Remove-Item -LiteralPath $temporarySourcePath -Recurse -Force -ErrorAction SilentlyContinue
+    throw
+}
 finally {
     Remove-Item Env:DEPLOY_PASSWORD -ErrorAction SilentlyContinue
+}
+
+$tokenSourcePath = Join-Path $temporarySourcePath 'activation-token-source'
+New-Item -ItemType Directory -Path $tokenSourcePath | Out-Null
+$tokenSentinel = 'validation-only-token-value-not-for-output'
+$tokenFilePath = Join-Path $tokenSourcePath 'activation-token.txt'
+[IO.File]::WriteAllText($tokenFilePath, $tokenSentinel)
+
+try {
+    $validToken = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if (
+        $validToken.ExitCode -ne 0 -or
+        $validToken.Output -notmatch 'Validated activation-token provisioning inputs' -or
+        $validToken.Output.Contains($tokenSentinel)
+    ) {
+        throw "Valid token-only inputs were not safely validated. Output: $($validToken.Output)"
+    }
+
+    [IO.File]::WriteAllText($tokenFilePath, 'T' * 32)
+    $minimumLengthToken = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if ($minimumLengthToken.ExitCode -ne 0) {
+        throw "A 32-character activation token was not accepted. Output: $($minimumLengthToken.Output)"
+    }
+    [IO.File]::WriteAllText($tokenFilePath, $tokenSentinel)
+
+    $wrongNamePath = Join-Path $tokenSourcePath 'token.txt'
+    Move-Item -LiteralPath $tokenFilePath -Destination $wrongNamePath
+    $wrongName = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if ($wrongName.ExitCode -eq 0 -or $wrongName.Output -notmatch 'exactly one regular file') {
+        throw "A differently named source file was not rejected. Output: $($wrongName.Output)"
+    }
+    Move-Item -LiteralPath $wrongNamePath -Destination $tokenFilePath
+
+    $emptySourcePath = Join-Path $temporarySourcePath 'empty-token-source'
+    New-Item -ItemType Directory -Path $emptySourcePath | Out-Null
+    $emptySource = Invoke-TokenValidation -TokenSourcePath $emptySourcePath
+    if ($emptySource.ExitCode -eq 0 -or $emptySource.Output -notmatch 'exactly one regular file') {
+        throw "An empty token source directory was not rejected. Output: $($emptySource.Output)"
+    }
+
+    [IO.File]::WriteAllText($tokenFilePath, 'short')
+    $shortToken = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if ($shortToken.ExitCode -eq 0 -or $shortToken.Output -notmatch 'at least 32 characters') {
+        throw "A short activation token was not rejected. Output: $($shortToken.Output)"
+    }
+
+    [IO.File]::WriteAllText($tokenFilePath, $tokenSentinel)
+    foreach ($whitespaceToken in @(" $tokenSentinel", "$tokenSentinel`r`n")) {
+        [IO.File]::WriteAllText($tokenFilePath, $whitespaceToken)
+        $invalidWhitespaceToken = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+        if ($invalidWhitespaceToken.ExitCode -eq 0 -or $invalidWhitespaceToken.Output -notmatch 'leading or trailing whitespace') {
+            throw "An activation token with surrounding whitespace was not rejected. Output: $($invalidWhitespaceToken.Output)"
+        }
+    }
+    [IO.File]::WriteAllText($tokenFilePath, $tokenSentinel)
+
+    [IO.File]::WriteAllText((Join-Path $tokenSourcePath 'unexpected.txt'), 'extra')
+    $extraFile = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if ($extraFile.ExitCode -eq 0 -or $extraFile.Output -notmatch 'exactly one regular file') {
+        throw "An additional source file was not rejected. Output: $($extraFile.Output)"
+    }
+    Remove-Item -LiteralPath (Join-Path $tokenSourcePath 'unexpected.txt')
+
+    $nestedDirectory = Join-Path $tokenSourcePath 'nested'
+    New-Item -ItemType Directory -Path $nestedDirectory | Out-Null
+    $nestedEntry = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath
+    if ($nestedEntry.ExitCode -eq 0 -or $nestedEntry.Output -notmatch 'exactly one regular file') {
+        throw "A nested source directory was not rejected. Output: $($nestedEntry.Output)"
+    }
+    Remove-Item -LiteralPath $nestedDirectory -Force
+
+    $normalizedDestination = Invoke-TokenValidation `
+        -TokenSourcePath $tokenSourcePath `
+        -DestinationPath 'TEST.EXAMPLE\App_Data\CONTENT-RELEASES'
+    if ($normalizedDestination.ExitCode -ne 0) {
+        throw "A destination differing only by separator and case was rejected. Output: $($normalizedDestination.Output)"
+    }
+
+    foreach ($unsafeDestination in @(
+            'test.example/App_Data/content-releases/release-123'
+            'test.example/../test.example/App_Data/content-releases'
+            'other-site/App_Data/content-releases'
+            '/test.example/App_Data/content-releases'
+            'C:\test.example\App_Data\content-releases'
+            '\\server\share\test.example\App_Data\content-releases'
+            '//server/share/test.example/App_Data/content-releases'
+        )) {
+        $invalidDestination = Invoke-TokenValidation `
+            -TokenSourcePath $tokenSourcePath `
+            -DestinationPath $unsafeDestination
+        if ($invalidDestination.ExitCode -eq 0 -or $invalidDestination.Output -notmatch 'exactly match DeploySiteName/App_Data/content-releases') {
+            throw "An unsafe destination was not rejected. Output: $($invalidDestination.Output)"
+        }
+    }
+
+    $exclusiveModes = Invoke-TokenValidation -TokenSourcePath $tokenSourcePath -AlsoContentRelease
+    if ($exclusiveModes.ExitCode -eq 0 -or $exclusiveModes.Output -notmatch 'mutually exclusive') {
+        throw "Conflicting deploy modes were not rejected. Output: $($exclusiveModes.Output)"
+    }
+}
+finally {
     Remove-Item -LiteralPath $temporarySourcePath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
