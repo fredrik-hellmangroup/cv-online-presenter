@@ -27,7 +27,7 @@ Protect release tags and confirm the Beebyte FTP hostname, FTPS access, content 
 
 ## Manual MSDeploy experiment
 
-The tag-driven FTPS release remains the normal production path. A separate **MSDeploy experiment** workflow can be started manually from `main`; it does not create a GitHub Release and never falls back to FTPS automatically. The workflow requires the `confirm_production` input, uses a dedicated `production-msdeploy` Environment restricted to `main`, and shares the `production-deployment` concurrency group with FTPS so the transports cannot run at the same time.
+The tag-driven FTPS release remains the normal production path until MSDeploy has passed a live deployment and rollback exercise. A separate **MSDeploy experiment** workflow can be started manually from `main`; it does not create a GitHub Release and never falls back to FTPS automatically. The workflow requires the `confirm_production` input, uses a dedicated `production-msdeploy` Environment restricted to `main`, and shares the `production-deployment` concurrency group with FTPS so the transports cannot run at the same time.
 
 Copy `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_PASSWORD`, and `DEPLOY_HEALTH_URL` from the FTPS production configuration into `production-msdeploy`. Configure these additional **Environment variables** there:
 
@@ -35,4 +35,12 @@ Copy `DEPLOY_CONTENT_PATH`, `DEPLOY_USERNAME`, `DEPLOY_PASSWORD`, and `DEPLOY_HE
 - `MSDEPLOY_SITE_NAME`: IIS site name used in the `msdeploy.axd` query.
 - `MSDEPLOY_CERTIFICATE_SHA256`: SHA-256 fingerprint for the exact WMSvc certificate.
 
-The hosted runner verifies the remote certificate fingerprint before credentials are used, maps the certificate's internal DNS name to the verified endpoint address, and temporarily trusts only that pinned certificate in the runner's machine root store. The deployment uses the `Microsoft.Web.Deployment` managed API so the password is not placed in process arguments. MSDeploy then performs normal TLS validation; `-allowUntrusted` is not used. Destination-only files are preserved with `DoNotDelete`, and `.well-known` is explicitly skipped. Temporary trust and hosts-file changes are removed after the attempt. This is an experimental path until a successful run, health check, and deployed build metadata have been verified. Keep FTPS available for recovery.
+The hosted runner uses the preinstalled Microsoft Web Deploy client when it matches the expected Microsoft-signed version. If it is absent, the runner downloads the official Microsoft MSI, verifies its pinned SHA-256 digest and Microsoft Authenticode signature, installs it, and then verifies the installed executable and assembly before the password is made available to the deployment step.
+
+The runner verifies the remote certificate fingerprint before credentials are used, maps the certificate's internal DNS name to the verified endpoint address, and temporarily trusts only that pinned certificate in the runner's machine root store. The deployment uses the `Microsoft.Web.Deployment` managed API so the password is not placed in process arguments. MSDeploy then performs normal TLS validation; `-allowUntrusted` is not used.
+
+Before synchronization, the AppOffline rule serves the self-contained branded `deployment/app_offline.htm` template. The template has inline styles and no application or third-party dependencies. MSDeploy removes it when synchronization finishes. Destination-only files are preserved with `DoNotDelete`, and `.well-known` is explicitly skipped. Temporary trust and hosts-file changes are removed after the attempt.
+
+After the site comes online, the workflow requires both `/health` and `/build-metadata.json` to match the exact deployed artifact. A failed verification is a failed deployment and must be followed by an explicit rollback; it never triggers FTPS automatically.
+
+For rollback, set `rollback_release_tag` to an existing `vMAJOR.MINOR.PATCH` GitHub Release. The workflow requires the selected asset to expose a GitHub SHA-256 digest, verifies the downloaded bytes against it, and sends that immutable package through the same MSDeploy, offline, health, and metadata checks as a current-`main` deployment. Leave `rollback_release_tag` empty to build and deploy the selected `main` commit. This remains an experimental path until both a live deployment and an immutable-package rollback have succeeded. Keep FTPS available as a separately invoked recovery path during the transition.

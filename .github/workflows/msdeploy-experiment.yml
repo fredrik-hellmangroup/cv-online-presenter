@@ -8,6 +8,11 @@ on:
         required: true
         type: boolean
         default: false
+      rollback_release_tag:
+        description: Optional existing vMAJOR.MINOR.PATCH release to redeploy for rollback
+        required: false
+        type: string
+        default: ''
 
 run-name: MSDeploy experiment from ${{ github.ref_name }}
 
@@ -24,6 +29,7 @@ jobs:
         env:
           CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
           REQUESTED_REF: ${{ github.ref }}
+          ROLLBACK_RELEASE_TAG: ${{ inputs.rollback_release_tag }}
         run: |
           if ($env:REQUESTED_REF -ne 'refs/heads/main') {
             throw 'MSDeploy experiments must run from the main branch.'
@@ -31,25 +37,88 @@ jobs:
           if ($env:CONFIRM_PRODUCTION -ne 'true') {
             throw 'confirm_production must be enabled for a production MSDeploy experiment.'
           }
+          if (
+            $env:ROLLBACK_RELEASE_TAG -and
+            $env:ROLLBACK_RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$'
+          ) {
+            throw 'rollback_release_tag must be empty or use the vMAJOR.MINOR.PATCH format.'
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           fetch-depth: 0
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: inputs.rollback_release_tag == ''
         with:
           global-json-file: global.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.rollback_release_tag == ''
         with:
           node-version: 24
-      - run: npm ci --prefix client
-      - run: npm run build
-      - run: npm run build:metadata
-      - run: npm run validate:content
-      - run: dotnet restore CvOnlinePresenter.sln
-      - run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
+      - if: inputs.rollback_release_tag == ''
+        run: npm ci --prefix client
+      - if: inputs.rollback_release_tag == ''
+        run: npm run build
+      - if: inputs.rollback_release_tag == ''
+        run: npm run build:metadata
+      - if: inputs.rollback_release_tag == ''
+        run: npm run validate:content
+      - if: inputs.rollback_release_tag == ''
+        run: dotnet restore CvOnlinePresenter.sln
+      - if: inputs.rollback_release_tag == ''
+        run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
       - name: Create MSDeploy experiment package
+        if: inputs.rollback_release_tag == ''
         shell: pwsh
         run: Compress-Archive -Path 'artifacts/publish/*' -DestinationPath 'artifacts/msdeploy-experiment.zip' -CompressionLevel Optimal
+      - name: Download immutable rollback package
+        if: inputs.rollback_release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK_RELEASE_TAG: ${{ inputs.rollback_release_tag }}
+        run: |
+          New-Item -ItemType Directory -Path 'artifacts' -Force | Out-Null
+          $assetName = "cv-online-presenter-$env:ROLLBACK_RELEASE_TAG.zip"
+          $release = gh release view $env:ROLLBACK_RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read release '$env:ROLLBACK_RELEASE_TAG'."
+          }
+          $assets = @($release.assets | Where-Object { $_.name -ceq $assetName })
+          if ($assets.Count -ne 1 -or $assets[0].digest -notmatch '^sha256:[a-f0-9]{64}$') {
+            throw "Release asset '$assetName' must have exactly one GitHub SHA-256 digest."
+          }
+
+          gh release download $env:ROLLBACK_RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern $assetName `
+            --dir 'artifacts'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not download release asset '$assetName'."
+          }
+
+          $downloadedPath = Join-Path 'artifacts' $assetName
+          $actualDigest = (Get-FileHash -LiteralPath $downloadedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedDigest = $assets[0].digest.Substring('sha256:'.Length)
+          if ($actualDigest -cne $expectedDigest) {
+            throw "Release asset '$assetName' did not match its GitHub SHA-256 digest."
+          }
+          Move-Item -LiteralPath $downloadedPath -Destination 'artifacts/msdeploy-experiment.zip'
+      - name: Validate deployment package
+        shell: pwsh
+        run: |
+          Expand-Archive `
+            -LiteralPath 'artifacts/msdeploy-experiment.zip' `
+            -DestinationPath 'artifacts/package-validation' `
+            -Force
+          foreach ($requiredFile in @('web.config', 'Portfolio.Web.dll', 'wwwroot/build-metadata.json')) {
+            if (-not (Test-Path -LiteralPath (Join-Path 'artifacts/package-validation' $requiredFile) -PathType Leaf)) {
+              throw "MSDeploy package is missing required file '$requiredFile'."
+            }
+          }
+          Remove-Item -LiteralPath 'artifacts/package-validation' -Recurse -Force
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: msdeploy-experiment-${{ github.run_id }}
@@ -92,15 +161,60 @@ jobs:
               throw "MSDeploy experiment package is missing required file '$requiredFile'."
             }
           }
-      - name: Ensure Microsoft Web Deploy is available
+      - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
         run: |
-          $msDeployPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe'
+          $msDeployRoot = 'C:\Program Files\IIS\Microsoft Web Deploy V3'
+          $msDeployPath = Join-Path $msDeployRoot 'msdeploy.exe'
+          $assemblyPath = Join-Path $msDeployRoot 'Microsoft.Web.Deployment.dll'
           if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
-            choco install webdeploy -y --no-progress
+            $installerPath = Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi'
+            $installerUrl = 'https://download.microsoft.com/download/0/1/D/01DC28EA-638C-4A22-A57B-4CEF97755C6C/WebDeploy_amd64_en-US.msi'
+            $expectedInstallerSha256 = '2150f9d1ab67e1b7b63559fb977ba9adc49f2b064fe2669a2e70d313a36b9a3d'
+            try {
+              Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -MaximumRedirection 0
+              $actualInstallerSha256 = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actualInstallerSha256 -cne $expectedInstallerSha256) {
+                throw 'The Microsoft Web Deploy installer did not match the pinned SHA-256 digest.'
+              }
+              $installerSignature = Get-AuthenticodeSignature -LiteralPath $installerPath
+              if (
+                $installerSignature.Status -ne 'Valid' -or
+                $installerSignature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(, |$)'
+              ) {
+                throw 'The Microsoft Web Deploy installer does not have a valid Microsoft Authenticode signature.'
+              }
+              $installer = Start-Process msiexec.exe `
+                -ArgumentList @('/i', "`"$installerPath`"", '/qn', '/norestart', 'ADDLOCAL=ALL') `
+                -Wait `
+                -PassThru
+              if ($installer.ExitCode -notin @(0, 3010, 1641)) {
+                throw "Microsoft Web Deploy installation failed with exit code $($installer.ExitCode)."
+              }
+            }
+            finally {
+              Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+            }
           }
-          if (-not (Test-Path -LiteralPath $msDeployPath -PathType Leaf)) {
-            throw 'Web Deploy installation failed or msdeploy.exe was not found.'
+
+          $expectedVersions = @{
+            $msDeployPath = '7.1.9419.0650'
+            $assemblyPath = '7.1.9419.0646'
+          }
+          foreach ($entry in $expectedVersions.GetEnumerator()) {
+            if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
+              throw "Verified Web Deploy file '$($entry.Key)' was not found."
+            }
+            if ((Get-Item -LiteralPath $entry.Key).VersionInfo.FileVersion -cne $entry.Value) {
+              throw "Web Deploy file '$($entry.Key)' does not match version '$($entry.Value)'."
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $entry.Key
+            if (
+              $signature.Status -ne 'Valid' -or
+              $signature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(, |$)'
+            ) {
+              throw "Web Deploy file '$($entry.Key)' does not have a valid Microsoft Authenticode signature."
+            }
           }
       - name: Deploy package with MSDeploy
         shell: powershell
@@ -113,7 +227,13 @@ jobs:
             -DeployServerUrl $env:MSDEPLOY_SERVER_URL `
             -DeploySiteName $env:MSDEPLOY_SITE_NAME `
             -DeployUsername $env:DEPLOY_USERNAME `
-            -DeployCertificateSha256 $env:MSDEPLOY_CERTIFICATE_SHA256
+            -DeployCertificateSha256 $env:MSDEPLOY_CERTIFICATE_SHA256 `
+            -OfflinePagePath '.\deployment\app_offline.htm'
       - name: Verify site health
         shell: pwsh
-        run: .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
+        run: |
+          .\scripts\health-check.ps1 -Url $env:DEPLOY_HEALTH_URL
+          $metadataUrl = [Uri]::new([Uri]$env:DEPLOY_HEALTH_URL, '/build-metadata.json')
+          .\scripts\verify-build-metadata.ps1 `
+            -Url $metadataUrl.AbsoluteUri `
+            -ExpectedMetadataPath 'artifact/publish/wwwroot/build-metadata.json'

@@ -17,6 +17,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DeployCertificateSha256,
 
+    [Parameter(Mandatory = $true)]
+    [string]$OfflinePagePath,
+
     [string]$WebDeployAssemblyPath = 'C:\Program Files\IIS\Microsoft Web Deploy V3\Microsoft.Web.Deployment.dll',
 
     [switch]$ValidateOnly
@@ -209,6 +212,14 @@ if ([string]::IsNullOrWhiteSpace($deployUsername)) {
 if ([string]::IsNullOrWhiteSpace($password)) {
     throw 'DEPLOY_PASSWORD is required for MSDeploy.'
 }
+if (-not (Test-Path -LiteralPath $OfflinePagePath -PathType Leaf)) {
+    throw "OfflinePagePath '$OfflinePagePath' must be a file."
+}
+$resolvedOfflinePagePath = (Resolve-Path -LiteralPath $OfflinePagePath).Path
+$offlinePageLength = (Get-Item -LiteralPath $resolvedOfflinePagePath).Length
+if ($offlinePageLength -lt 1 -or $offlinePageLength -gt 1MB) {
+    throw 'OfflinePagePath must contain a non-empty HTML file no larger than 1 MB.'
+}
 if ($certificateSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
     throw 'MSDEPLOY_CERTIFICATE_SHA256 must contain a SHA-256 certificate fingerprint.'
 }
@@ -302,6 +313,11 @@ try {
     $destinationOptions.IncludeAcls = $false
     $destinationOptions.RetryAttempts = 10
     $destinationOptions.RetryInterval = 5000
+    $destinationOptions.AddDefaultProviderSetting(
+        'contentPath',
+        'appOfflineTemplate',
+        $resolvedOfflinePagePath
+    )
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
     foreach ($link in $destinationOptions.LinkExtensions) {
         if ($link.Name -in @('AppPoolExtension', 'ContentExtension', 'CertificateExtension')) {

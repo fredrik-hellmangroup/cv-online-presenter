@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="sv-SE" data-deployment-status="offline">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="refresh" content="15">
+  <title>Tillf&auml;lligt underh&aring;ll &middot; Fredrik Haller&ouml;s</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: #0a0d16;
+      color: #f2f4fa;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      min-height: 100svh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 1.5rem;
+      background:
+        radial-gradient(60rem 40rem at 12% -10%, rgba(255, 107, 44, .18), transparent 65%),
+        radial-gradient(50rem 36rem at 100% 25%, rgba(99, 84, 255, .16), transparent 65%),
+        #0a0d16;
+    }
+
+    main {
+      width: min(100%, 42rem);
+      padding: clamp(2rem, 7vw, 4.5rem);
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 1.5rem;
+      background: rgba(18, 24, 40, .82);
+      box-shadow: 0 2rem 5rem rgba(0, 0, 0, .28);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+
+    .brand-mark {
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #fff, #ff6b2c 55%, transparent 75%);
+      box-shadow: 0 0 1.25rem .2rem #ff6b2c;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin: 0;
+      font-size: clamp(2.5rem, 9vw, 5rem);
+      line-height: .95;
+      letter-spacing: -.055em;
+    }
+
+    p {
+      max-width: 42ch;
+      margin: 1.5rem 0 0;
+      color: #aab3c8;
+      font-size: clamp(1rem, 2.5vw, 1.2rem);
+      line-height: 1.65;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: .6rem;
+      margin-top: 2rem;
+      color: #ff9a5c;
+      font-weight: 700;
+    }
+
+    .status::before {
+      width: .65rem;
+      height: .65rem;
+      border-radius: 50%;
+      background: #ff6b2c;
+      content: "";
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand" aria-label="Fredrik Haller&ouml;s">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>FH</span>
+    </div>
+    <h1>Tillf&auml;lligt underh&aring;ll</h1>
+    <p>Webbplatsen uppdateras just nu och &auml;r snart tillbaka. Sidan f&ouml;rs&ouml;ker ansluta igen automatiskt.</p>
+    <div class="status" role="status">Drifts&auml;ttning p&aring;g&aring;r</div>
+  </main>
+</body>
+</html>
