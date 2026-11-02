@@ -1,11 +1,13 @@
 # Repository boundaries and content delivery
 
+Last updated: 2026-11-02
+
 | Repository | Visibility | Responsibility | Validation |
 | --- | --- | --- | --- |
 | [`cv-online-presenter`](https://github.com/fredrik-hellmangroup/cv-online-presenter) | Public, MIT | .NET application, TypeScript client, deployment, and the [`content/`](../content/README.md) template with synthetic demo data | `Quality gates` workflow |
 | [`cv-online-presenter-content`](https://github.com/fredrik-hellmangroup/cv-online-presenter-content) | **Private** | The real CV: `site.json`, `pages/`, source documents, provenance | `Content validation` and `Deploy content` workflows |
 
-The two repositories are not linked by a submodule or a pinned commit. The app builds and tests against its own `content/` template. The real content reaches the live site as a **content release**: a folder `<ReleasesRoot>/<releaseId>/{site.json,pages/}` that the running app activates without an app redeploy. See [content-releases.md](content-releases.md).
+The two repositories are not linked by a submodule or a pinned commit. The app builds and tests against its own `content/` template. The real content reaches the live site as a **content release**: a folder `<ReleasesRoot>/<releaseId>/{site.json,pages/}` that the running app activates without an app redeploy. After activation, best-effort cleanup retains the active release and the 10 most recent eligible inactive releases; preserved uncertain directories can make the total exceed 11. See [content-releases.md](content-releases.md) for eligibility and safety details. Production assumes one Plesk worker and no overlapping worker during recycle; revisit coordination if web-garden or overlapping-process configuration changes.
 
 Contact metadata and locale settings live in `site.json` of whichever content is active (`content/site.json` in the template). The template is synthetic and uses `demo@example.com`.
 
@@ -30,11 +32,11 @@ flowchart TD
     A --> L(["Live; active-release.txt updated"])
 ```
 
-`releaseId` is `<UTC date>-<short sha>`. The deploy reuses `scripts/deploy-beebyte-iis.ps1 -ContentRelease`, which syncs into a new folder, never deletes, never writes `web.config` and never takes the site offline. The workflow checks out the public app repo at a pinned ref to get the validator and the deploy scripts.
+`releaseId` is `yyyyMMdd-HHmmss-<7 lowercase hex characters>`: the workflow formats the UTC timestamp with `ToString('yyyyMMdd-HHmmss')` and appends a hyphen plus the 7-character lowercase SHA (for example, `20261101-210215-1a6df58`). The deploy reuses `scripts/deploy-beebyte-iis.ps1 -ContentRelease`, which syncs into a new folder, never deletes, never writes `web.config` and never takes the site offline. The workflow checks out the public app repo at a pinned ref to get the validator and the deploy scripts.
 
 ### One-time setup
 
-1. **Server.** Nothing to configure in IIS. The app defaults to `<site root>/App_Data/content-releases` (hidden from HTTP, skipped by the app deploy, so it survives app releases). Make sure the app pool identity has modify rights on it, because the app writes `active-release.txt`. Create the file `App_Data/content-releases/activation-token.txt` once, containing the same value as the `CONTENT_ACTIVATION_TOKEN` secret (at least 32 characters). It is read on every request, so no restart is needed.
+1. **Server.** Nothing to configure in IIS. The app defaults to `<site root>/App_Data/content-releases` (hidden from HTTP, skipped by the app deploy, so it survives app releases). Make sure the app pool identity has modify rights on it, because the app writes `active-release.txt`. Provision `App_Data/content-releases/activation-token.txt` through the reviewed content repository’s `Provision activation token` workflow, using the same value as the `CONTENT_ACTIVATION_TOKEN` secret (at least 32 characters). It is read on every request, so no restart is needed.
 2. **Web Deploy user.** The deployment user must be able to write below the releases folder through Web Deploy. Verify this before the first run.
 3. **GitHub environment `production-content`** in the private repo:
 

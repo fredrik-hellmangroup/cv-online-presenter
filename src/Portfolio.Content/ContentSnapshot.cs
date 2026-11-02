@@ -90,26 +90,59 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
 
 public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapshotLoader loader)
 {
-    private readonly SemaphoreSlim activationLock = new(1, 1);
+    private readonly SemaphoreSlim operationLock = new(1, 1);
     private ContentSnapshot current = initial;
 
     public ContentSnapshot Current => Volatile.Read(ref current);
 
-    public async Task<ContentStructuralDiff> ActivateAsync(string pagesRoot, CancellationToken cancellationToken = default, Action? persist = null)
+    public async Task<ContentStructuralDiff> PreviewAsync(string pagesRoot, CancellationToken cancellationToken = default)
     {
-        var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
-        await activationLock.WaitAsync(cancellationToken);
+        await operationLock.WaitAsync(cancellationToken);
         try
         {
+            var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
+            return ContentSnapshotLoader.Compare(current, candidate);
+        }
+        finally
+        {
+            operationLock.Release();
+        }
+    }
+
+    public async Task<ContentStructuralDiff> ActivateAsync(
+        string pagesRoot,
+        CancellationToken cancellationToken = default,
+        Action? persist = null,
+        Func<Task>? afterCommit = null,
+        Action<Exception>? maintenanceFailure = null)
+    {
+        await operationLock.WaitAsync(cancellationToken);
+        try
+        {
+            var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
             var diff = ContentSnapshotLoader.Compare(current, candidate);
-            // Persisting inside the lock, with no awaits before the swap, keeps the stored pointer and the served snapshot in the same order.
+            // Persisting and swapping without an await/cancellation gap keeps the pointer and served snapshot ordered.
             persist?.Invoke();
             Volatile.Write(ref current, candidate);
+
+            if (afterCommit is not null)
+            {
+                try
+                {
+                    // Post-commit maintenance is best effort and deliberately has no request cancellation token.
+                    await afterCommit();
+                }
+                catch (Exception exception)
+                {
+                    try { maintenanceFailure?.Invoke(exception); }
+                    catch { /* Logging must not reverse or obscure the committed activation. */ }
+                }
+            }
             return diff;
         }
         finally
         {
-            activationLock.Release();
+            operationLock.Release();
         }
     }
 }

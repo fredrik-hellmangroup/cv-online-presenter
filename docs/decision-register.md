@@ -1,5 +1,7 @@
 # Owner decision register
 
+Last updated: 2026-11-02
+
 This register maps the PRD's open questions to current safe template behavior. A safe default is not owner approval. Do not publish profile facts, contact details, images, or deployment settings until the owner confirms the corresponding decision.
 
 | OQ | Current state | Owner input required to close |
@@ -13,14 +15,14 @@ This register maps the PRD's open questions to current safe template behavior. A
 | 07 — Analytics | Disabled; no analytics script, vendor, or tracking requests are configured. | Confirm to keep off or specify provider, purpose, events, consent, and retention before implementation. |
 | 08 — Visual identity and image rights | Owner selected a user-provided `logo.svg`, due no later than deployment. Colors and typography may start as a design draft informed by public consultant-site research, not as a final brand standard. Use the system font stack; no external font service. Additional photographs/illustrations are out of scope. Current palette (Immersive Dark, replaces the earlier off-white/teal draft): near-black `#0a0d16`, text `#f2f4fa`, muted `#aab3c8`, orange accent `#ff6b2c` with links `#ff9a5c`, focus `#7dd3fc`; light alternative `#f7f4ee`, ink `#14161f`, accent `#c2410c`. Benchmark references: [Kvadrat](https://www.kvadrat.se/om-kvadrat/aktuellt/kvadrat-far-ny-grafisk-identitet/), [Consid](https://www.consid.com/sv/), [Ework](https://www.eworkgroup.com/sv/), [Knowit](https://www.knowit.eu/). | Provide `logo.svg` before deployment and confirm that it may be used on the website. Revisit the draft colors/type if a formal brand guide is supplied. |
 | 09 — Contact flow | Owner selected an email link (`mailto:`) at first and later approved a contact form protected by Cloudflare Turnstile. The form is built but stays hidden until Turnstile and SMTP are configured; until then the page shows a contact card with a `mailto:` link to `contactEmail` (`demo@example.com` in the public template; the real address lives in the private content repo's `site.json`). See [contact-form.md](contact-form.md). | Owner creates the Turnstile site, supplies SMTP credentials as secrets, and approves the privacy wording before enabling. |
-| 10 — IIS SLO, backup/retention, incident owner | Out of scope for the current delivery; no production SLO, backup/retention schedule, or incident owner is declared. This does not approve production operations. | Revisit if production operations become part of scope; define targets and ownership before then. |
+| 10 — IIS SLO, backup/retention, incident owner | Broader production operations remain unresolved: no production SLO, backup guarantee/schedule, or incident owner is declared. Separately, for issue #57 the owner approved application retention of the active release plus the 10 most recent eligible inactive releases, with no grace period; malformed, incomplete, unrecognized, or reparse-point directories are preserved. Permanent deletion outside that window is approved, but is not a backup guarantee. Production assumes Plesk’s default single worker; revisit cleanup/activation coordination if worker or web-garden configuration changes. | Define production SLO, backup/restore policy, and incident ownership if production operations enter scope. The #57 retention decision does not close these broader items. |
 
 ## Release impact
 
 - #1 stays open for the implementation conformance review against the recovered ADR source; source and PRD traceability are now recorded.
 - #7 stays open until the IIS target and deployment network in OQ-05 are configured and staging health is verified.
 - #8 stays open until a rollback is demonstrated on that staging target and the result is recorded.
-- #12's OQ-04 and OQ-08 decisions are recorded. The user-provided `logo.svg` remains a deployment prerequisite. OQ-05 is resolved for the current app/hosting decision; optional staging-pipeline configuration remains a deployment gate tracked by #7. OQ-10 is deferred as out of scope for the current delivery. Public release is not approved by this register.
+- #12's OQ-04 and OQ-08 decisions are recorded. The user-provided `logo.svg` remains a deployment prerequisite. OQ-05 is resolved for the current app/hosting decision; optional staging-pipeline configuration remains a deployment gate tracked by #7. Broader OQ-10 production-operations policy remains deferred; issue #57 retention is approved as recorded above. Public release is not approved by this register.
 
 ## Tracking source
 

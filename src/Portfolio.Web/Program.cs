@@ -80,6 +80,10 @@ builder.Services.AddSingleton(provider => new SiteContent(store, provider.GetReq
 var app = builder.Build();
 if (startupWarning is not null) app.Logger.LogWarning("{Message}", startupWarning);
 app.Logger.LogInformation("Serving content {Source} with snapshot {Version}", activeReleaseId is null ? "bundled with the app" : $"release {activeReleaseId}", initialSnapshot.Version);
+if (releaseCatalog is not null)
+    app.Logger.LogInformation(
+        "Content release pruning uses path-based checks; release-root writers must remain restricted to additive serialized deploy-content uploads and this app's single Plesk activation worker ({ReleaseRoot})",
+        releaseCatalog.Root);
 var siteContent = app.Services.GetRequiredService<SiteContent>();
 var contactForm = app.Services.GetRequiredService<ContactFormSettings>();
 const string baseCsp = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -229,15 +233,28 @@ if (releaseCatalog is not null)
         var pages = releaseCatalog.PagesPath(releaseId);
         try
         {
-            var candidate = await loader.LoadAsync(pages, context.RequestAborted);
-            var diff = ContentSnapshotLoader.Compare(store.Current, candidate);
-            if (action == "activate")
-            {
-                // The pointer is persisted inside the store's activation lock and only after the candidate loaded,
-                // so a restart never selects an invalid release and concurrent activations stay ordered.
-                diff = await store.ActivateAsync(pages, context.RequestAborted, () => releaseCatalog.WriteActiveReleaseId(releaseId));
-                app.Logger.LogInformation("Activated content release {ReleaseId} with snapshot {Version}", releaseId, diff.ToVersion);
-            }
+            if (action == "preview")
+                return Results.Json(await store.PreviewAsync(pages, context.RequestAborted));
+
+            // The store loads, persists, swaps and prunes under one lock. Pruning is post-commit and best effort.
+            var diff = await store.ActivateAsync(
+                pages,
+                context.RequestAborted,
+                persist: () => releaseCatalog.WriteActiveReleaseId(releaseId),
+                afterCommit: async () =>
+                {
+                    var result = await releaseCatalog.PruneInactiveReleasesAsync(releaseId, loader);
+                    if (result.Aborted)
+                        app.Logger.LogWarning("Content release cleanup aborted after activation of {ReleaseId}: {Reason}", releaseId, result.AbortReason);
+                    else
+                        app.Logger.LogInformation(
+                            "Content release cleanup completed after activation of {ReleaseId}: {EligibleInactiveCount} eligible inactive, {RetainedInactiveCount} retained, {DeletedCount} deleted ({DeletedReleaseIds}), {IssueCount} cleanup issue(s)",
+                            releaseId, result.EligibleInactiveReleaseCount, result.RetainedInactiveReleaseCount, result.DeletedReleaseIds.Count, result.DeletedReleaseIds, result.Issues.Count);
+                    foreach (var issue in result.Issues)
+                        app.Logger.LogWarning("Content release cleanup issue for {ReleaseId}: {Reason}", issue.ReleaseId, issue.Reason);
+                },
+                maintenanceFailure: exception => app.Logger.LogError(exception, "Content release cleanup failed after activation of {ReleaseId}", releaseId));
+            app.Logger.LogInformation("Activated content release {ReleaseId} with snapshot {Version}", releaseId, diff.ToVersion);
             return Results.Json(diff);
         }
         catch (Exception exception) when (exception is ContentValidationException or IOException or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException)
