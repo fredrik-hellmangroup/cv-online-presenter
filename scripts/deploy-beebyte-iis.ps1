@@ -429,7 +429,7 @@ try {
     $destinationOptions.UserName = $deployUsername
     $destinationOptions.AuthenticationType = 'Basic'
     $destinationOptions.IncludeAcls = $false
-    $destinationOptions.RetryAttempts = 10
+    $destinationOptions.RetryAttempts = 0
     $destinationOptions.RetryInterval = 5000
     $destinationOptions.SkipDirectory('(?:^|[\\/])\.well-known(?:[\\/]|$)')
     if (-not $isContentOnlyMode) {

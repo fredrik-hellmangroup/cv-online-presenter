@@ -1,46 +1,46 @@
 # Beebyte rollback runbook
 
-Last updated: 2026-11-02
+Last updated: 2026-11-03
 
-Rollback is currently a manual redeployment of an earlier immutable GitHub Release package through the same deployment and verification checks as a normal release. There is no automatic rollback or recovery today. The legacy `rollback-iis.ps1` script is not used, because it needs local filesystem and app-pool access that Beebyte does not provide.
+Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. The legacy `rollback-iis.ps1` script is not used because it needs local filesystem and app-pool access that Beebyte does not provide.
 
 ```mermaid
 flowchart LR
-    A["Choose prior immutable release"] --> B["Dispatch MSDeploy experiment from main"]
-    B --> C["Verify package SHA-256"]
-    C --> D["Deploy with offline page"]
-    D --> E{"Health and exact metadata match?"}
-    E -->|yes| F(["Verify offline marker absent; record restoration"])
-    E -->|no| G(["Keep safe maintenance state; operator escalation"])
+    A["Choose immutable release"] --> B["Dispatch MSDeploy experiment from main"]
+    B --> C["Validate candidate and LKG digests"]
+    C --> D["Deploy through Web Deploy"]
+    D --> E{"Health, exact metadata, marker absent?"}
+    E -->|yes| F(["Write verified live artifact to LKG"])
+    E -->|no| R["One rollback attempt from prior LKG"]
+    R --> V{"Restored health, exact metadata, marker absent?"}
+    V -->|yes| X(["Candidate run fails; prior LKG retained"])
+    V -->|no| G(["Report both failures; operator/provider escalation"])
 ```
 
 ## Manual rollback steps
 
-1. Choose the previous immutable `cv-online-presenter-<tag>.zip` on GitHub Releases. A published release is not proof it was deployed; select a known-good artifact based on deployment evidence.
-2. Run **MSDeploy experiment** from `main`.
-3. Set `confirm_production` and enter the semantic tag in `rollback_release_tag`.
-4. The workflow checks that the tag is reachable from `main`, downloads the package, and verifies its SHA-256 digest against the GitHub Release asset digest.
-5. `/health` must pass and live `/build-metadata.json` must exactly match the rollback artifact.
-6. After restoration is verified, confirm the active root `app_offline.htm` marker is absent, then record the deployed tag, digest, metadata, and verification in the release incident or exercise log.
+1. Confirm the protected `production-state` branch has a valid `lkg-v1.json` and that its exact recorded immutable package is available. The workflow validates this prior LKG before any sync; never select a rollback based on tag ordering or `latest`.
+2. Choose the desired immutable `cv-online-presenter-<tag>.zip` on GitHub Releases. A published release is not proof it was deployed; the workflow updates LKG only after verified live deployment.
+3. Run **MSDeploy experiment** from `main`.
+4. Set `confirm_production` and enter the semantic tag or exact `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
+5. The workflow checks the tag is reachable from `main`, verifies the downloaded bytes against the GitHub asset digest, verifies the embedded metadata, and validates the prior LKG asset before sync.
+6. `/health`, exact live `/build-metadata.json`, and the active root marker check must pass. The successful manual rollback is then recorded as the actual live LKG using a non-force state-branch update.
 
 Do not rebuild an old source tag when its release package exists. Never run FTPS automatically after an MSDeploy failure. The FTPS helper is break-glass only, for when WMSvc itself is unavailable. If you use it, record the exception and verify health, exact metadata, and offline-marker absence after restoration.
 
-If health or metadata cannot be verified, or the site continues returning HTTP 503 after an immutable redeploy, do not remove an active root `app_offline.htm` marker. Preserve the safe maintenance/offline state and escalate. The v1.0.10 incident demonstrated that redeploying the immutable package did not recover the site; recovery required the operator/provider to recycle or restart the IIS app pool. The workflows do not manage the pool. Escalate persistent 503 to the operator/provider for that action; do not represent pool recycle/restart as automated recovery.
+On a candidate sync, health, metadata, or marker-verification failure, the workflow makes exactly one sync to the prior LKG package and verifies health, exact metadata, and marker absence. It still reports the candidate run as failed. If restoration fails, both the original and recovery errors are reported and there is no retry. Do not manually remove a marker through unsupported APIs. Persistent HTTP 503 is operator/provider escalation; no app-pool restart is done by the workflows. The v1.0.10 incident showed an immutable redeploy may not recover a persistent 503.
 
-## Phase 2: accepted, deferred
+## Durable LKG, recovery, and failure limits
 
-Issue #56's bounded automatic rollback is accepted but deferred until provider preflight, artifact identity recording, and safe failure-injection tests are complete. This describes a future boundary, not current behavior.
+`production-state` is a dedicated branch containing the versioned `lkg-v1.json` record. It describes the artifact actually verified live, not the latest published tag. Record fields are: nullable source tag, source commit, app/content/build metadata, package SHA-256, exact immutable recovery release tag and asset name, workflow/run/attempt evidence, UTC verification time, and health/metadata/marker evidence. No fallback to `latest`, tag order, rebuilding, or a short-retention Actions artifact is permitted.
 
-The proposal is exactly one bounded automatic rollback attempt on a sync failure or a health/metadata verification failure, and only after the prior **actually deployed** artifact identity is recorded and its immutable package digest verifies. The record must correctly handle a manual rollback and distinguish a published-but-not-deployed release from the live deployment. A GitHub Release tag alone is insufficient.
+Before either workflow syncs, it reads and validates the LKG record, downloads that exact GitHub Release asset, compares the GitHub-published digest with downloaded bytes and the record, and checks embedded metadata. Any missing/malformed record, unavailable asset, digest mismatch, or metadata mismatch fails closed. Bootstrap the protected branch from independently verified current production deployment evidence before enabling deployment workflows.
 
-Recovery is successful only when, after restoration, all three conditions are true: health passes, exact metadata matches the restored artifact, and the active root `app_offline.htm` marker is absent. If rollback, cleanup, or verification cannot complete, the deployment remains failed; preserve maintenance/offline state and escalate to an operator. There is no unqualified guarantee under runner, WMSvc, or network failure.
+For a manual-main deployment, a separate restricted publication job archives the exact package artifact first as `recovery/manual-<run-id>-<attempt>` with a uniquely named asset and explicitly targets the source commit used to package. The deployment job verifies the release asset digest and bytes against the SHA-256 produced by the package job before deployment; that prefix cannot trigger the automatic `v*.*.*` release workflow. The release locator becomes LKG only after successful live verification. A manual rollback similarly records the selected immutable release as the actual live artifact only after successful verification.
 
-Preflight requirements:
+On successful candidate verification, a separate `contents: write` state job writes LKG by a non-force branch push; the deployment job retains read-only repository permissions. GitHub branch state and IIS cannot be changed atomically: a failed/ambiguous state write after successful live verification is a distinct failure requiring operator reconciliation, not another rollback. After automatic rollback succeeds, the prior LKG remains unchanged and the candidate workflow remains failed.
 
-- Confirm Beebyte-supported remote root-marker delete and verification operations.
-- Establish a trustworthy live-deployed tag-and-digest record that handles manual rollback and published-but-not-deployed releases.
-- Determine whether Beebyte provides a supported app-pool restart API. Do not automate pool recycle/restart absent explicit provider support; otherwise persistent 503 remains an operator/provider escalation.
-- Add safe failure-injection tests for sync and health/metadata failures, failed rollback/cleanup/verification, and runner/WMSvc/network interruption.
+Cleanup is limited to the existing Web Deploy ContentPath/AppOffline lifecycle. There is no established remote marker delete/readback API, so the workflow does not claim or attempt separate deletion; after restored health and metadata pass, it checks `/app_offline.htm` for the offline marker. It does not use a `finally` cleanup. Runner loss, network interruption, or WMSvc interruption can prevent restoration or confirmation. No unconditional recovery/cleanup guarantee is possible. `App_Data` and `.well-known` are preserved by the existing sync exclusions. No app-pool restart is attempted.
 
 ## Release notes
 

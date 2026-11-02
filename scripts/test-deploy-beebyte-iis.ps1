@@ -123,6 +123,7 @@ if ($offlineHtml -match '(?i)<script\b|(?:src|href)\s*=\s*["''](?:https?:)?//') 
 
 $deployScript = [IO.File]::ReadAllText($deployScriptPath)
 foreach ($requiredDeployFragment in @(
+        '$destinationOptions.RetryAttempts = 0'
         "ProviderSettings['AppOfflineTemplate'].Value"
         "'App_Data\app_offline.template.htm'"
         '$templateSource.SyncTo('
@@ -138,6 +139,11 @@ foreach ($requiredDeployFragment in @(
         throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."
     }
 }
+$retryAssignments = [regex]::Matches($deployScript, '(?m)^\s*\$destinationOptions\.RetryAttempts\s*=\s*(\d+)\s*$')
+if ($retryAssignments.Count -ne 1 -or $retryAssignments[0].Groups[1].Value -ne '0') {
+    throw 'One SyncTo operation must configure exactly zero remote Web Deploy retries.'
+}
+
 if ($deployScript.Contains(".Value = `$resolvedOfflinePagePath")) {
     throw 'AppOfflineTemplate must be a destination-relative path, not a local absolute path.'
 }
@@ -155,8 +161,7 @@ foreach ($requiredWorkflowFragment in @(
         'git merge-base --is-ancestor'
         "ensure-webdeploy.ps1"
         'MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}'
-        'verify-build-metadata.ps1'
-        "-OfflinePagePath '.\deployment\app_offline.htm'"
+        'run-production-deployment.ps1'
     )) {
     if (-not $workflow.Contains($requiredWorkflowFragment)) {
         throw "The MSDeploy workflow is missing '$requiredWorkflowFragment'."
@@ -169,6 +174,21 @@ if ($workflow.Contains('DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}')) 
     throw 'MSDeploy must not reuse the FTPS-only DEPLOY_CONTENT_PATH value.'
 }
 
+$productionRunnerPath = Join-Path $PSScriptRoot 'run-production-deployment.ps1'
+$productionRunner = [IO.File]::ReadAllText($productionRunnerPath)
+foreach ($requiredRunnerFragment in @(
+        'deploy-beebyte-iis.ps1'
+        'verify-build-metadata.ps1'
+        'health-check.ps1'
+        'production-state'
+        'Get-ReleaseAsset'
+        'Assert-PackageSha256'
+        'app_offline.htm'
+    )) {
+    if (-not $productionRunner.Contains($requiredRunnerFragment)) {
+        throw "The production orchestration is missing '$requiredRunnerFragment'."
+    }
+}
 $releaseWorkflow = [IO.File]::ReadAllText($releaseWorkflowPath)
 foreach ($requiredReleaseFragment in @(
         'name: production-msdeploy'
@@ -177,9 +197,7 @@ foreach ($requiredReleaseFragment in @(
         'MSDEPLOY_CONTENT_PATH: ${{ vars.MSDEPLOY_CONTENT_PATH }}'
         'MSDEPLOY_CERTIFICATE_SHA256: ${{ vars.MSDEPLOY_CERTIFICATE_SHA256 }}'
         "ensure-webdeploy.ps1"
-        "deploy-beebyte-iis.ps1"
-        "verify-build-metadata.ps1"
-        "-OfflinePagePath '.\deployment\app_offline.htm'"
+        'run-production-deployment.ps1'
     )) {
     if (-not $releaseWorkflow.Contains($requiredReleaseFragment)) {
         throw "The primary release workflow is missing '$requiredReleaseFragment'."
