@@ -50,11 +50,13 @@ Each request pins one snapshot before routing, so page content, site identity, c
 
 **Production content deployment and rollback verified (2026-11-02):**
 
+- **App-pool recycle after the 503 incident:** The operator confirmed the IIS app pool was restarted/recycled. Immediately afterward, at 2026-11-02 11:44 UTC, live `/health` returned HTTP 200; static build metadata reported appRevision `fb858d63b25e98058b3bd538b11d755c41951e96`, contentRevision `56fc7b90625f841785dc54fc39ee0ed9d345b23b`, and buildId `41362144486`. `scripts/write-build-metadata.mjs` sets `contentRevision` from `git rev-parse HEAD:content` and writes it to static `wwwroot/build-metadata.json`, which `PortfolioTelemetry.ReleaseIdentity.Load` reads. Thus the metadata identifies bundled template content, not the selected private runtime release. The health response and metadata verify app responsiveness and bundled build identity after recycle, but do not prove which private content release or pointer was active. **Active-content-pointer persistence across recycle remains unverified**, pending a post-recycle live-content or pointer-specific check.
 - **Push deployment:** Normal push run `41439229423`, triggered by content PR #15 merge commit `70df2cfc1b52e87cd0869f3838745c18b670616a`, activated `20261102-114607-70df2cf`. Preview: 0 added, 0 removed, 1 changed. Workflow health succeeded; live `/health` returned 200. `/cv` showed the approved employment wording, and its H1 was confirmed after HTML entity decoding with separate name and tagline spans.
 - **Rollback:** Run `41439769084` activated the confirmed prior release `20261101-210215-1a6df58`. Preview: 0/0/1. Workflow and live health returned 200. The prior release's content was confirmed live on `/cv`.
 - **Restoration:** Run `41439874103` reactivated `20261102-114607-70df2cf`. Preview: 0/0/1; health returned 200. `/cv` again showed the approved employment wording, and its H1 was confirmed after HTML entity decoding with separate name and tagline spans.
 
-**Remaining gap:** A deliberate IIS app-pool restart was not tested; persistence across that restart is unverified.
+**Remaining gap:** Although an operator-confirmed app-pool recycle was followed by HTTP 200 and bundled-build metadata at 11:44 UTC, active private release/pointer persistence across that recycle remains unverified. Verify with post-recycle live content or pointer-specific evidence.
+
 
 ## Provisioning incident runbook
 
