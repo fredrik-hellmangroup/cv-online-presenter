@@ -67,7 +67,7 @@ var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot)
     ? null
     : new ContentReleaseCatalog(Path.GetFullPath(releasesRoot, builder.Environment.ContentRootPath));
 string? ResolveActivationToken() => !string.IsNullOrWhiteSpace(configuredActivationToken)
-    ? configuredActivationToken
+    ? configuredActivationToken.Length >= ContentReleaseCatalog.MinimumActivationTokenLength ? configuredActivationToken : null
     : releaseCatalog?.ReadActivationToken();
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
 var loader = new ContentSnapshotLoader(PortfolioRoutes.CorePages.Values.ToArray());

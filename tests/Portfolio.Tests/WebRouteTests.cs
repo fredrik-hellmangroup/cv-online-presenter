@@ -420,6 +420,33 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         }
     }
 
+    [Theory]
+    [InlineData("/internal/content/active", "GET")]
+    [InlineData("/internal/content/preview/candidate-release", "POST")]
+    [InlineData("/internal/content/activate/candidate-release", "POST")]
+    public async Task ProtectedContentRoutesRejectConfiguredActivationTokensBelowMinimum(string path, string method)
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-short-activation-token-" + Guid.NewGuid().ToString("N"));
+        const string releaseId = "candidate-release";
+        CreateRelease(releasesRoot, releaseId, "Candidate content");
+        var shortToken = new string('s', ContentReleaseCatalog.MinimumActivationTokenLength - 1);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot, shortToken);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var request = new HttpRequestMessage(new HttpMethod(method), path);
+            request.Headers.Add("X-Content-Activation-Token", shortToken);
+
+            var response = await httpsClient.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ActiveContentRouteRequiresTheExistingHttpsAndTokenBoundary()
     {
@@ -552,11 +579,11 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("data-json=\"{&quot;groups&quot;", html);
     }
 
-    private static WebApplicationFactory<Program> CreateReleaseFactory(string releasesRoot) =>
+    private static WebApplicationFactory<Program> CreateReleaseFactory(string releasesRoot, string? activationToken = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Content:ReleasesRoot", releasesRoot);
-            builder.UseSetting("Content:ActivationToken", TestActivationToken);
+            builder.UseSetting("Content:ActivationToken", activationToken ?? TestActivationToken);
         });
 
     private static HttpClient CreateHttpsClient(WebApplicationFactory<Program> activeFactory) =>
