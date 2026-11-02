@@ -51,7 +51,7 @@ flowchart TD
 ```
 
 - Real content is edited in the private content repository only. The public `content/` folder is a demo template.
-- A content push to `main` deploys a new immutable release folder and activates it. The active release is persisted in `active-release.txt` and survives app restarts and app releases.
+- A content push to `main` deploys a new immutable release folder and activates it. The active release pointer is persisted in `active-release.txt`, and the app reloads it by design. Persistence across app releases is verified; persistence across an app-pool restart remains unverified. See [docs/content-releases.md](docs/content-releases.md) for the current verification evidence.
 - Rollback is re-activating an earlier release id. See [docs/content-releases.md](docs/content-releases.md).
 - App releases stay a manual `vMAJOR.MINOR.PATCH` tag on `main`. The bundled demo content is only a fallback when no content release is active.
 
