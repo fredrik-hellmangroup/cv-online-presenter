@@ -48,7 +48,13 @@ Each request pins one snapshot before routing, so page content, site identity, c
 
 **Verified:** The app main/release commit `fb858d63b25e98058b3bd538b11d755c41951e96` contains #61. Tag/release `v1.0.10` passed full deployment and health/metadata checks in run `41362144486`; production `/health` returned HTTP 200. Token-only provisioning run `41362063163` succeeded; the primary environment secret was set from that same in-memory token, and the staged `NEXT` secret was later removed. Current `APP_REPO_REF` is `main`. After the full app deploy, authenticated content run `41362455305` previewed 3 added, 1 removed, and 5 changed sections, then activated `20261101-210215-1a6df58`. This confirms the root token remained available and matched the primary secret after deployment; successful activation also confirms the app-pool identity could write the active pointer. Immutable-package redeploy run `41362579683` passed. Follow-up run `41362687186` previewed 0 added, 0 removed, and 0 changed, then reactivated the same release, confirming content persistence across an app redeploy.
 
-**Not verified:** A deliberate IIS app-pool restart was not tested. The normal push-triggered content deployment was not run. No content rollback was attempted. Earlier run `41347450843` uploaded the same target but failed preview; there is no distinct known earlier release id or server inventory. Do not treat that run as a confirmed rollback target: rollback requires a distinct, confirmed existing release id.
+**Production content deployment and rollback verified (2026-11-02):**
+
+- **Push deployment:** Normal push run `41439229423`, triggered by content PR #15 merge commit `70df2cfc1b52e87cd0869f3838745c18b670616a`, activated `20261102-114607-70df2cf`. Preview: 0 added, 0 removed, 1 changed. Workflow health succeeded; live `/health` returned 200. `/cv` showed the approved employment wording, and its H1 was confirmed after HTML entity decoding with separate name and tagline spans.
+- **Rollback:** Run `41439769084` activated the confirmed prior release `20261101-210215-1a6df58`. Preview: 0/0/1. Workflow and live health returned 200. The prior release's content was confirmed live on `/cv`.
+- **Restoration:** Run `41439874103` reactivated `20261102-114607-70df2cf`. Preview: 0/0/1; health returned 200. `/cv` again showed the approved employment wording, and its H1 was confirmed after HTML entity decoding with separate name and tagline spans.
+
+**Remaining gap:** A deliberate IIS app-pool restart was not tested; persistence across that restart is unverified.
 
 ## Provisioning incident runbook
 
