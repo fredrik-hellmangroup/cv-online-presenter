@@ -67,12 +67,12 @@ var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot)
     ? null
     : new ContentReleaseCatalog(Path.GetFullPath(releasesRoot, builder.Environment.ContentRootPath));
 string? ResolveActivationToken() => !string.IsNullOrWhiteSpace(configuredActivationToken)
-    ? configuredActivationToken
+    ? configuredActivationToken.Length >= ContentReleaseCatalog.MinimumActivationTokenLength ? configuredActivationToken : null
     : releaseCatalog?.ReadActivationToken();
 var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
 var loader = new ContentSnapshotLoader(PortfolioRoutes.CorePages.Values.ToArray());
 var (initialSnapshot, activeReleaseId, startupWarning) = await LoadInitialSnapshotAsync(loader, releaseCatalog, contentRoot);
-var store = new ContentSnapshotStore(initialSnapshot, loader);
+var store = new ContentSnapshotStore(initialSnapshot, loader, activeReleaseId);
 var service = new MarkdownContentService();
 builder.Services.AddSingleton(store);
 builder.Services.AddSingleton(provider => new SiteContent(store, provider.GetRequiredService<IHttpContextAccessor>(), service));
@@ -99,7 +99,9 @@ else app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 }));
 app.Use(async (context, next) =>
 {
-    context.Items[typeof(ContentSnapshot)] = store.Current;
+    var contentState = store.CurrentState;
+    context.Items[typeof(ContentReleaseState)] = contentState;
+    context.Items[typeof(ContentSnapshot)] = contentState.Snapshot;
     context.Response.Headers["Content-Security-Policy"] = contactForm.IsEnabled && context.Request.Path.StartsWithSegments("/contact") ? contactCsp : baseCsp;
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Cache-Control"] = "no-cache";
@@ -223,6 +225,14 @@ app.MapGet("/robots.txt", (HttpContext context) =>
 });
 if (releaseCatalog is not null)
 {
+    app.MapGet("/internal/content/active", (HttpContext context) =>
+    {
+        // Read the state captured before routing; release identity and served version are one snapshot.
+        var activationToken = ResolveActivationToken();
+        if (string.IsNullOrWhiteSpace(activationToken) || !context.Request.IsHttps || !IsAuthorized(context, activationToken)) return Results.NotFound();
+        var state = context.Items[typeof(ContentReleaseState)] as ContentReleaseState ?? store.CurrentState;
+        return Results.Json(new { contentReleaseId = state.ContentReleaseId, contentVersion = state.Snapshot.Version });
+    });
     app.MapPost("/internal/content/{action}/{releaseId}", async (HttpContext context, string action, string releaseId) =>
     {
         // The token is read per request so provisioning the token file needs no app restart.
@@ -239,6 +249,7 @@ if (releaseCatalog is not null)
             // The store loads, persists, swaps and prunes under one lock. Pruning is post-commit and best effort.
             var diff = await store.ActivateAsync(
                 pages,
+                releaseId,
                 context.RequestAborted,
                 persist: () => releaseCatalog.WriteActiveReleaseId(releaseId),
                 afterCommit: async () =>

@@ -88,12 +88,24 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
     private sealed record SiteIdentitySettings(string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null);
 }
 
-public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapshotLoader loader)
+public sealed record ContentReleaseState(string? ContentReleaseId, ContentSnapshot Snapshot);
+
+public sealed class ContentSnapshotStore
 {
     private readonly SemaphoreSlim operationLock = new(1, 1);
-    private ContentSnapshot current = initial;
+    private readonly ContentSnapshotLoader loader;
+    private ContentReleaseState currentState;
 
-    public ContentSnapshot Current => Volatile.Read(ref current);
+    public ContentSnapshotStore(ContentSnapshot initial, ContentSnapshotLoader loader, string? contentReleaseId = null)
+    {
+        ArgumentNullException.ThrowIfNull(initial);
+        this.loader = loader ?? throw new ArgumentNullException(nameof(loader));
+        currentState = new(contentReleaseId, initial);
+    }
+
+    public ContentReleaseState CurrentState => Volatile.Read(ref currentState);
+
+    public ContentSnapshot Current => CurrentState.Snapshot;
 
     public async Task<ContentStructuralDiff> PreviewAsync(string pagesRoot, CancellationToken cancellationToken = default)
     {
@@ -101,7 +113,7 @@ public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapsho
         try
         {
             var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
-            return ContentSnapshotLoader.Compare(current, candidate);
+            return ContentSnapshotLoader.Compare(CurrentState.Snapshot, candidate);
         }
         finally
         {
@@ -111,6 +123,7 @@ public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapsho
 
     public async Task<ContentStructuralDiff> ActivateAsync(
         string pagesRoot,
+        string? releaseId,
         CancellationToken cancellationToken = default,
         Action? persist = null,
         Func<Task>? afterCommit = null,
@@ -120,10 +133,10 @@ public sealed class ContentSnapshotStore(ContentSnapshot initial, ContentSnapsho
         try
         {
             var candidate = await loader.LoadAsync(pagesRoot, cancellationToken);
-            var diff = ContentSnapshotLoader.Compare(current, candidate);
-            // Persisting and swapping without an await/cancellation gap keeps the pointer and served snapshot ordered.
+            var diff = ContentSnapshotLoader.Compare(CurrentState.Snapshot, candidate);
+            // Persisting and swapping without an await/cancellation gap keeps the pointer and served state ordered.
             persist?.Invoke();
-            Volatile.Write(ref current, candidate);
+            Volatile.Write(ref currentState, new ContentReleaseState(releaseId, candidate));
 
             if (afterCommit is not null)
             {

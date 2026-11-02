@@ -29,9 +29,10 @@ A release id may contain letters, digits, `-` and `_` (max 100 characters). Rele
 Runtime selection requires a releases root and an activation token (see the operational requirements below). Over HTTPS, with the header `X-Content-Activation-Token`:
 
 - `POST /internal/content/preview/{releaseId}` validates the release and returns the diff against the active snapshot without switching.
-- `POST /internal/content/activate/{releaseId}` validates, writes `active-release.txt` atomically, then switches the snapshot.
+- `POST /internal/content/activate/{releaseId}` validates, writes `active-release.txt` atomically, then switches the active release state.
+- `GET /internal/content/active` returns only `{"contentReleaseId":"<id-or-null>","contentVersion":"<served-snapshot-hash>"}`. It uses the same HTTPS and `X-Content-Activation-Token` boundary. The bundled snapshot (including startup fallback) reports a null release ID; a selected or activated private release reports its exact ID.
 
-Invalid candidates leave the current snapshot and pointer unchanged. Because the pointer is persisted, the active release survives app releases. **Rollback** requires activating a distinct, confirmed existing release id; an upload or failed preview is not evidence that a usable prior release exists.
+The release ID and content snapshot are one immutable state pinned together at request start. Activation persists the pointer before publishing that state; failed validation or pointer persistence leaves the old ID and snapshot served. Because the pointer is persisted, the active release survives app releases. **Rollback** requires activating a distinct, confirmed existing release id; an upload or failed preview is not evidence that a usable prior release exists.
 
 ## Operational requirements
 
@@ -55,7 +56,7 @@ The active release is retained. Eligible inactive releases are ordered by UTC ti
 
 Releases outside the retention window are permanently deleted. This approval is not a backup guarantee and does not promise recovery of deleted releases. Cleanup assumes one Plesk worker and no overlapping worker process during recycle. If hosting changes to a web-garden or otherwise allows overlapping processes, revisit cleanup/activation coordination before relying on this behavior.
 
-Each request pins one snapshot before routing, so page content, site identity, canonical/social metadata, and sitemap paths agree during activation. Structured data remains disabled pending owner approval. Styles and script entrypoints carry the content version; HTTP responses use `no-cache` so imported scripts and other static assets revalidate across app releases. The content release root is separate from the IIS application release directory; app rollback still follows the [IIS runbook](rollback-runbook.md).
+Each request pins one immutable release state before routing, so the active-release endpoint, page content, site identity, canonical/social metadata, and sitemap paths agree during activation. Structured data remains disabled pending owner approval. Styles and script entrypoints carry the content version; HTTP responses use `no-cache` so imported scripts and other static assets revalidate across app releases. The content release root is separate from the IIS application release directory; app rollback still follows the [IIS runbook](rollback-runbook.md).
 
 ## Production verification and known gaps (2026-11-02)
 

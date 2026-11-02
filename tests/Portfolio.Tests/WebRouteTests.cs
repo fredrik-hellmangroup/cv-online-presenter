@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Portfolio.Content;
 using Portfolio.Web;
 
 namespace Portfolio.Tests;
@@ -15,6 +16,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
 {
     private readonly HttpClient client;
     private readonly WebApplicationFactory<Program> factory;
+    private const string TestActivationToken = "issue-58-test-token-only-not-a-secret-value";
 
     public WebRouteTests(WebApplicationFactory<Program> factory)
     {
@@ -263,10 +265,218 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task HealthEndpointReturnsOk()
+    public async Task HealthEndpointPreservesTheExistingPublicResponse()
     {
         var response = await client.GetAsync("/health");
+
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("{\"status\":\"ok\"}", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ActiveContentRouteReturnsBundledSnapshotWithNullReleaseId()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-content-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(releasesRoot);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/internal/content/active");
+            request.Headers.Add("X-Content-Activation-Token", TestActivationToken);
+
+            var response = await httpsClient.SendAsync(request);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var properties = body.RootElement.EnumerateObject().ToArray();
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(2, properties.Length);
+            Assert.Contains(properties, property => property.Name == "contentReleaseId");
+            Assert.Contains(properties, property => property.Name == "contentVersion");
+            Assert.Null(body.RootElement.GetProperty("contentReleaseId").GetString());
+            Assert.Equal(activeFactory.Services.GetRequiredService<SiteContent>().Version,
+                body.RootElement.GetProperty("contentVersion").GetString());
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ActiveContentRouteReportsNullReleaseIdAfterInvalidPointerFallsBackToBundledContent()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(releasesRoot);
+        File.WriteAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName), "../invalid");
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var request = AuthorizedGet("/internal/content/active");
+
+            var response = await httpsClient.SendAsync(request);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Null(body.RootElement.GetProperty("contentReleaseId").GetString());
+            Assert.Equal(activeFactory.Services.GetRequiredService<SiteContent>().Version,
+                body.RootElement.GetProperty("contentVersion").GetString());
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ActiveContentRouteReturnsTheStartupPrivateReleaseAndItsSnapshotVersion()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-private-" + Guid.NewGuid().ToString("N"));
+        const string releaseId = "startup-private-release";
+        CreateRelease(releasesRoot, releaseId, "Private startup content");
+        File.WriteAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName), releaseId);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var request = AuthorizedGet("/internal/content/active");
+
+            var response = await httpsClient.SendAsync(request);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(releaseId, body.RootElement.GetProperty("contentReleaseId").GetString());
+            Assert.Equal(activeFactory.Services.GetRequiredService<SiteContent>().Version,
+                body.RootElement.GetProperty("contentVersion").GetString());
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ActivationChangesTheActiveReleaseIdAndSnapshotVersionTogether()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-change-" + Guid.NewGuid().ToString("N"));
+        const string initialId = "initial-release";
+        const string candidateId = "candidate-release";
+        CreateRelease(releasesRoot, initialId, "Initial private content");
+        CreateRelease(releasesRoot, candidateId, "Activated private content");
+        File.WriteAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName), initialId);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            var before = await GetActiveContentAsync(httpsClient);
+            var expectedVersion = (await LoadReleaseAsync(releasesRoot, candidateId)).Version;
+            using var activation = AuthorizedPost($"/internal/content/activate/{candidateId}");
+
+            var activationResponse = await httpsClient.SendAsync(activation);
+            var after = await GetActiveContentAsync(httpsClient);
+
+            Assert.Equal(HttpStatusCode.OK, activationResponse.StatusCode);
+            Assert.Equal(initialId, before.ReleaseId);
+            Assert.NotEqual(before.Version, after.Version);
+            Assert.Equal(candidateId, after.ReleaseId);
+            Assert.Equal(expectedVersion, after.Version);
+            Assert.Equal(candidateId, File.ReadAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName)));
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task FailedActivationPreservesThePreviousReleaseIdAndVersion()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-failed-" + Guid.NewGuid().ToString("N"));
+        const string activeId = "active-release";
+        const string invalidId = "invalid-release";
+        CreateRelease(releasesRoot, activeId, "Still active private content");
+        Directory.CreateDirectory(Path.Combine(releasesRoot, invalidId));
+        File.WriteAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName), activeId);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            var before = await GetActiveContentAsync(httpsClient);
+            using var activation = AuthorizedPost($"/internal/content/activate/{invalidId}");
+
+            var failedActivation = await httpsClient.SendAsync(activation);
+            var after = await GetActiveContentAsync(httpsClient);
+
+            Assert.Equal(HttpStatusCode.BadRequest, failedActivation.StatusCode);
+            Assert.Equal(activeId, before.ReleaseId);
+            Assert.Equal(before, after);
+            Assert.Equal(activeId, File.ReadAllText(Path.Combine(releasesRoot, ContentReleaseCatalog.ActiveReleaseFileName)));
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("/internal/content/active", "GET")]
+    [InlineData("/internal/content/preview/candidate-release", "POST")]
+    [InlineData("/internal/content/activate/candidate-release", "POST")]
+    public async Task ProtectedContentRoutesRejectConfiguredActivationTokensBelowMinimum(string path, string method)
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-short-activation-token-" + Guid.NewGuid().ToString("N"));
+        const string releaseId = "candidate-release";
+        CreateRelease(releasesRoot, releaseId, "Candidate content");
+        var shortToken = new string('s', ContentReleaseCatalog.MinimumActivationTokenLength - 1);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot, shortToken);
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var request = new HttpRequestMessage(new HttpMethod(method), path);
+            request.Headers.Add("X-Content-Activation-Token", shortToken);
+
+            var response = await httpsClient.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ActiveContentRouteRequiresTheExistingHttpsAndTokenBoundary()
+    {
+        var releasesRoot = Path.Combine(Path.GetTempPath(), "portfolio-active-auth-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(releasesRoot);
+        try
+        {
+            using var activeFactory = CreateReleaseFactory(releasesRoot);
+            using var httpClient = activeFactory.CreateClient();
+            using var httpsClient = CreateHttpsClient(activeFactory);
+            using var noToken = new HttpRequestMessage(HttpMethod.Get, "/internal/content/active");
+            using var wrongToken = new HttpRequestMessage(HttpMethod.Get, "/internal/content/active");
+            wrongToken.Headers.Add("X-Content-Activation-Token", "not-the-configured-test-token");
+            using var httpAuthorized = AuthorizedGet("/internal/content/active");
+            using var httpsAuthorized = AuthorizedGet("/internal/content/active");
+
+            var missing = await httpsClient.SendAsync(noToken);
+            var invalid = await httpsClient.SendAsync(wrongToken);
+            var insecure = await httpClient.SendAsync(httpAuthorized);
+            var authorized = await httpsClient.SendAsync(httpsAuthorized);
+
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, invalid.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, insecure.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
+        }
+        finally
+        {
+            Directory.Delete(releasesRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -368,4 +578,57 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("id=\"constellation-data\"", html);
         Assert.Contains("data-json=\"{&quot;groups&quot;", html);
     }
+
+    private static WebApplicationFactory<Program> CreateReleaseFactory(string releasesRoot, string? activationToken = null) =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Content:ReleasesRoot", releasesRoot);
+            builder.UseSetting("Content:ActivationToken", activationToken ?? TestActivationToken);
+        });
+
+    private static HttpClient CreateHttpsClient(WebApplicationFactory<Program> activeFactory) =>
+        activeFactory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+
+    private static HttpRequestMessage AuthorizedGet(string path)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add("X-Content-Activation-Token", TestActivationToken);
+        return request;
+    }
+
+    private static HttpRequestMessage AuthorizedPost(string path)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path);
+        request.Headers.Add("X-Content-Activation-Token", TestActivationToken);
+        return request;
+    }
+
+    private static async Task<(string? ReleaseId, string Version)> GetActiveContentAsync(HttpClient httpsClient)
+    {
+        using var request = AuthorizedGet("/internal/content/active");
+        var response = await httpsClient.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return (body.RootElement.GetProperty("contentReleaseId").GetString(), body.RootElement.GetProperty("contentVersion").GetString()!);
+    }
+
+    private static string CreateRelease(string releasesRoot, string releaseId, string siteName)
+    {
+        var releaseRoot = Path.Combine(releasesRoot, releaseId);
+        var pages = Path.Combine(releaseRoot, "pages");
+        Directory.CreateDirectory(pages);
+        File.WriteAllText(Path.Combine(releaseRoot, "site.json"), JsonSerializer.Serialize(new
+        {
+            supportedLocales = new[] { "sv-SE" },
+            siteName
+        }));
+        foreach (var slug in new[] { "home", "services", "contact", "projects", "cv" })
+            File.WriteAllText(Path.Combine(pages, slug + ".md"), $"---\ntitle: {siteName} {slug}\ndescription: Private {slug} content\nlocale: sv-SE\nstatus: published\ntype: page\n---\n# {siteName} {slug}");
+        return pages;
+    }
+
+    private static async Task<ContentSnapshot> LoadReleaseAsync(string releasesRoot, string releaseId) =>
+        await new ContentSnapshotLoader(["home", "services", "contact", "projects", "cv"])
+            .LoadAsync(Path.Combine(releasesRoot, releaseId, "pages"));
+
 }
