@@ -6,7 +6,10 @@ namespace Portfolio.Web;
 
 public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor accessor, MarkdownContentService renderer)
 {
-    public ContentSnapshot Snapshot => accessor.HttpContext?.Items[typeof(ContentSnapshot)] as ContentSnapshot ?? store.Current;
+    public ContentSnapshot Snapshot =>
+        (accessor.HttpContext?.Items[typeof(ContentReleaseState)] as ContentReleaseState)?.Snapshot
+        ?? accessor.HttpContext?.Items[typeof(ContentSnapshot)] as ContentSnapshot
+        ?? store.Current;
 
     public static IReadOnlyDictionary<string, string> CoreRoutes => PortfolioRoutes.CorePages;
     public SiteIdentity Settings => Snapshot.Identity;

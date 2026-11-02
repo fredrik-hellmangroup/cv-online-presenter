@@ -24,10 +24,10 @@ public sealed class ContentSnapshotTests
             accessor.HttpContext.Items[typeof(ContentSnapshot)] = initial;
             var siteContent = new SiteContent(store, accessor, new MarkdownContentService());
             await File.WriteAllTextAsync(page, "invalid content");
-            await Assert.ThrowsAsync<ContentValidationException>(() => store.ActivateAsync(pages));
+            await Assert.ThrowsAsync<ContentValidationException>(() => store.ActivateAsync(pages, releaseId: null));
             Assert.Same(initial, store.Current);
             await File.WriteAllTextAsync(page, "---\ntitle: Home\ndescription: Welcome\nlocale: sv-SE\nstatus: published\ntype: page\n---\n# Updated");
-            var diff = await store.ActivateAsync(pages);
+            var diff = await store.ActivateAsync(pages, releaseId: null);
             Assert.NotEqual(initial.Version, store.Current.Version);
             Assert.Equal(["home"], diff.Changed);
             Assert.Equal(initial.Version, siteContent.Version);
@@ -40,7 +40,39 @@ public sealed class ContentSnapshotTests
         }
     }
     [Fact]
-    public async Task FailedPointerPersistenceDoesNotRunPruningOrChangeSnapshot()
+    public async Task ActiveReleaseStatePublishesReleaseIdAndSnapshotAsOneImmutableValue()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-state-" + Guid.NewGuid().ToString("N"));
+        var initialPages = CreatePages(root, "Initial");
+        var candidatePages = CreatePages(Path.Combine(root, "candidate"), "Candidate");
+        try
+        {
+            var loader = new ContentSnapshotLoader();
+            var initial = await loader.LoadAsync(initialPages);
+            var store = new ContentSnapshotStore(initial, loader, "initial-release");
+            var previousState = store.CurrentState;
+            ContentReleaseState? stateObservedDuringPersistence = null;
+
+            await store.ActivateAsync(
+                candidatePages,
+                "candidate-release",
+                persist: () => stateObservedDuringPersistence = store.CurrentState);
+
+            Assert.Same(previousState, stateObservedDuringPersistence);
+            Assert.NotSame(previousState, store.CurrentState);
+            Assert.Equal("initial-release", previousState.ContentReleaseId);
+            Assert.Same(initial, previousState.Snapshot);
+            Assert.Equal("candidate-release", store.CurrentState.ContentReleaseId);
+            Assert.Equal("Candidate", store.CurrentState.Snapshot.Identity.SiteName);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task FailedPointerPersistencePreservesTheSameReleaseState()
     {
         var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-persist-" + Guid.NewGuid().ToString("N"));
         var initialPages = CreatePages(root, "Initial");
@@ -49,15 +81,19 @@ public sealed class ContentSnapshotTests
         {
             var loader = new ContentSnapshotLoader();
             var initial = await loader.LoadAsync(initialPages);
-            var store = new ContentSnapshotStore(initial, loader);
+            var store = new ContentSnapshotStore(initial, loader, "initial-release");
+            var previousState = store.CurrentState;
             var cleanupRan = false;
 
             await Assert.ThrowsAsync<IOException>(() => store.ActivateAsync(
                 candidatePages,
+                "candidate-release",
                 persist: () => throw new IOException("simulated pointer write failure"),
                 afterCommit: () => { cleanupRan = true; return Task.CompletedTask; }));
 
-            Assert.Same(initial, store.Current);
+            Assert.Same(previousState, store.CurrentState);
+            Assert.Same(initial, store.CurrentState.Snapshot);
+            Assert.Equal("initial-release", store.CurrentState.ContentReleaseId);
             Assert.False(cleanupRan);
         }
         finally
@@ -81,6 +117,7 @@ public sealed class ContentSnapshotTests
 
             var diff = await store.ActivateAsync(
                 candidatePages,
+                "candidate-release",
                 persist: () => { },
                 afterCommit: () => throw new IOException("simulated cleanup failure"),
                 maintenanceFailure: exception => maintenanceFailure = exception);
@@ -111,6 +148,7 @@ public sealed class ContentSnapshotTests
             var allowMaintenanceToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var activation = store.ActivateAsync(
                 candidatePages,
+                "candidate-release",
                 persist: () => { },
                 afterCommit: async () =>
                 {

@@ -79,10 +79,10 @@ public sealed class ContentReleaseCatalogTests : IDisposable
         WriteRelease("first", "First Person");
         WriteRelease("second", "Second Person");
         var loader = new ContentSnapshotLoader();
-        var store = new ContentSnapshotStore(await loader.LoadAsync(Path.Combine(root, "first", "pages")), loader);
+        var store = new ContentSnapshotStore(await loader.LoadAsync(Path.Combine(root, "first", "pages")), loader, "first");
         var before = store.Current.Version;
 
-        await Assert.ThrowsAsync<IOException>(() => store.ActivateAsync(Path.Combine(root, "second", "pages"), persist: () => throw new IOException("disk full")));
+        await Assert.ThrowsAsync<IOException>(() => store.ActivateAsync(Path.Combine(root, "second", "pages"), "second", persist: () => throw new IOException("disk full")));
 
         Assert.Equal(before, store.Current.Version);
     }
@@ -390,11 +390,12 @@ public sealed class ContentReleaseCatalogTests : IDisposable
         catalog.WriteActiveReleaseId(previousActive);
         var loader = new ContentSnapshotLoader();
         var initial = await loader.LoadAsync(catalog.PagesPath(previousActive));
-        var store = new ContentSnapshotStore(initial, loader);
+        var store = new ContentSnapshotStore(initial, loader, previousActive);
         ContentReleasePruneResult? cleanup = null;
 
         var diff = await store.ActivateAsync(
             catalog.PagesPath(nextActive),
+            nextActive,
             persist: () => catalog.WriteActiveReleaseId(nextActive),
             afterCommit: async () => cleanup = await catalog.PruneInactiveReleasesAsync(nextActive, loader));
 
