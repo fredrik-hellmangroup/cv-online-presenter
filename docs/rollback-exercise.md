@@ -24,3 +24,8 @@ After the live exercise, a second local cycle deployed app revision `76574844116
 Before promotion, destination cleanup was hardened so stale release files are deleted instead of preserved. A new remote `WhatIf` reported 106 updates and 12 deletions. The corresponding live synchronization completed with the same counts, exact current-artifact metadata passed, and the hardened rollback completed with 106 updates and 2 deletions. Final health and exact `v1.0.8` metadata passed, temporary certificate trust was absent, and production was again left on `v1.0.8`.
 
 MSDeploy was then promoted to the tag-driven primary release workflow; the manual workflow remains the immutable-package rollback path and FTPS remains break-glass only.
+
+
+## 503 incident evidence (2026-11-02)
+
+The automated `v1.0.10` production deployment completed successfully, including health and metadata verification. The IIS app pool later returned HTTP 503. Redeploying the same immutable package did not restore service; service returned only after the operator/provider recycled or restarted the app pool. This is evidence that an immutable redeploy does not recover every post-deployment IIS failure. No automatic rollback or pool recovery occurred. Persistent 503 must be escalated to the operator/provider; the workflows do not manage the app pool. Keep an active root `app_offline.htm` marker in place unless restoration has been verified, and do not claim recovery until health, exact metadata, and marker absence after restoration are confirmed.
