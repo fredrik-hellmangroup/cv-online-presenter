@@ -184,6 +184,70 @@ try {
     $state = New-TestState $rollbackPath
     $candidate = New-Artifact $candidatePath 'v1.0.2'
 
+    Test-Case 'default JSON conversion may coerce UTC timestamps to DateTime' {
+        $zJson = '{"verifiedAtUtc":"2026-01-01T00:00:00Z"}' | ConvertFrom-Json
+        Assert-True ($zJson.verifiedAtUtc -is [DateTime]) 'default JSON conversion did not produce a DateTime for Z timestamp'
+        Assert-True ($zJson.verifiedAtUtc.Kind -eq [DateTimeKind]::Utc) 'default JSON conversion did not preserve Z as UTC Kind'
+        $zRecord = $state.PSObject.Copy()
+        $zRecord.verifiedAtUtc = $zJson.verifiedAtUtc
+        Assert-LkgRecord $zRecord
+
+        $offsetJson = '{"verifiedAtUtc":"2026-01-01T00:00:00+00:00"}' | ConvertFrom-Json
+        Assert-True ($offsetJson.verifiedAtUtc -is [DateTime]) 'default JSON conversion did not coerce +00:00 to DateTime'
+        Assert-True ($offsetJson.verifiedAtUtc.Kind -eq [DateTimeKind]::Local) 'default JSON conversion behavior for +00:00 was not Local Kind'
+        $offsetRecord = $state.PSObject.Copy()
+        $offsetRecord.verifiedAtUtc = $offsetJson.verifiedAtUtc
+        Assert-Throws { Assert-LkgRecord $offsetRecord } 'must be UTC'
+    }
+
+    Test-Case 'production LKG JSON parser preserves timestamp strings' {
+        $record = New-LkgRecord `
+            -Artifact $state.artifact `
+            -VerifiedAtUtc '2026-01-01T00:00:00.1234567+00:00' `
+            -Workflow 'release.yml' `
+            -RunId '1' `
+            -RunAttempt '1'
+        $json = ConvertTo-Json -InputObject $record -Depth 10
+        $loadedRecord = ConvertFrom-LkgJson -Json $json
+        Assert-True ($loadedRecord.verifiedAtUtc -is [string]) 'production LKG JSON parser coerced timestamp to DateTime'
+        Assert-True ($loadedRecord.verifiedAtUtc -ceq '2026-01-01T00:00:00.1234567+00:00') 'production LKG JSON parser changed original offset text'
+        Assert-LkgRecord $loadedRecord
+    }
+
+    Test-Case 'New-LkgRecord UTC timestamp forms are strict and exact' {
+        foreach ($timestamp in @(
+            '2026-01-01T00:00:00.1234567Z',
+            '2026-01-01T00:00:00.1234567+00:00',
+            '2026-01-01T00:00:00Z',
+            '2026-01-01T00:00:00+00:00'
+        )) {
+            $record = New-LkgRecord `
+                -Artifact $state.artifact `
+                -VerifiedAtUtc $timestamp `
+                -Workflow 'release.yml' `
+                -RunId '1' `
+                -RunAttempt '1'
+            Assert-True ($record.verifiedAtUtc -ceq $timestamp) "New-LkgRecord changed timestamp '$timestamp'"
+            Assert-LkgRecord $record
+        }
+
+        $stringRecord = $state.PSObject.Copy()
+        $stringRecord.verifiedAtUtc = '2026-01-01T00:00:00+01:00'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'must be UTC'
+
+        $stringRecord.verifiedAtUtc = '2026-01-01T00:00:00-00:00'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'unknown -00:00'
+
+        $stringRecord.verifiedAtUtc = "2026-01-01T00:00:00Z`n"
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'valid ISO-8601'
+
+        $stringRecord.verifiedAtUtc = '2026-02-30T00:00:00Z'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'valid ISO-8601'
+
+        $stringRecord.verifiedAtUtc = [DateTime]::SpecifyKind([DateTime]::Parse('2026-01-01T00:00:00'), [DateTimeKind]::Unspecified)
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'must be UTC'
+    }
+
     Test-Case 'successful candidate verified then LKG updated' {
         $ops = New-Ops $state $rollbackPath
         $result = Invoke-LkgDeployment $ops $candidate

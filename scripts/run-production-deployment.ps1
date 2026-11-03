@@ -143,7 +143,7 @@ $operationState = @{ priorRecord = $null; rollback = $null; candidate = $null; e
 $operations = @{
     ReadState = {
         if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw "production-state branch record '$statePath' is missing." }
-        try { $operationState.priorRecord = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json }
+        try { $operationState.priorRecord = ConvertFrom-LkgJson -Json (Get-Content -LiteralPath $statePath -Raw) }
         catch { throw "production-state LKG record is malformed: $($_.Exception.Message)" }
         return $operationState.priorRecord
     }.GetNewClosure()
