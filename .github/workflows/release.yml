@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Validate release tag
         shell: pwsh
         env:
@@ -32,9 +33,11 @@ jobs:
       - name: Verify release commit is on main
         shell: pwsh
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          $gitAuthorization = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$env:GITHUB_TOKEN"))
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $gitAuthorization" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if ($LASTEXITCODE -ne 0) {
             throw 'Unable to refresh origin/main before validating the release commit.'
           }

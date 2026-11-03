@@ -57,6 +57,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: inputs.rollback_release_tag == ''
         with:
@@ -89,11 +90,12 @@ jobs:
           ROLLBACK_RELEASE_TAG: ${{ inputs.rollback_release_tag }}
         run: |
           New-Item -ItemType Directory -Path 'artifacts' -Force | Out-Null
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          $gitAuthorization = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$env:GH_TOKEN"))
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $gitAuthorization" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if ($LASTEXITCODE -ne 0) {
             throw 'Could not refresh origin/main before validating the rollback tag.'
           }
-          git fetch --force origin "refs/tags/$($env:ROLLBACK_RELEASE_TAG):refs/tags/$($env:ROLLBACK_RELEASE_TAG)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $gitAuthorization" fetch --force origin "refs/tags/$($env:ROLLBACK_RELEASE_TAG):refs/tags/$($env:ROLLBACK_RELEASE_TAG)"
           if ($LASTEXITCODE -ne 0) {
             throw "Could not fetch rollback tag '$env:ROLLBACK_RELEASE_TAG'."
           }
