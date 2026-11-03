@@ -378,6 +378,41 @@ try {
         Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'reconciliation is required'
         Assert-True ($null -ne $script:testPendingBox.value) 'ambiguous state write cleared pending'
     }
+    Test-Case 'local mirror failure after durable LKG success is a separate nonfatal warning' {
+        $durableStatePath = Join-Path $temp 'durable-lkg.json'
+        $mirrorBlockerPath = Join-Path $temp 'mirror-parent-file'
+        [IO.File]::WriteAllText($mirrorBlockerPath, 'not a directory')
+        $mirrorPath = Join-Path $mirrorBlockerPath 'lkg-v1.json'
+        $ops = New-Ops $state $rollbackPath
+        $callLog = $script:calls
+        $pendingBox = $script:testPendingBox
+        $ops.WriteState = {
+            param($artifact)
+            $callLog.Add('writeState')
+            $record = New-LkgRecord `
+                -Artifact $artifact `
+                -VerifiedAtUtc '2026-01-02T00:00:00Z' `
+                -Workflow 'test' `
+                -RunId '2' `
+                -RunAttempt '1'
+            $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $durableStatePath
+            $pendingBox.value = $null
+            $mirrorResult = Write-LkgStateMirror -Record $record -Path $mirrorPath
+            if (-not $mirrorResult.Written) {
+                Write-Warning -Message "Durable production-state commit succeeded; $($mirrorResult.Warning)" -WarningAction Continue
+            }
+            return $record
+        }.GetNewClosure()
+
+        $warnings = @()
+        $result = Invoke-LkgDeployment $ops $candidate -WarningVariable warnings
+        $durableRecord = ConvertFrom-LkgJson -Json (Get-Content -LiteralPath $durableStatePath -Raw)
+        Assert-True ($result.Status -ceq 'DeployedAndRecorded') 'deployment result did not report verified deployment/state success'
+        Assert-True ($durableRecord.artifact.packageSha256 -ceq $candidate.packageSha256) 'durable LKG did not retain the verified candidate'
+        Assert-True ($null -eq $script:testPendingBox.value) 'pending state was not cleared by the durable commit'
+        Assert-True ($warnings.Count -eq 1 -and $warnings[0].Message -like '*Durable production-state commit succeeded*local state mirror*') 'local mirror failure was not reported as a separate durable-success warning'
+        Assert-True (-not ($script:calls -contains 'syncRollback')) 'local mirror failure triggered rollback'
+    }
     Test-Case 'stale pending blocks automatic sync before any production mutation' {
         $ops = New-Ops $state $rollbackPath @{ initialPending = [PSCustomObject]@{ candidate = 'old'; prior = 'older' } }
         Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'automatic deployment is blocked before sync'

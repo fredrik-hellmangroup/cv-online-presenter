@@ -118,6 +118,27 @@ function New-LkgRecord {
     return $record
 }
 
+function Write-LkgStateMirror {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    try {
+        $recordDirectory = Split-Path -Parent $Path
+        if ($recordDirectory) { New-Item -ItemType Directory -Path $recordDirectory -Force -ErrorAction Stop | Out-Null }
+        $Record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding utf8 -ErrorAction Stop
+        return [PSCustomObject]@{ Written = $true; Warning = $null }
+    }
+    catch {
+        return [PSCustomObject]@{
+            Written = $false
+            Warning = "local state mirror '$Path' could not be written: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Invoke-LkgDeployment {
     [CmdletBinding()]
     param(
@@ -190,4 +211,4 @@ function Invoke-LkgDeployment {
     }
 }
 
-Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, ConvertFrom-LkgJson, New-LkgRecord, Invoke-LkgDeployment
+Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, ConvertFrom-LkgJson, New-LkgRecord, Write-LkgStateMirror, Invoke-LkgDeployment
