@@ -24,10 +24,50 @@ function Assert-LkgRecord {
     }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.appRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.contentRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.buildId)) { throw 'LKG build metadata must be complete.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.workflow) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runId) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runAttempt)) { throw 'LKG workflow evidence must be complete.' }
-    try { $verifiedAt = [DateTimeOffset]::Parse([string]$Record.verifiedAtUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) }
-    catch { throw 'LKG verification timestamp must be a valid ISO-8601 timestamp.' }
+    if ($Record.verifiedAtUtc -is [DateTime]) {
+        if ($Record.verifiedAtUtc.Kind -ne [DateTimeKind]::Utc) { throw 'LKG verification timestamp must be UTC.' }
+        $verifiedAt = [DateTimeOffset]$Record.verifiedAtUtc
+    }
+    elseif ($Record.verifiedAtUtc -is [string]) {
+        $timestamp = $Record.verifiedAtUtc
+        if ($timestamp -notmatch '\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\z') {
+            throw 'LKG verification timestamp must be a valid ISO-8601 timestamp.'
+        }
+        if ($timestamp.EndsWith('-00:00', [StringComparison]::Ordinal)) {
+            throw 'LKG verification timestamp must not use the unknown -00:00 offset.'
+        }
+
+        $format = "yyyy-MM-dd'T'HH:mm:ss"
+        if ($timestamp.Contains('.')) { $format += '.FFFFFFF' }
+        if ($timestamp.EndsWith('Z', [StringComparison]::Ordinal)) { $format += "'Z'" }
+        else { $format += 'zzz' }
+
+        try {
+            $verifiedAt = [DateTimeOffset]::ParseExact(
+                $timestamp,
+                $format,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::AssumeUniversal
+            )
+        }
+        catch { throw 'LKG verification timestamp must be a valid ISO-8601 timestamp.' }
+    }
+    else {
+        throw 'LKG verification timestamp must be a valid ISO-8601 timestamp.'
+    }
     if ($verifiedAt.Offset -ne [TimeSpan]::Zero) { throw 'LKG verification timestamp must be UTC.' }
     if ($Record.evidence.health -cne 'passed' -or $Record.evidence.buildMetadata -cne 'exact-match' -or $Record.evidence.activeOfflineMarker -cne 'absent') { throw 'LKG verification evidence is incomplete or unsuccessful.' }
+}
+
+function ConvertFrom-LkgJson {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Json)
+
+    $convertFromJson = Get-Command ConvertFrom-Json -ErrorAction Stop
+    if (-not $convertFromJson.Parameters.ContainsKey('DateKind')) {
+        throw 'LKG JSON parsing requires PowerShell ConvertFrom-Json -DateKind String support.'
+    }
+    return ConvertFrom-Json -InputObject $Json -DateKind String
 }
 
 function Assert-PackageSha256 {
@@ -76,6 +116,27 @@ function New-LkgRecord {
     }
     Assert-LkgRecord -Record $record
     return $record
+}
+
+function Write-LkgStateMirror {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Record,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    try {
+        $recordDirectory = Split-Path -Parent $Path
+        if ($recordDirectory) { New-Item -ItemType Directory -Path $recordDirectory -Force -ErrorAction Stop | Out-Null }
+        $Record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding utf8 -ErrorAction Stop
+        return [PSCustomObject]@{ Written = $true; Warning = $null }
+    }
+    catch {
+        return [PSCustomObject]@{
+            Written = $false
+            Warning = "local state mirror '$Path' could not be written: $($_.Exception.Message)"
+        }
+    }
 }
 
 function Invoke-LkgDeployment {
@@ -150,4 +211,4 @@ function Invoke-LkgDeployment {
     }
 }
 
-Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, New-LkgRecord, Invoke-LkgDeployment
+Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, ConvertFrom-LkgJson, New-LkgRecord, Write-LkgStateMirror, Invoke-LkgDeployment

@@ -143,7 +143,7 @@ $operationState = @{ priorRecord = $null; rollback = $null; candidate = $null; e
 $operations = @{
     ReadState = {
         if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw "production-state branch record '$statePath' is missing." }
-        try { $operationState.priorRecord = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json }
+        try { $operationState.priorRecord = ConvertFrom-LkgJson -Json (Get-Content -LiteralPath $statePath -Raw) }
         catch { throw "production-state LKG record is malformed: $($_.Exception.Message)" }
         return $operationState.priorRecord
     }.GetNewClosure()
@@ -219,8 +219,10 @@ $operations = @{
         $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding utf8
         if (Test-Path -LiteralPath $pendingPath -PathType Leaf) { Remove-Item -LiteralPath $pendingPath -Force }
         Invoke-StateBranchCommit -Message 'production-state: record verified live artifact and clear pending'
-        $recordDirectory = Split-Path -Parent $StateRecordPath
-        if ($recordDirectory) { New-Item -ItemType Directory -Path $recordDirectory -Force | Out-Null; $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateRecordPath -Encoding utf8 }
+        $mirrorResult = Write-LkgStateMirror -Record $record -Path $StateRecordPath
+        if (-not $mirrorResult.Written) {
+            Write-Warning -Message "Durable production-state commit succeeded; $($mirrorResult.Warning)" -WarningAction Continue
+        }
         return $record
     }.GetNewClosure()
 }

@@ -184,6 +184,70 @@ try {
     $state = New-TestState $rollbackPath
     $candidate = New-Artifact $candidatePath 'v1.0.2'
 
+    Test-Case 'default JSON conversion may coerce UTC timestamps to DateTime' {
+        $zJson = '{"verifiedAtUtc":"2026-01-01T00:00:00Z"}' | ConvertFrom-Json
+        Assert-True ($zJson.verifiedAtUtc -is [DateTime]) 'default JSON conversion did not produce a DateTime for Z timestamp'
+        Assert-True ($zJson.verifiedAtUtc.Kind -eq [DateTimeKind]::Utc) 'default JSON conversion did not preserve Z as UTC Kind'
+        $zRecord = $state.PSObject.Copy()
+        $zRecord.verifiedAtUtc = $zJson.verifiedAtUtc
+        Assert-LkgRecord $zRecord
+
+        $offsetJson = '{"verifiedAtUtc":"2026-01-01T00:00:00+00:00"}' | ConvertFrom-Json
+        Assert-True ($offsetJson.verifiedAtUtc -is [DateTime]) 'default JSON conversion did not coerce +00:00 to DateTime'
+        Assert-True ($offsetJson.verifiedAtUtc.Kind -eq [DateTimeKind]::Local) 'default JSON conversion behavior for +00:00 was not Local Kind'
+        $offsetRecord = $state.PSObject.Copy()
+        $offsetRecord.verifiedAtUtc = $offsetJson.verifiedAtUtc
+        Assert-Throws { Assert-LkgRecord $offsetRecord } 'must be UTC'
+    }
+
+    Test-Case 'production LKG JSON parser preserves timestamp strings' {
+        $record = New-LkgRecord `
+            -Artifact $state.artifact `
+            -VerifiedAtUtc '2026-01-01T00:00:00.1234567+00:00' `
+            -Workflow 'release.yml' `
+            -RunId '1' `
+            -RunAttempt '1'
+        $json = ConvertTo-Json -InputObject $record -Depth 10
+        $loadedRecord = ConvertFrom-LkgJson -Json $json
+        Assert-True ($loadedRecord.verifiedAtUtc -is [string]) 'production LKG JSON parser coerced timestamp to DateTime'
+        Assert-True ($loadedRecord.verifiedAtUtc -ceq '2026-01-01T00:00:00.1234567+00:00') 'production LKG JSON parser changed original offset text'
+        Assert-LkgRecord $loadedRecord
+    }
+
+    Test-Case 'New-LkgRecord UTC timestamp forms are strict and exact' {
+        foreach ($timestamp in @(
+            '2026-01-01T00:00:00.1234567Z',
+            '2026-01-01T00:00:00.1234567+00:00',
+            '2026-01-01T00:00:00Z',
+            '2026-01-01T00:00:00+00:00'
+        )) {
+            $record = New-LkgRecord `
+                -Artifact $state.artifact `
+                -VerifiedAtUtc $timestamp `
+                -Workflow 'release.yml' `
+                -RunId '1' `
+                -RunAttempt '1'
+            Assert-True ($record.verifiedAtUtc -ceq $timestamp) "New-LkgRecord changed timestamp '$timestamp'"
+            Assert-LkgRecord $record
+        }
+
+        $stringRecord = $state.PSObject.Copy()
+        $stringRecord.verifiedAtUtc = '2026-01-01T00:00:00+01:00'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'must be UTC'
+
+        $stringRecord.verifiedAtUtc = '2026-01-01T00:00:00-00:00'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'unknown -00:00'
+
+        $stringRecord.verifiedAtUtc = "2026-01-01T00:00:00Z`n"
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'valid ISO-8601'
+
+        $stringRecord.verifiedAtUtc = '2026-02-30T00:00:00Z'
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'valid ISO-8601'
+
+        $stringRecord.verifiedAtUtc = [DateTime]::SpecifyKind([DateTime]::Parse('2026-01-01T00:00:00'), [DateTimeKind]::Unspecified)
+        Assert-Throws { Assert-LkgRecord $stringRecord } 'must be UTC'
+    }
+
     Test-Case 'successful candidate verified then LKG updated' {
         $ops = New-Ops $state $rollbackPath
         $result = Invoke-LkgDeployment $ops $candidate
@@ -313,6 +377,41 @@ try {
         $ops = New-Ops $state $rollbackPath @{ stateFail = $true }
         Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'reconciliation is required'
         Assert-True ($null -ne $script:testPendingBox.value) 'ambiguous state write cleared pending'
+    }
+    Test-Case 'local mirror failure after durable LKG success is a separate nonfatal warning' {
+        $durableStatePath = Join-Path $temp 'durable-lkg.json'
+        $mirrorBlockerPath = Join-Path $temp 'mirror-parent-file'
+        [IO.File]::WriteAllText($mirrorBlockerPath, 'not a directory')
+        $mirrorPath = Join-Path $mirrorBlockerPath 'lkg-v1.json'
+        $ops = New-Ops $state $rollbackPath
+        $callLog = $script:calls
+        $pendingBox = $script:testPendingBox
+        $ops.WriteState = {
+            param($artifact)
+            $callLog.Add('writeState')
+            $record = New-LkgRecord `
+                -Artifact $artifact `
+                -VerifiedAtUtc '2026-01-02T00:00:00Z' `
+                -Workflow 'test' `
+                -RunId '2' `
+                -RunAttempt '1'
+            $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $durableStatePath
+            $pendingBox.value = $null
+            $mirrorResult = Write-LkgStateMirror -Record $record -Path $mirrorPath
+            if (-not $mirrorResult.Written) {
+                Write-Warning -Message "Durable production-state commit succeeded; $($mirrorResult.Warning)" -WarningAction Continue
+            }
+            return $record
+        }.GetNewClosure()
+
+        $warnings = @()
+        $result = Invoke-LkgDeployment $ops $candidate -WarningVariable warnings
+        $durableRecord = ConvertFrom-LkgJson -Json (Get-Content -LiteralPath $durableStatePath -Raw)
+        Assert-True ($result.Status -ceq 'DeployedAndRecorded') 'deployment result did not report verified deployment/state success'
+        Assert-True ($durableRecord.artifact.packageSha256 -ceq $candidate.packageSha256) 'durable LKG did not retain the verified candidate'
+        Assert-True ($null -eq $script:testPendingBox.value) 'pending state was not cleared by the durable commit'
+        Assert-True ($warnings.Count -eq 1 -and $warnings[0].Message -like '*Durable production-state commit succeeded*local state mirror*') 'local mirror failure was not reported as a separate durable-success warning'
+        Assert-True (-not ($script:calls -contains 'syncRollback')) 'local mirror failure triggered rollback'
     }
     Test-Case 'stale pending blocks automatic sync before any production mutation' {
         $ops = New-Ops $state $rollbackPath @{ initialPending = [PSCustomObject]@{ candidate = 'old'; prior = 'older' } }
