@@ -47,6 +47,16 @@ jobs:
         run: docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --exit-code 1
       - run: dotnet list CvOnlinePresenter.sln package --vulnerable --include-transitive
 
+  deployment-safety-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run isolated production recovery failure tests
+        shell: pwsh
+        run: ./scripts/test-production-state.ps1
+
   browser-quality:
     # The three-browser matrix already ran on the PR. After merge, main only re-runs the fast build/security gate.
     if: github.event_name == 'pull_request'

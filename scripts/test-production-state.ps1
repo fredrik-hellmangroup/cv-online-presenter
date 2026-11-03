@@ -61,6 +61,8 @@ function New-TestState([string]$Path) {
 function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
     $callLog = [System.Collections.Generic.List[string]]::new()
     $script:calls = $callLog
+    $pendingBox = @{ value = $Flags.initialPending; lastSet = $null }
+    $script:testPendingBox = $pendingBox
 
     return @{
         ReadState = {
@@ -69,8 +71,17 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
             }
             return $State
         }.GetNewClosure()
+        ReadPending = { return $pendingBox.value }.GetNewClosure()
+        SetPending = {
+            param($candidate, $artifact)
+            $callLog.Add('setPending')
+            if ($Flags.pendingWriteFail) { throw 'pending commit rejected' }
+            $pendingBox.lastSet = [PSCustomObject]@{ candidate = $candidate.packageSha256; prior = $artifact.packageSha256 }
+            $pendingBox.value = $pendingBox.lastSet
+        }.GetNewClosure()
         ResolveRollbackPackage = {
             param($artifact)
+            $callLog.Add('resolveRollback')
             if ($Flags.missingAsset) {
                 throw 'asset unavailable'
             }
@@ -127,6 +138,12 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
                 throw 'rollback sync failed'
             }
         }.GetNewClosure()
+        ClearPending = {
+            param($artifact)
+            $callLog.Add('clearPending')
+            if ($Flags.clearPendingFail) { throw 'pending clear rejected' }
+            $pendingBox.value = $null
+        }.GetNewClosure()
         VerifyRollback = {
             param($artifact)
             $callLog.Add('verifyRollback')
@@ -146,6 +163,7 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
             if ($Flags.stateFail) {
                 throw 'push rejected'
             }
+            $pendingBox.value = $null
             return New-LkgRecord `
                 -Artifact $candidate `
                 -VerifiedAtUtc '2026-01-02T00:00:00Z' `
@@ -171,12 +189,16 @@ try {
         $result = Invoke-LkgDeployment $ops $candidate
         Assert-True ($result.Status -eq 'DeployedAndRecorded') 'wrong result'
         Assert-True ($script:calls[-1] -eq 'writeState') 'state write must be last'
+        Assert-True ($script:calls.IndexOf('resolveRollback') -lt $script:calls.IndexOf('setPending')) 'pending was written before LKG asset validation'
+        Assert-True ($script:calls.IndexOf('validate') -lt $script:calls.IndexOf('setPending')) 'pending was written before candidate identity validation'
+        Assert-True ($script:calls.IndexOf('setPending') -lt $script:calls.IndexOf('syncCandidate')) 'pending was written after the first production sync'
     }
     Test-Case 'sync failure gets exactly one rollback' {
         $ops = New-Ops $state $rollbackPath @{ syncFail = $true }
-        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'single rollback attempt restored'
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'pending state was cleared and old LKG kept'
         Assert-True (($script:calls | Where-Object { $_ -eq 'syncRollback' }).Count -eq 1) 'rollback count was not one'
         Assert-True (-not ($script:calls -contains 'writeState')) 'LKG updated after failed candidate'
+        Assert-True ($null -eq $script:testPendingBox.value) 'verified rollback did not clear pending'
     }
     Test-Case 'health failure gets one rollback' {
         $ops = New-Ops $state $rollbackPath @{ healthFail = $true }
@@ -191,11 +213,13 @@ try {
     Test-Case 'rollback failure reports both causes and never retries' {
         $ops = New-Ops $state $rollbackPath @{ syncFail = $true; rollbackFail = $true }
         Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'rollback sync failed'
+        Assert-True ($null -ne $script:testPendingBox.value) 'failed rollback cleared pending'
         Assert-True (($script:calls | Where-Object { $_ -eq 'syncRollback' }).Count -eq 1) 'second rollback attempted'
     }
     Test-Case 'restoration marker verification failure is a recovery failure' {
         $ops = New-Ops $state $rollbackPath @{ syncFail = $true; rollbackMarkerFail = $true }
         Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'restored app_offline marker remains observable'
+        Assert-True ($null -ne $script:testPendingBox.value) 'unverified rollback cleared pending'
         Assert-True (($script:calls | Where-Object { $_ -eq 'syncRollback' }).Count -eq 1) 'second rollback attempted'
     }
     Test-Case 'candidate cleanup marker failure starts bounded rollback' {
@@ -255,7 +279,8 @@ try {
     Test-Case 'manual-main archive precedes deployment and record update' {
         $ops = New-Ops $state $rollbackPath
         $result = Invoke-LkgDeployment $ops $candidate -ArchiveCandidateBeforeDeploy
-        Assert-True ($script:calls.IndexOf('archive') -lt $script:calls.IndexOf('syncCandidate')) 'archive was not before deploy'
+        Assert-True ($script:calls.IndexOf('archive') -lt $script:calls.IndexOf('setPending')) 'archive was not validated before pending write'
+        Assert-True ($script:calls.IndexOf('setPending') -lt $script:calls.IndexOf('syncCandidate')) 'pending was not committed before deploy'
         Assert-True ($script:calls[-1] -eq 'writeState') 'record not updated'
         Assert-True ($null -eq $result.Record.artifact.sourceTag) 'manual-main source tag is not null'
         Assert-True ($result.Record.artifact.releaseTag -eq 'recovery/manual-2-1') 'manual archive locator was not recorded'
@@ -278,13 +303,54 @@ try {
     }
     Test-Case 'state write occurs only after successful candidate verification' {
         $ops = New-Ops $state $rollbackPath @{ stateFail = $true }
-        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'LKG write failed'
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'LKG update/pending clear failed'
+        Assert-True ($null -ne $script:testPendingBox.value) 'failed state write cleared pending'
+        Assert-True ($state.artifact.packageSha256 -eq $script:testPendingBox.value.prior) 'failed state write advanced the old LKG pointer'
         Assert-True ($script:calls.IndexOf('verifyCandidate') -lt $script:calls.IndexOf('writeState')) 'state write preceded verification'
         Assert-True (-not ($script:calls -contains 'syncRollback')) 'state failure triggered rollback'
     }
     Test-Case 'ambiguous state write fails distinctly and asks reconciliation' {
         $ops = New-Ops $state $rollbackPath @{ stateFail = $true }
-        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'Reconciliation is required'
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'reconciliation is required'
+        Assert-True ($null -ne $script:testPendingBox.value) 'ambiguous state write cleared pending'
+    }
+    Test-Case 'stale pending blocks automatic sync before any production mutation' {
+        $ops = New-Ops $state $rollbackPath @{ initialPending = [PSCustomObject]@{ candidate = 'old'; prior = 'older' } }
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'automatic deployment is blocked before sync'
+        Assert-True (-not ($script:calls -contains 'syncCandidate')) 'stale pending allowed candidate sync'
+        Assert-True (-not ($script:calls -contains 'syncRollback')) 'stale pending allowed rollback sync'
+    }
+    Test-Case 'verified automatic rollback clears pending and retains old LKG' {
+        $oldDigest = $state.artifact.packageSha256
+        $ops = New-Ops $state $rollbackPath @{ syncFail = $true }
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'old LKG kept'
+        Assert-True ($state.artifact.packageSha256 -ceq $oldDigest) 'verified rollback replaced LKG'
+        Assert-True ($null -eq $script:testPendingBox.value) 'verified rollback left pending'
+        Assert-True ($script:calls.IndexOf('verifyRollback') -lt $script:calls.IndexOf('clearPending')) 'pending cleared before rollback verification'
+    }
+    Test-Case 'failed rollback leaves pending state intact' {
+        $ops = New-Ops $state $rollbackPath @{ syncFail = $true; rollbackFail = $true }
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'Pending state is retained'
+        Assert-True ($null -ne $script:testPendingBox.value) 'failed rollback did not retain pending'
+        Assert-True (-not ($script:calls -contains 'clearPending')) 'pending clear attempted after failed rollback'
+    }
+    Test-Case 'explicit verified manual recovery replaces pending and clears it after LKG update' {
+        $ops = New-Ops $state $rollbackPath @{ initialPending = [PSCustomObject]@{ candidate = 'stale'; prior = 'old' } }
+        $result = Invoke-LkgDeployment $ops $candidate -AllowPendingRecovery
+        Assert-True ($result.Record.artifact.packageSha256 -ceq $candidate.packageSha256) 'manual recovery did not update LKG'
+        Assert-True ($script:testPendingBox.lastSet.candidate -ceq $candidate.packageSha256) 'manual recovery did not replace pending with the verified candidate identity'
+        Assert-True ($null -eq $script:testPendingBox.value) 'verified manual recovery did not clear pending'
+        Assert-True ($script:calls.IndexOf('setPending') -lt $script:calls.IndexOf('syncCandidate')) 'replacement pending was not set before sync'
+    }
+    Test-Case 'failed pending-state write prevents first sync' {
+        $ops = New-Ops $state $rollbackPath @{ pendingWriteFail = $true }
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'pending commit rejected'
+        Assert-True (-not ($script:calls -contains 'syncCandidate')) 'production changed despite failed pending write'
+    }
+    Test-Case 'ambiguous rollback pending clear leaves pending intact' {
+        $ops = New-Ops $state $rollbackPath @{ syncFail = $true; clearPendingFail = $true }
+        Assert-Throws { Invoke-LkgDeployment $ops $candidate } 'pending-state clear failed or is ambiguous'
+        Assert-True ($null -ne $script:testPendingBox.value) 'ambiguous clear erased pending'
     }
     Test-Case 'malformed required record fields rejected' {
         $broken = [PSCustomObject]@{ schemaVersion = 1 }
@@ -302,10 +368,13 @@ try {
             $text = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/$workflow") -Raw
             Assert-True ($text.Contains('group: production-deployment')) "$workflow lacks shared production concurrency"
             Assert-True ($text.Contains('ref: production-state')) "$workflow does not read durable production state"
-            Assert-True ($text.Contains('record-state:')) "$workflow lacks isolated LKG write job"
+            Assert-True ($text.Contains('pending-v1.json')) "$workflow lacks durable pending-state handling"
+            Assert-True (-not $text.Contains('production-state-record-')) "$workflow still uses a delayed LKG-only write"
             Assert-True ($text.Contains('contents: read')) "$workflow lacks read-only default permissions"
             Assert-True ($text.Contains('run-production-deployment.ps1')) "$workflow bypasses bounded recovery orchestration"
             Assert-True ($text.Contains('package_sha256')) "$workflow does not pass package-job digest"
+            Assert-True ($text.Contains('contents: write')) "$workflow cannot persist pending/LKG by non-force CAS"
+            Assert-True ($text.Contains('persist-credentials: false')) "$workflow persists checkout credentials"
         }
         $release = Get-Content -LiteralPath (Join-Path $repoRoot '.github/workflows/release.yml') -Raw
         Assert-True ($release.Contains('tags: ["v*.*.*"]')) 'automatic v*.*.* release trigger changed'
@@ -322,6 +391,9 @@ try {
         Assert-True ($runner.Contains('ExpectedPackageSha256')) 'deployment runner does not accept a package-job digest'
         Assert-True ($runner.Contains('$published.digest -cne $ExpectedPackageSha256.ToLowerInvariant()')) 'release package digest is not compared with the package-job digest'
         Assert-True ($runner.Contains('Assert-PackageSha256 -Path $resolvedPackagePath -ExpectedSha256 $ExpectedPackageSha256')) 'manual package bytes are not bound to the package-job digest'
+        Assert-True ($runner.Contains('ReadPending')) 'deployment runner does not check durable pending state.'
+        Assert-True ($runner.Contains('Invoke-StateBranchCommit')) 'state writes are not durable non-force pushes.'
+        Assert-True ($runner.Contains('HEAD:production-state')) 'state writes do not use compare-and-swap branch updates.'
     }
 }
 finally {

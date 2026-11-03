@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ExpectedPackageSha256,
     [Parameter(Mandatory = $true)][string]$StateRecordPath,
     [string]$SourceTag = '',
-    [switch]$ManualMain
+    [switch]$ManualMain,
+    [switch]$AllowPendingRecovery
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,6 +36,38 @@ function Get-ReleaseAsset {
     return [PSCustomObject]@{ path = $path; digest = $digest; asset = $assets[0] }
 }
 
+function Invoke-GitWithScopedToken {
+    param([Parameter(Mandatory = $true)][string[]]$GitArguments)
+    if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) { throw 'GH_TOKEN is required for authenticated repository operations.' }
+    $authorization = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$env:GH_TOKEN"))
+    $env:GIT_CONFIG_COUNT = '1'
+    $env:GIT_CONFIG_KEY_0 = 'http.https://github.com/.extraheader'
+    $env:GIT_CONFIG_VALUE_0 = "AUTHORIZATION: basic $authorization"
+    try {
+        $output = & git @GitArguments
+        if ($LASTEXITCODE -ne 0) { throw "GitHub repository operation failed (git $($GitArguments -join ' '))." }
+        return $output
+    }
+    finally {
+        Remove-Item Env:GIT_CONFIG_COUNT, Env:GIT_CONFIG_KEY_0, Env:GIT_CONFIG_VALUE_0 -ErrorAction SilentlyContinue
+        $authorization = $null
+    }
+}
+
+function Invoke-StateBranchCommit {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    git -C $StateDirectory add -- lkg-v1.json pending-v1.json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not stage production-state files.' }
+    git -C $StateDirectory config user.name 'github-actions[bot]'
+    git -C $StateDirectory config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+    git -C $StateDirectory commit -m $Message
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create the production-state commit.' }
+
+    # Non-force push is a compare-and-swap; scoped credentials never enter persistent git config.
+    Invoke-GitWithScopedToken -GitArguments @('-C', $StateDirectory, 'push', 'origin', 'HEAD:production-state') | Out-Null
+}
+
 function Read-PackageMetadata {
     param([string]$ZipPath, [string]$Destination)
     if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
@@ -54,16 +87,26 @@ function Invoke-DeploySync {
     $deployPassword = $env:DEPLOY_PASSWORD
     if ([string]::IsNullOrWhiteSpace($deployPassword)) { throw 'DEPLOY_PASSWORD is not configured.' }
     $env:DEPLOY_PASSWORD = $deployPassword
+    $ghToken = $env:GH_TOKEN
+    $githubToken = $env:GITHUB_TOKEN
     Remove-Item Env:GH_TOKEN, Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-    & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1') `
-        -SourcePath $PublishDirectory `
-        -DeployContentPath $env:MSDEPLOY_CONTENT_PATH `
-        -DeployServerUrl $env:MSDEPLOY_SERVER_URL `
-        -DeploySiteName $env:MSDEPLOY_SITE_NAME `
-        -DeployUsername $env:DEPLOY_USERNAME `
-        -DeployCertificateSha256 $env:MSDEPLOY_CERTIFICATE_SHA256 `
-        -OfflinePagePath (Join-Path (Split-Path -Parent $PSScriptRoot) 'deployment/app_offline.htm')
-    if ($LASTEXITCODE -ne 0) { throw "MSDeploy sync failed with exit code $LASTEXITCODE." }
+    try {
+        & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1') `
+            -SourcePath $PublishDirectory `
+            -DeployContentPath $env:MSDEPLOY_CONTENT_PATH `
+            -DeployServerUrl $env:MSDEPLOY_SERVER_URL `
+            -DeploySiteName $env:MSDEPLOY_SITE_NAME `
+            -DeployUsername $env:DEPLOY_USERNAME `
+            -DeployCertificateSha256 $env:MSDEPLOY_CERTIFICATE_SHA256 `
+            -OfflinePagePath (Join-Path (Split-Path -Parent $PSScriptRoot) 'deployment/app_offline.htm')
+        if ($LASTEXITCODE -ne 0) { throw "MSDeploy sync failed with exit code $LASTEXITCODE." }
+    }
+    finally {
+        if ($ghToken) { $env:GH_TOKEN = $ghToken }
+        if ($githubToken) { $env:GITHUB_TOKEN = $githubToken }
+        $ghToken = $null
+        $githubToken = $null
+    }
 }
 
 function Invoke-LiveVerification {
@@ -94,7 +137,8 @@ function Invoke-LiveVerification {
 }
 
 $statePath = Join-Path $StateDirectory 'lkg-v1.json'
-$operationState = @{ priorRecord = $null; rollback = $null; candidate = $null; extractedCandidate = $null }
+$pendingPath = Join-Path $StateDirectory 'pending-v1.json'
+$operationState = @{ priorRecord = $null; rollback = $null; candidate = $null; extractedCandidate = $null; pending = $null }
 
 $operations = @{
     ReadState = {
@@ -102,6 +146,29 @@ $operations = @{
         try { $operationState.priorRecord = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json }
         catch { throw "production-state LKG record is malformed: $($_.Exception.Message)" }
         return $operationState.priorRecord
+    }.GetNewClosure()
+    ReadPending = {
+        if (-not (Test-Path -LiteralPath $pendingPath -PathType Leaf)) { return $null }
+        try { $operationState.pending = Get-Content -LiteralPath $pendingPath -Raw | ConvertFrom-Json }
+        catch { throw "production-state pending record is malformed: $($_.Exception.Message)" }
+        foreach ($field in @('schemaVersion', 'runId', 'runAttempt', 'candidate')) {
+            if ($null -eq $operationState.pending.PSObject.Properties[$field]) { throw "production-state pending record is missing '$field'." }
+        }
+        if ([int]$operationState.pending.schemaVersion -ne 1) { throw 'production-state pending schemaVersion must be 1.' }
+        return $operationState.pending
+    }.GetNewClosure()
+    SetPending = {
+        param($artifact, $priorArtifact)
+        $pending = [PSCustomObject]@{
+            schemaVersion = 1
+            runId = [string]$env:GITHUB_RUN_ID
+            runAttempt = [string]$env:GITHUB_RUN_ATTEMPT
+            createdAtUtc = [DateTime]::UtcNow.ToString('o')
+            candidate = [PSCustomObject]@{ releaseTag = [string]$artifact.releaseTag; assetName = [string]$artifact.assetName; commit = [string]$artifact.commit; packageSha256 = [string]$artifact.packageSha256 }
+            priorLkgPackageSha256 = [string]$priorArtifact.packageSha256
+        }
+        $pending | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $pendingPath -Encoding utf8
+        Invoke-StateBranchCommit -Message 'production-state: mark deployment pending'
     }.GetNewClosure()
     ResolveRollbackPackage = {
         param($artifact)
@@ -140,13 +207,20 @@ $operations = @{
     SyncCandidate = { param($artifact) Invoke-DeploySync -PublishDirectory $artifact.publishPath }.GetNewClosure()
     VerifyCandidate = { param($artifact) Invoke-LiveVerification -PublishDirectory $artifact.publishPath }.GetNewClosure()
     SyncRollback = { param($package, $artifact) Invoke-DeploySync -PublishDirectory $package.publishPath }.GetNewClosure()
+    ClearPending = {
+        param($artifact)
+        if (Test-Path -LiteralPath $pendingPath -PathType Leaf) { Remove-Item -LiteralPath $pendingPath -Force }
+        Invoke-StateBranchCommit -Message 'production-state: verified rollback restored prior LKG'
+    }.GetNewClosure()
     VerifyRollback = { param($artifact) Invoke-LiveVerification -PublishDirectory $operationState.rollback.publishPath }.GetNewClosure()
     WriteState = {
         param($artifact)
         $record = New-LkgRecord -Artifact $artifact -VerifiedAtUtc ([DateTime]::UtcNow.ToString('o')) -Workflow $env:GITHUB_WORKFLOW -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT
+        $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding utf8
+        if (Test-Path -LiteralPath $pendingPath -PathType Leaf) { Remove-Item -LiteralPath $pendingPath -Force }
+        Invoke-StateBranchCommit -Message 'production-state: record verified live artifact and clear pending'
         $recordDirectory = Split-Path -Parent $StateRecordPath
-        New-Item -ItemType Directory -Path $recordDirectory -Force | Out-Null
-        $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateRecordPath -Encoding utf8
+        if ($recordDirectory) { New-Item -ItemType Directory -Path $recordDirectory -Force | Out-Null; $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateRecordPath -Encoding utf8 }
         return $record
     }.GetNewClosure()
 }
@@ -169,10 +243,10 @@ if ($SourceTag) {
     }
     $resolvedPackagePath = $published.path
     $candidateDigest = Assert-PackageSha256 -Path $published.path -ExpectedSha256 $ExpectedPackageSha256
-    git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-    if ($LASTEXITCODE -ne 0) { throw 'Could not refresh origin/main before source validation.' }
-    git fetch --no-tags origin "refs/tags/$SourceTag:refs/tags/$SourceTag"
-    if ($LASTEXITCODE -ne 0) { throw "Could not resolve source tag '$SourceTag'." }
+    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main') | Out-Null }
+    catch { throw "Could not refresh origin/main before source validation: $($_.Exception.Message)" }
+    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', "refs/tags/$SourceTag:refs/tags/$SourceTag") | Out-Null }
+    catch { throw "Could not resolve source tag '$SourceTag': $($_.Exception.Message)" }
     $SourceCommit = (git rev-list -n 1 "refs/tags/$SourceTag").Trim()
     if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[a-f0-9]{40,64}$') { throw "Could not resolve source tag '$SourceTag' to a commit." }
     git merge-base --is-ancestor $SourceCommit origin/main
@@ -204,7 +278,7 @@ if ($Mode -eq 'release' -or ($SourceTag -and -not $ManualMain)) {
     if ($metadata.appRevision -cne $releaseCommit) { throw 'Candidate embedded appRevision does not match workflow source commit.' }
 }
 try {
-    Invoke-LkgDeployment -Operations $operations -Candidate $candidate -ArchiveCandidateBeforeDeploy:$ManualMain
+    Invoke-LkgDeployment -Operations $operations -Candidate $candidate -ArchiveCandidateBeforeDeploy:$ManualMain -AllowPendingRecovery:$AllowPendingRecovery
 }
 catch {
     Write-Error -ErrorRecord $_

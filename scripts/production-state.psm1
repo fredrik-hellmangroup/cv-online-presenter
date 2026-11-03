@@ -83,16 +83,23 @@ function Invoke-LkgDeployment {
     param(
         [Parameter(Mandatory = $true)][hashtable]$Operations,
         [Parameter(Mandatory = $true)]$Candidate,
-        [switch]$ArchiveCandidateBeforeDeploy
+        [switch]$ArchiveCandidateBeforeDeploy,
+        [switch]$AllowPendingRecovery
     )
 
-    foreach ($operation in @('ReadState', 'ResolveRollbackPackage', 'ValidateCandidate', 'SyncCandidate', 'VerifyCandidate', 'SyncRollback', 'VerifyRollback', 'WriteState')) {
+    foreach ($operation in @('ReadState', 'ReadPending', 'ResolveRollbackPackage', 'ValidateCandidate', 'SetPending', 'SyncCandidate', 'VerifyCandidate', 'SyncRollback', 'VerifyRollback', 'ClearPending', 'WriteState')) {
         if (-not $Operations.ContainsKey($operation) -or $Operations[$operation] -isnot [scriptblock]) { throw "Required injected operation '$operation' is missing." }
     }
 
-    # Fail closed before any production sync when state or either immutable package is unusable.
+    # A pending record means the preceding run could have changed production without advancing LKG.
+    # Automatic releases must stop before resolving/syncing anything; only an explicit manual recovery may proceed.
     $prior = & $Operations.ReadState
     Assert-LkgRecord -Record $prior
+    $pending = & $Operations.ReadPending
+    if ($pending -and -not $AllowPendingRecovery) { throw 'A production deployment is pending reconciliation; automatic deployment is blocked before sync.' }
+    if ($pending -and $AllowPendingRecovery -and -not $pending.candidate) { throw 'Pending production state is malformed; manual reconciliation cannot proceed.' }
+
+    # Validate both immutable package identities before durably setting/replacing pending state.
     $rollbackPackage = & $Operations.ResolveRollbackPackage $prior.artifact
     if ($null -eq $rollbackPackage -or [string]::IsNullOrWhiteSpace([string]$rollbackPackage.path)) { throw 'Recorded rollback package is unavailable.' }
     Assert-PackageSha256 -Path $rollbackPackage.path -ExpectedSha256 $prior.artifact.packageSha256 | Out-Null
@@ -103,31 +110,43 @@ function Invoke-LkgDeployment {
         & $Operations.ValidateCandidate $Candidate
     }
 
+    # Must be durable before the first production mutation. The LKG record itself is not changed here.
+    & $Operations.SetPending $Candidate $prior.artifact
+    $pendingRecovery = [bool]$pending
     try {
         & $Operations.SyncCandidate $Candidate
         & $Operations.VerifyCandidate $Candidate
     }
     catch {
         $primaryFailure = $_.Exception.Message
+        if ($pendingRecovery) {
+            throw "Manual recovery deployment failed: $primaryFailure. Existing pending state remains for operator reconciliation; stale LKG rollback was intentionally not attempted."
+        }
         try {
             & $Operations.SyncRollback $rollbackPackage $prior.artifact
             & $Operations.VerifyRollback $prior.artifact
         }
         catch {
             $recoveryFailure = $_.Exception.Message
-            throw "Primary deployment failed: $primaryFailure. The single rollback attempt also failed: $recoveryFailure. Operator/provider escalation required; no retry will be attempted."
+            throw "Primary deployment failed: $primaryFailure. The single rollback attempt also failed: $recoveryFailure. Pending state is retained; operator/provider escalation required; no retry will be attempted."
         }
-        throw "Primary deployment failed: $primaryFailure. The single rollback attempt restored and verified the prior LKG; candidate workflow remains failed. If HTTP 503 persists, operator/provider escalation is required; no app-pool action was attempted."
+        try {
+            & $Operations.ClearPending $prior.artifact
+        }
+        catch {
+            throw "Primary deployment failed: $primaryFailure. The single rollback was verified and old LKG remains live, but pending-state clear failed or is ambiguous: $($_.Exception.Message). Automatic deployment remains blocked."
+        }
+        throw "Primary deployment failed: $primaryFailure. The single rollback attempt restored and verified the prior LKG; pending state was cleared and old LKG kept. If HTTP 503 persists, operator/provider escalation is required; no app-pool action was attempted."
     }
 
-    # The IIS deployment is already live. A failed state-branch write is ambiguous and must not trigger another sync.
+    # Candidate is live. Updating LKG and removing pending must be one non-force state-branch commit.
     try {
         $record = & $Operations.WriteState $Candidate
         Assert-LkgRecord -Record $record
         return [PSCustomObject]@{ Status = 'DeployedAndRecorded'; Record = $record }
     }
     catch {
-        throw "Candidate is live and passed verification, but production-state LKG write failed or is ambiguous: $($_.Exception.Message). Reconciliation is required; no rollback was attempted."
+        throw "Candidate is live and passed verification, but production-state LKG update/pending clear failed or is ambiguous: $($_.Exception.Message). Pending state must remain; reconciliation is required; no rollback was attempted."
     }
 }
 

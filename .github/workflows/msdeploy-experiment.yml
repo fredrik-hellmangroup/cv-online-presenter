@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: ''
+      reconcile_pending:
+        description: Explicitly confirm manual recovery of a previously pending production deployment
+        required: false
+        type: boolean
+        default: false
 
 run-name: MSDeploy experiment from ${{ github.ref_name }}
 
@@ -180,6 +185,8 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           $package = Join-Path 'artifact' 'msdeploy-experiment.zip'
+          $archiveAssetName = "cv-online-presenter-manual-$($env:RUN_ID)-$($env:RUN_ATTEMPT).zip"
+          $archivePackage = Join-Path 'artifact' $archiveAssetName
           if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') {
             throw 'The packaged source commit is invalid.'
           }
@@ -189,13 +196,25 @@ jobs:
           }
           $tag = "recovery/manual-$env:RUN_ID-$env:RUN_ATTEMPT"
           $assetName = "cv-online-presenter-manual-$env:RUN_ID-$env:RUN_ATTEMPT.zip"
-          gh release create $tag $package `
+          Copy-Item -LiteralPath $package -Destination $archivePackage
+          $sourceDigest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+          $archivedBytesDigest = (Get-FileHash -LiteralPath $archivePackage -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sourceDigest -cne $env:PACKAGE_SHA256 -or $archivedBytesDigest -cne $sourceDigest) {
+            throw 'Recovery archive bytes must exactly match the package job bytes and digest.'
+          }
+          gh release create $tag $archivePackage `
             --repo $env:REPOSITORY `
             --title $tag `
             --notes 'Immutable production recovery package archived before manual-main deployment.' `
             --target $env:SOURCE_COMMIT
           if ($LASTEXITCODE -ne 0) {
             throw "Could not publish immutable manual recovery release '$tag'."
+          }
+          $published = gh release view $tag --repo $env:REPOSITORY --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify manual recovery release '$tag'." }
+          $assets = @($published.assets | Where-Object { $_.name -ceq $assetName })
+          if ($assets.Count -ne 1 -or $assets[0].digest -cne "sha256:$sourceDigest") {
+            throw "Published recovery asset '$assetName' name/digest does not match the archived package."
           }
 
   deploy:
@@ -213,7 +232,7 @@ jobs:
       url: ${{ vars.DEPLOY_HEALTH_URL }}
     permissions:
       actions: read
-      contents: read
+      contents: write
     env:
       MSDEPLOY_SERVER_URL: ${{ vars.MSDEPLOY_SERVER_URL }}
       MSDEPLOY_SITE_NAME: ${{ vars.MSDEPLOY_SITE_NAME }}
@@ -224,7 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: production-state
@@ -238,7 +257,8 @@ jobs:
       - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
         run: .\scripts\ensure-webdeploy.ps1 -InstallerPath (Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi')
-      - name: Deploy, verify, and prepare LKG record
+      # The runner durably commits pending-v1.json before its first sync, then updates LKG/clears pending only after verification.
+      - name: Deploy, verify, and reconcile pending/LKG state
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -246,6 +266,7 @@ jobs:
           SOURCE_COMMIT: ${{ github.sha }}
           PACKAGE_SHA256: ${{ needs.package.outputs.package_sha256 }}
           MANUAL_MAIN: ${{ inputs.rollback_release_tag == '' }}
+          RECONCILE_PENDING: ${{ inputs.reconcile_pending }}
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
           $package = Join-Path 'artifact' 'msdeploy-experiment.zip'
@@ -259,39 +280,5 @@ jobs:
             '-SourceTag', $env:SOURCE_TAG
           )
           if ($env:MANUAL_MAIN -eq 'true') { $arguments += '-ManualMain' }
+          if ($env:RECONCILE_PENDING -eq 'true') { $arguments += '-AllowPendingRecovery' }
           .\scripts\run-production-deployment.ps1 @arguments
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: production-state-record-${{ github.run_id }}
-          path: state-record/lkg-v1.json
-          if-no-files-found: error
-          retention-days: 1
-
-  record-state:
-    needs: deploy
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: production-state-record-${{ github.run_id }}
-          path: state-record
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: production-state
-          path: production-state
-          fetch-depth: 0
-          persist-credentials: true
-      - name: Commit verified live state
-        shell: pwsh
-        run: |
-          Copy-Item -LiteralPath 'state-record/lkg-v1.json' -Destination 'production-state/lkg-v1.json' -Force
-          git -C production-state config user.name 'github-actions[bot]'
-          git -C production-state config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C production-state add -- lkg-v1.json
-          if ($LASTEXITCODE -ne 0) { throw 'Could not stage production-state LKG record.' }
-          git -C production-state commit -m 'production-state: record verified live artifact'
-          if ($LASTEXITCODE -ne 0) { throw 'Could not commit production-state LKG record.' }
-          git -C production-state push origin HEAD:production-state
-          if ($LASTEXITCODE -ne 0) { throw 'Non-force production-state push failed; remote rejection requires reconciliation.' }
