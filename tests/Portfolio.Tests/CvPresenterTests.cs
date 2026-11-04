@@ -79,11 +79,11 @@ public sealed class CvPresenterTests
     {
         var view = Build();
         Assert.Equal("SYNTHETIC PERSON", view.Name);
-        Assert.Equal("Example Organization A · Synthetic Role A · sedan 2023", view.Kicker);
+        Assert.Equal("Example Organization A \u00b7 Synthetic Role A \u00b7 sedan 2023", view.Kicker);
         Assert.Equal(["Synthetic Role A", "Synthetic Role B"], view.Roles);
         Assert.Equal("Synthetic profile summary.", view.Summary);
         Assert.Equal(
-            [(18, "+", "års erfarenhet"), (3, "", "uppdrag"), (3, "", "branscher"), (5, "", "nyckelteknologier")],
+            [(18, "+", "\u00e5rs erfarenhet"), (3, "", "uppdrag"), (3, "", "branscher"), (5, "", "nyckelteknologier")],
             view.Figures.Select(figure => (figure.Count, figure.Suffix, figure.Label)));
     }
 
