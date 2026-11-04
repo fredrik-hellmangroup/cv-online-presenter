@@ -6,35 +6,17 @@ Implement the four requested work items on an isolated worktree from `main` at
 `c9f9767`, preserving existing release and rollback behavior and avoiding any
 production dispatch, push, PR, tag, or deployment action.
 
-## Execution sequence
+## Completed work
 
-1. **Fix manual runner binding** in the renamed manual workflow using a
-   hashtable splat. Continue passing `PackagePath` unconditionally, including
-   rollback-tag runs; add `ManualMain` and `AllowPendingRecovery` only when
-   their existing conditions are true. Add a source-contract regression
-   assertion in `test-deploy-beebyte-iis.ps1`.
-2. **Remove legacy local-IIS scripts** only after a tracked repository-wide
-   reference check. Update rollback runbook wording, delete the two unused
-   local-IIS scripts, and retain all listed Beebyte and
-   production-state scripts.
-3. **Rename the manual workflow** to
-   `.github/workflows/manual-production-recovery.yml`. Update workflow/run
-   names, step labels, errors, ZIP/artifact names, tests, helper output wording,
-   and all documentation references, including `rollback-exercise.md`.
-   Preserve job IDs/matrix names and immutable release-asset naming. Check
-   workflow dispatch/run and required-check references without triggering any
-   workflow.
-4. **Correct deployment documentation** to describe `contents: write` on the
-   deploy job and the durable pending-state commit before first sync, followed
-   by same-job verification, LKG update, and pending clear.
-5. **Verify and review:** run both requested PowerShell self-tests; execute
-   actual `quality.yml` local-equivalent gates; parse the renamed YAML; confirm
-   no old script/workflow references remain; obtain read-only correctness,
-   security, conventions, and applicable PowerShell/workflow review. Address
-   blockers and rerun affected checks.
-6. **Commit per logical step** after checks: argument-binding regression fix;
-   legacy-script retirement; workflow rename and dependent references; state
-   permissions documentation. Do not push.
+1. Fixed manual runner argument binding with a hashtable splat and added a
+   source-contract regression guard. Commit: `3388626`.
+2. Removed the unused local-IIS scripts after a tracked repository-wide
+   reference check, retained the Beebyte scripts, and updated the runbook.
+   Commit: `a6a6375`.
+3. Renamed the workflow and package/artifact identities, updated tests/docs,
+   and neutralized shared helper output. Commit: `ea7070e`.
+4. Corrected the documented deploy-job permissions and pending/LKG write
+   sequence. Commit: `1d6541e`.
 
 ## Verification commands and constraints
 
@@ -61,3 +43,22 @@ production dispatch, push, PR, tag, or deployment action.
   consistent; immutable release-asset lookup remains unchanged.
 - Remote branch-protection/ruleset state may not be inspectable locally; report
   any inability to verify it rather than inferring that checks are absent.
+
+## Verification status
+
+- Both requested PowerShell self-tests passed (`33/33` state cases and the
+  Beebyte deployment helper contract tests).
+- `quality.yml` restore, architecture, npm install/build/client tests/build
+  metadata/content validation, .NET Release build/tests, npm audits, and
+  vulnerability listing passed. .NET format verification also passed.
+- All three browser-quality projects passed (Chromium: 37 passed / 1 skipped;
+  Firefox and WebKit: 26 passed / 12 skipped each).
+- YAML parsing, stale-reference checks, and `git diff --check` passed.
+- Gitleaks could not run because Docker Desktop's Linux engine was unavailable.
+- GitHub ruleset inspection confirmed the required check names are unchanged.
+  Branch-protection API calls returned 404 for both `main` and
+  `production-state`; the deploy-job token's repository-wide `contents: write`
+  scope remains an operator/security-policy consideration and was not changed.
+- No production workflow, deployment, release, or tag was triggered. Do not
+  push; the operator must create a new release tag from fixed `main` because
+  rerunning `v1.0.12` would still execute pre-fix code.
