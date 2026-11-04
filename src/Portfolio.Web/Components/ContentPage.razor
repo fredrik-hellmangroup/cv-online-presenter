@@ -83,7 +83,7 @@ else
                 {
                     @((MarkupString)cv.BeforeHistoryHtml)
                     @((MarkupString)cv.HistoryHeadingHtml)
-                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? PageHeading.Split(cv.Name).Name)" />
+                    <GitLog Assignments="cv.Assignments" HeadLabel="@(cv.Kicker ?? cv.Name)" />
                     @((MarkupString)cv.AssignmentsHtml)
                     @((MarkupString)cv.AfterHistoryHtml)
                 }
@@ -106,7 +106,7 @@ else
                 }
                 else
                 {
-                    @((MarkupString)PageHeading.SplitFirstH1(Content.Render(page)))
+                    @((MarkupString)Content.Render(page))
                     @if (path == "/services")
                     {
                         <aside class="service-cv-cta" aria-label="Fördjupad profil">

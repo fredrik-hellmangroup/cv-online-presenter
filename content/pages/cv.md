@@ -5,7 +5,8 @@ locale: "sv-SE"
 status: "published"
 type: "page"
 ---
-# Alex Exempel – Lösningsarkitekt och senior konsult (demo)
+# Alex Exempel
+Lösningsarkitekt och senior konsult (demo)
 
 ## Roller
 - Lösningsarkitekt

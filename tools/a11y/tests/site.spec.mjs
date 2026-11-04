@@ -222,33 +222,67 @@ test('/cv presents the CV as hero, figures, git log and cards without JavaScript
 });
 
 
-test('real-content home H1 exposes the complete name and tagline', async ({ page }) => {
+test('homepage presentation is centered from header through footer', async ({ page }) => {
+  await page.goto('/');
+  const alignment = await page.evaluate(() => {
+    const header = document.querySelector('.site-header');
+    const brand = header?.querySelector('.brand-wrap');
+    const nav = header?.querySelector('nav');
+    const article = document.querySelector('main.home article');
+    const footer = document.querySelector('footer');
+    if (!header || !brand || !nav || !article || !footer) return null;
+
+    return {
+      header: {
+        flexDirection: getComputedStyle(header).flexDirection,
+        alignItems: getComputedStyle(header).alignItems,
+        justifyContent: getComputedStyle(header).justifyContent,
+        textAlign: getComputedStyle(header).textAlign
+      },
+      brand: getComputedStyle(brand).justifyContent,
+      navigation: getComputedStyle(nav).justifyContent,
+      article: getComputedStyle(article).textAlign,
+      footer: {
+        justifyContent: getComputedStyle(footer).justifyContent,
+        textAlign: getComputedStyle(footer).textAlign
+      }
+    };
+  });
+
+  expect(alignment).toEqual({
+    header: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+    brand: 'center',
+    navigation: 'center',
+    article: 'center',
+    footer: { justifyContent: 'center', textAlign: 'center' }
+  });
+});
+
+test('real-content home renders the source name H1 and role separately', async ({ page }) => {
   test.skip(process.env.PLAYWRIGHT_CONTENT_MODE !== 'real');
   const pagesRoot = process.env.EDITORIAL_CONTENT_PAGES;
   expect(pagesRoot, 'real-content mode requires EDITORIAL_CONTENT_PAGES').toBeTruthy();
   const source = readFileSync(join(pagesRoot, 'home.md'), 'utf8');
   const markdown = source.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/, '');
-  const marker = markdown.match(/^#\s+(.+?)\s*$/m)?.[1];
-  expect(marker, 'external home.md must contain an H1 marker').toBeTruthy();
-  const [name, tagline] = marker.split(/\s+[\u2013\u2014-]\s+/, 2);
-  expect(name && tagline, 'external home H1 must contain a name and tagline').toBeTruthy();
-  const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const completeAccessibleName = new RegExp(`^${escapeRegExp(name)}\\s+${escapeRegExp(tagline)}$`, 'iu');
+  const lines = markdown.split(/\r?\n/);
+  const headingIndex = lines.findIndex(line => /^#\s+/.test(line));
+  const name = headingIndex < 0 ? undefined : lines[headingIndex].replace(/^#\s+/, '').trim();
+  const tagline = headingIndex < 0 ? undefined : lines.slice(headingIndex + 1).find(line => line.trim())?.trim();
+  expect(name, 'external home.md must contain a name H1').toBeTruthy();
+  expect(tagline && !/^#{1,6}\s/u.test(tagline), 'external home.md must contain a separate role paragraph').toBeTruthy();
 
   await page.goto('/');
   const heading = page.locator('main h1');
   await expect(heading).toHaveCount(1);
-  await expect(page.getByRole('heading', { level: 1, name: completeAccessibleName })).toHaveCount(1);
-  const visibleText = await heading.innerText();
-  expect(completeAccessibleName.test(visibleText), 'visible H1 must include both source components with spacing').toBe(true);
-  const sourceText = await heading.evaluate(element => element.textContent ?? '');
-  expect(completeAccessibleName.test(sourceText), 'H1 text must retain spacing between source components').toBe(true);
+  await expect(page.getByRole('heading', { level: 1, name, exact: true })).toHaveCount(1);
+  await expect(heading).toHaveText(name);
+  await expect(page.locator('main.home article > h1 + p')).toHaveText(tagline);
 });
 
 test('editorial home, services and project pages expose clear content and links', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('main.home h1')).toHaveCount(1);
-  await expect(page.locator('main.home h1 .h1-tagline')).toBeVisible();
+  await expect(page.locator('main.home article > h1 + p')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Roller', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Översikt', exact: true })).toHaveCount(0);
 
