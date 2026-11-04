@@ -5,6 +5,8 @@ locale: "sv-SE"
 status: "published"
 type: "page"
 ---
-# Alex Exempel – Lösningsarkitekt och senior konsult (demo)
+# Alex Exempel
+
+Lösningsarkitekt och senior konsult (demo)
 
 En syntetisk introduktion till konsultprofilen. Här får besökaren en kort, tydlig riktning vidare till kompetens, projekt och CV.

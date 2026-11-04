@@ -540,14 +540,28 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal("/cv", response.Headers.Location?.OriginalString);
     }
 
-    [Theory]
-    [InlineData("/")]
-    [InlineData("/cv")]
-    public async Task H1CarriesNameAndRole(string path)
+    [Fact]
+    public async Task CvHeroRendersNameAndOptionalTaglineAsSeparateElements()
     {
-        var html = await client.GetStringAsync(path);
-        Assert.Contains("class=\"h1-name\"", html);
-        Assert.Contains("class=\"h1-tagline\"", html);
+        var html = await client.GetStringAsync("/cv");
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv!;
+        var hero = Regex.Match(html, "<header class=\"cv-hero\">.*?</header>", RegexOptions.Singleline).Value;
+        var heading = Regex.Match(hero, "<h1>(.*?)</h1>", RegexOptions.Singleline);
+
+        Assert.True(heading.Success);
+        Assert.DoesNotContain("<", heading.Groups[1].Value);
+        Assert.Equal(cv.Name, System.Net.WebUtility.HtmlDecode(heading.Groups[1].Value));
+
+        var tagline = Regex.Match(hero, "<p class=\"cv-tagline\">(.*?)</p>", RegexOptions.Singleline);
+        if (cv.Tagline is null)
+        {
+            Assert.False(tagline.Success);
+        }
+        else
+        {
+            Assert.True(tagline.Success);
+            Assert.Equal(cv.Tagline, System.Net.WebUtility.HtmlDecode(tagline.Groups[1].Value));
+        }
     }
 
     [Fact]

@@ -20,6 +20,7 @@ public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills);
 
 public sealed record CvView(
     string Name,
+    string? Tagline,
     string? Kicker,
     IReadOnlyList<string> Roles,
     string? Summary,
@@ -70,6 +71,10 @@ public static class CvPresenter
         var history = Find(sections, names.History);
         var h1 = sections[0].Items.FirstOrDefault(item => item.LocalName == "h1");
         if (history is null || h1 is null || !history.Items.Any(item => item.LocalName == "h3")) return null;
+        var h1Index = sections[0].Items.IndexOf(h1);
+        var taglineParagraph = sections[0].Items.Skip(h1Index + 1).FirstOrDefault(item => item.LocalName == "p");
+        var tagline = taglineParagraph?.TextContent.Trim();
+        if (string.IsNullOrWhiteSpace(tagline)) tagline = null;
 
         var skillGroups = TransformSkillGroups(document, sections, names);
         var (introHtml, cards, assignments) = BuildAssignments(document, history, names);
@@ -91,11 +96,12 @@ public static class CvPresenter
         if (technologyCount > 0) figures.Add(new(technologyCount, string.Empty, "nyckelteknologier"));
 
         var historyIndex = sections.IndexOf(history);
-        var before = string.Concat(sections.Take(historyIndex).SelectMany(section => Render(section, names.Roles, h1)));
-        var after = string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names.Roles, h1)));
+        var before = string.Concat(sections.Take(historyIndex).SelectMany(section => Render(section, names.Roles, h1, taglineParagraph)));
+        var after = string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names.Roles, h1, taglineParagraph)));
 
         return new CvView(
             h1.TextContent.Trim(),
+            tagline,
             BuildKicker(Find(sections, names.Employment), names),
             roles,
             FirstSentence(firstParagraph),
@@ -132,13 +138,13 @@ public static class CvPresenter
     private static bool Matches(string text, string expected) =>
         string.Equals(text.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> Render(Section section, string rolesTitle, IElement h1)
+    private static IEnumerable<string> Render(Section section, string rolesTitle, IElement h1, IElement? taglineParagraph)
     {
-        // Roles and the H1 live in the hero, so they are left out of the article body.
+        // Roles, the H1 and its tagline live in the hero, so they are left out of the article body.
         if (section.Heading is not null && Matches(section.Heading.TextContent, rolesTitle)) yield break;
         if (section.Heading is not null) yield return section.Heading.OuterHtml;
         foreach (var item in section.Items)
-            if (!ReferenceEquals(item, h1)) yield return item.OuterHtml;
+            if (!ReferenceEquals(item, h1) && !ReferenceEquals(item, taglineParagraph)) yield return item.OuterHtml;
     }
 
     private static string? BuildKicker(Section? employment, CvHeadings names)

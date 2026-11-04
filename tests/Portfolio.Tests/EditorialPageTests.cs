@@ -45,7 +45,8 @@ public sealed class EditorialPageTests : IClassFixture<EditorialWebFactory>
     {
         var home = await GetHtml("/");
         var homeHeading = Assert.Single(Regex.Matches(home, "<h1(?:\\s[^>]*)?>.*?</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline));
-        Assert.Matches("<span class=\"h1-name\">[^<]+</span>\\s*<span class=\"h1-tagline\">[^<]+</span>", homeHeading.Value);
+        Assert.DoesNotContain("class=\"h1-name\"", homeHeading.Value);
+        Assert.DoesNotContain("class=\"h1-tagline\"", homeHeading.Value);
         Assert.False(Regex.IsMatch(home, "<h[2-6]\\b[^>]*>\\s*Roller\\s*</h[2-6]>", RegexOptions.IgnoreCase));
         Assert.False(Regex.IsMatch(home, "<h[2-6]\\b[^>]*>\\s*\\u00D6versikt\\s*</h[2-6]>", RegexOptions.IgnoreCase));
 
