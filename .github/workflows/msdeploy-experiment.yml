@@ -272,15 +272,15 @@ jobs:
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
           $package = Join-Path 'artifact' 'msdeploy-experiment.zip'
-          $arguments = @(
-            '-PackagePath', $package,
-            '-StateDirectory', 'production-state',
-            '-StateRecordPath', 'state-record/lkg-v1.json',
-            '-ExpectedPackageSha256', $env:PACKAGE_SHA256,
-            '-Mode', 'manual',
-            '-SourceCommit', $env:SOURCE_COMMIT,
-            '-SourceTag', $env:SOURCE_TAG
-          )
-          if ($env:MANUAL_MAIN -eq 'true') { $arguments += '-ManualMain' }
-          if ($env:RECONCILE_PENDING -eq 'true') { $arguments += '-AllowPendingRecovery' }
+          $arguments = @{
+            PackagePath = $package
+            StateDirectory = 'production-state'
+            StateRecordPath = 'state-record/lkg-v1.json'
+            ExpectedPackageSha256 = $env:PACKAGE_SHA256
+            Mode = 'manual'
+            SourceCommit = $env:SOURCE_COMMIT
+            SourceTag = $env:SOURCE_TAG
+          }
+          if ($env:MANUAL_MAIN -eq 'true') { $arguments['ManualMain'] = $true }
+          if ($env:RECONCILE_PENDING -eq 'true') { $arguments['AllowPendingRecovery'] = $true }
           .\scripts\run-production-deployment.ps1 @arguments

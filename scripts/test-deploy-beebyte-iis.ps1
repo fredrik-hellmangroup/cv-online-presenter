@@ -173,6 +173,43 @@ if ($workflow.Contains('choco install')) {
 if ($workflow.Contains('DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}')) {
     throw 'MSDeploy must not reuse the FTPS-only DEPLOY_CONTENT_PATH value.'
 }
+if ($workflow -match '(?s)\$arguments\s*=\s*@\s*\(') {
+    throw 'The manual workflow must not pass production-runner arguments through a positional array splat.'
+}
+$argumentTableMatch = [regex]::Match($workflow, '(?s)\$arguments\s*=\s*@\{(?<body>.*?)\r?\n\s*\}')
+if (-not $argumentTableMatch.Success) {
+    throw 'The manual workflow must initialize production-runner arguments with a hashtable.'
+}
+$argumentTable = $argumentTableMatch.Groups['body'].Value
+if ($argumentTable -notmatch '(?m)^\s*PackagePath\s*=\s*\$package\s*$') {
+    throw 'PackagePath must be passed unconditionally in the production-runner argument hashtable.'
+}
+if ($argumentTable -match '(?m)^\s*(ManualMain|AllowPendingRecovery)\s*=') {
+    throw 'Manual recovery switches must not be enabled unconditionally in the production-runner argument hashtable.'
+}
+foreach ($requiredArgumentFragment in @(
+        '$arguments = @{'
+        'PackagePath = $package'
+        "StateDirectory = 'production-state'"
+        "StateRecordPath = 'state-record/lkg-v1.json'"
+        'ExpectedPackageSha256 = $env:PACKAGE_SHA256'
+        "Mode = 'manual'"
+        'SourceCommit = $env:SOURCE_COMMIT'
+        'SourceTag = $env:SOURCE_TAG'
+        '$arguments[''ManualMain''] = $true'
+        '$arguments[''AllowPendingRecovery''] = $true'
+        '.\scripts\run-production-deployment.ps1 @arguments'
+    )) {
+    if (-not $workflow.Contains($requiredArgumentFragment)) {
+        throw "The manual workflow does not use a named hashtable argument for '$requiredArgumentFragment'."
+    }
+}
+if (
+    -not $workflow.Contains('if ($env:MANUAL_MAIN -eq ''true'') { $arguments[''ManualMain''] = $true }') -or
+    -not $workflow.Contains('if ($env:RECONCILE_PENDING -eq ''true'') { $arguments[''AllowPendingRecovery''] = $true }')
+) {
+    throw 'Manual recovery switches must only be added when their corresponding inputs are enabled.'
+}
 
 $productionRunnerPath = Join-Path $PSScriptRoot 'run-production-deployment.ps1'
 $productionRunner = [IO.File]::ReadAllText($productionRunnerPath)
