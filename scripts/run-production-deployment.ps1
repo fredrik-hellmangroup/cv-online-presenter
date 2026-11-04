@@ -247,7 +247,8 @@ if ($SourceTag) {
     $candidateDigest = Assert-PackageSha256 -Path $published.path -ExpectedSha256 $ExpectedPackageSha256
     try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main') | Out-Null }
     catch { throw "Could not refresh origin/main before source validation: $($_.Exception.Message)" }
-    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', "refs/tags/$SourceTag:refs/tags/$SourceTag") | Out-Null }
+    $tagRefspec = "refs/tags/${SourceTag}:refs/tags/${SourceTag}"
+    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', $tagRefspec) | Out-Null }
     catch { throw "Could not resolve source tag '$SourceTag': $($_.Exception.Message)" }
     $SourceCommit = (git rev-list -n 1 "refs/tags/$SourceTag").Trim()
     if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[a-f0-9]{40,64}$') { throw "Could not resolve source tag '$SourceTag' to a commit." }
