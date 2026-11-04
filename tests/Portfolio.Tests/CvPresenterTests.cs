@@ -5,80 +5,85 @@ namespace Portfolio.Tests;
 public sealed class CvPresenterTests
 {
     private const string Cv = """
-        # FREDRIK TEST
+        # SYNTHETIC PERSON
 
-        ## Roller
-        - Lösningsarkitekt
-        - Backendutvecklare
+        ## Roles
+        - Synthetic Role A
+        - Synthetic Role B
 
-        ## Översikt
-        Senior konsult med över 18 års erfarenhet av .NET och Azure. Arbetar i komplexa miljöer.
+        ## Overview
+        Synthetic profile summary. A fictional example with over 18 years of sample experience.
 
-        Mer text.
+        Additional synthetic text.
 
-        ## Kompetensområden
-        - Backend i .NET
+        ## Expertise
+        - Example technical capability
 
-        **Nyckelteknik**
-        - Kärnplattform: .NET, C#, Azure
+        **Key Technologies**
+        - Core: .NET, C#, Azure
         - Integration: REST, MQTT
 
-        ## Branscherfarenhet
-        Finans, försäkring, telekom
+        ## Industries
+        Sample Sector A, Sample Sector B, Sample Sector C
 
-        ## Uppdragshistorik
+        ## Assignment History
 
-        ### Alfa AB
-        **Period:** 2023 - pågående
-        **Roll:** Arkitekt
+        ### Sample Project Alpha
+        **Period:** 2023 - ongoing
+        **Role:** Synthetic Assignment Role A
 
-        Beskrivning av Alfa.
+        Synthetic description for sample project Alpha.
 
-        #### Resultat
-        Bra resultat.
+        #### Results
+        Synthetic result placeholder.
 
-        #### Nyckelord
+        #### Keywords
         .NET, Azure, REST
 
-        ### Beta AB
+        ### Sample Project Beta
         **Period:** 2018 - 2020  
-        **Roll:** Utvecklare
+        **Role:** Synthetic Assignment Role B
 
-        Beskrivning av Beta.
+        Synthetic description for sample project Beta.
 
-        #### Nyckelord
+        #### Keywords
         C#, MQTT
 
-        ### Gamma AB
+        ### Sample Project Gamma
         **Period:** 2016
-        **Roll:** Konsult
+        **Role:** Synthetic Assignment Role C
 
-        Beskrivning av Gamma.
+        Synthetic description for sample project Gamma.
 
-        ## Anställningar
-        - IT-konsult, Test Group AB, 2023 - pågående
-        - IT-konsult, Gammal AB, 2011 - 2016
+        ## Employment
+        - Synthetic Role A, Example Organization A, 2023 - ongoing
+        - Synthetic Role B, Example Organization B, 2011 - 2016
 
-        ## Språk
-        Svenska
+        ## Languages
+        Example language
         """;
 
     private static CvView Build()
     {
-        var html = new MarkdownContentService().Render(Cv);
-        return CvPresenter.Build(html) ?? throw new InvalidOperationException("The sample CV was not recognised.");
+        var sample = Cv.Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal);
+        var html = new MarkdownContentService().Render(sample);
+        var headings = new CvHeadings(
+            Roles: "Roles", Overview: "Overview", Industries: "Industries",
+            History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
+            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing");
+        return CvPresenter.Build(html, headings) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
     }
 
     [Fact]
     public void ExtractsHeroFactsAndFigures()
     {
         var view = Build();
-        Assert.Equal("FREDRIK TEST", view.Name);
-        Assert.Equal("Test Group AB · IT-konsult · sedan 2023", view.Kicker);
-        Assert.Equal(["Lösningsarkitekt", "Backendutvecklare"], view.Roles);
-        Assert.Equal("Senior konsult med över 18 års erfarenhet av .NET och Azure.", view.Summary);
+        Assert.Equal("SYNTHETIC PERSON", view.Name);
+        Assert.Equal("Example Organization A \u00b7 Synthetic Role A \u00b7 sedan 2023", view.Kicker);
+        Assert.Equal(["Synthetic Role A", "Synthetic Role B"], view.Roles);
+        Assert.Equal("Synthetic profile summary.", view.Summary);
         Assert.Equal(
-            [(18, "+", "års erfarenhet"), (3, "", "uppdrag"), (3, "", "branscher"), (5, "", "nyckelteknologier")],
+            [(18, "+", "\u00e5rs erfarenhet"), (3, "", "uppdrag"), (3, "", "branscher"), (5, "", "nyckelteknologier")],
             view.Figures.Select(figure => (figure.Count, figure.Suffix, figure.Label)));
     }
 
@@ -86,9 +91,9 @@ public sealed class CvPresenterTests
     public void ParsesAssignmentsWithPeriodRoleAndKeywords()
     {
         var assignments = Build().Assignments;
-        Assert.Equal(["Alfa AB", "Beta AB", "Gamma AB"], assignments.Select(item => item.Title));
-        Assert.Equal(("alfa-ab", 2023, null, true), (assignments[0].Id, assignments[0].StartYear, assignments[0].EndYear, assignments[0].Ongoing));
-        Assert.Equal("Arkitekt", assignments[0].Role);
+        Assert.Equal(["Sample Project Alpha", "Sample Project Beta", "Sample Project Gamma"], assignments.Select(item => item.Title));
+        Assert.Equal(("sample-project-alpha", 2023, null, true), (assignments[0].Id, assignments[0].StartYear, assignments[0].EndYear, assignments[0].Ongoing));
+        Assert.Equal("Synthetic Assignment Role A", assignments[0].Role);
         Assert.Equal([".NET", "Azure", "REST"], assignments[0].Keywords);
         Assert.Equal((2018, 2020, false), (assignments[1].StartYear, assignments[1].EndYear, assignments[1].Ongoing));
         Assert.Equal((2016, 2016), (assignments[2].StartYear, assignments[2].EndYear));
@@ -99,10 +104,10 @@ public sealed class CvPresenterTests
     public void GroupsSkillsAndRendersChips()
     {
         var view = Build();
-        Assert.Equal(["Kärnplattform", "Integration"], view.SkillGroups.Select(group => group.Name));
+        Assert.Equal(["Core", "Integration"], view.SkillGroups.Select(group => group.Name));
         Assert.Equal([".NET", "C#", "Azure"], view.SkillGroups[0].Skills);
         Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
-        Assert.DoesNotContain("<strong>Nyckelteknik</strong>", view.BeforeHistoryHtml);
+        Assert.DoesNotContain("<strong>Key Technologies</strong>", view.BeforeHistoryHtml);
     }
 
     [Fact]
@@ -111,8 +116,8 @@ public sealed class CvPresenterTests
         var html = Build().AssignmentsHtml;
         Assert.Equal(3, html.Split("<section class=\"assignment\"", StringSplitOptions.None).Length - 1);
         Assert.Contains("data-keywords=\".NET|Azure|REST\"", html);
-        Assert.Contains("<span class=\"assignment-period\">2023 – pågående</span>", html);
-        Assert.Contains("<span class=\"assignment-role\">Arkitekt</span>", html);
+        Assert.Contains("<span class=\"assignment-period\">2023 \u2013 ongoing</span>", html);
+        Assert.Contains("<span class=\"assignment-role\">Synthetic Assignment Role A</span>", html);
         Assert.Contains("<ul class=\"tags\"><li>.NET</li>", html);
         Assert.DoesNotContain("<strong>Period:</strong>", html);
     }
@@ -121,17 +126,17 @@ public sealed class CvPresenterTests
     public void KeepsHeadingAnchorsAndMovesHeroContentOutOfTheBody()
     {
         var view = Build();
-        Assert.Contains("id=\"uppdragshistorik\"", view.HistoryHeadingHtml);
+        Assert.Contains("id=\"assignment-history\"", view.HistoryHeadingHtml);
         Assert.DoesNotContain("<h1", view.BeforeHistoryHtml);
-        Assert.DoesNotContain("Roller", view.BeforeHistoryHtml);
-        Assert.Contains("id=\"oversikt\"", view.BeforeHistoryHtml);
-        Assert.Contains("id=\"anstallningar\"", view.AfterHistoryHtml);
+        Assert.DoesNotContain("Roles", view.BeforeHistoryHtml);
+        Assert.Contains("id=\"overview\"", view.BeforeHistoryHtml);
+        Assert.Contains("id=\"employment\"", view.AfterHistoryHtml);
     }
 
     [Fact]
     public void ReturnsNullWhenTheDocumentHasNoAssignmentHistory()
     {
-        var html = new MarkdownContentService().Render("# Titel\n\n## Annat\nText");
+        var html = new MarkdownContentService().Render("# Title\n\n## Other\nText");
         Assert.Null(CvPresenter.Build(html));
     }
 
@@ -155,8 +160,8 @@ public sealed class CvPresenterTests
     [Fact]
     public void GitGraphUsesSeparateLanesForOverlappingAssignments()
     {
-        CvAssignment Make(string title, int start, int end) => new(title.ToLowerInvariant(), title, "Roll", start, end, false, []);
-        var graph = GitGraphLayout.Build([Make("Yttre", 2019, 2022), Make("Inre", 2020, 2021)]);
+        CvAssignment Make(string title, int start, int end) => new(title.ToLowerInvariant(), title, "Synthetic Role", start, end, false, []);
+        var graph = GitGraphLayout.Build([Make("Outer Sample", 2019, 2022), Make("Inner Sample", 2020, 2021)]);
 
         var outerMerge = graph.Rows.Single(row => row.Kind == GitRowKind.Merge && row.AssignmentIndex == 0);
         var innerMerge = graph.Rows.Single(row => row.Kind == GitRowKind.Merge && row.AssignmentIndex == 1);

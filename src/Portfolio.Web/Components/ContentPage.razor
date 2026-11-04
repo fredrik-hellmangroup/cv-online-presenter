@@ -87,9 +87,33 @@ else
                     @((MarkupString)cv.AssignmentsHtml)
                     @((MarkupString)cv.AfterHistoryHtml)
                 }
+                else if (path == "/projects")
+                {
+                    @((MarkupString)FirstHeadingHtml(Content.Render(page)))
+                    <div class="project-grid">
+                        @foreach (var project in Content.PublishedProjects.OrderBy(item => item.Title, StringComparer.CurrentCulture))
+                        {
+                            <article class="project-card">
+                                <h2><a href="/@project.Slug">@project.Title</a></h2>
+                                <p class="project-card-description">@MetadataText(project, "summary")</p>
+                            </article>
+                        }
+                    </div>
+                }
+                else if (page.Type == "project" && path.StartsWith("/projects/", StringComparison.OrdinalIgnoreCase))
+                {
+                    <ProjectDetails Document="page" Sections="Content.Snapshot.Sections[page.Slug]" />
+                }
                 else
                 {
-                    @((MarkupString)                    PageHeading.SplitFirstH1(Content.Render(page)))
+                    @((MarkupString)PageHeading.SplitFirstH1(Content.Render(page)))
+                    @if (path == "/services")
+                    {
+                        <aside class="service-cv-cta" aria-label="Fördjupad profil">
+                            <p>Vill du läsa mer om erfarenhet och uppdrag?</p>
+                            <a class="button-link primary" href="/cv">Se fullständigt CV</a>
+                        </aside>
+                    }
                 }
                 @if (path == "/contact")
                 {
@@ -154,6 +178,15 @@ StringComparison.OrdinalIgnoreCase)
 
 
     private string? canonicalUrl => page is null || Content.SiteUrl is null ? null : Content.SiteUrl + canonicalPath;
+
+    private static string FirstHeadingHtml(string html)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(html, @"<h1(?:\s[^>]*)?>.*?</h1>", System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Value : string.Empty;
+    }
+
+    private static string MetadataText(ContentDocument document, string key) =>
+        document.Metadata.TryGetValue(key, out var value) ? value?.ToString() ?? string.Empty : string.Empty;
     private string VersionedAsset(string assetPath) => ReleaseIdentity.AppRevision.Length == 40
         && ReleaseIdentity.AppRevision.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f')
             ? $"{assetPath}?v={ReleaseIdentity.AppRevision}"

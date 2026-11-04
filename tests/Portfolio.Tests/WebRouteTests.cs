@@ -185,9 +185,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         var siteUrl = factory.Services.GetRequiredService<SiteContent>().SiteUrl!;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("# Alex Exempel", body);
         Assert.Contains($"{siteUrl}/cv", body);
-        Assert.Contains("lösningsarkitekt och senior konsult", body);
         Assert.DoesNotContain("demo-profile", body);
         Assert.DoesNotContain("Synthetic example", body);
     }
@@ -482,7 +480,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task SearchReturnsPublishedContentButNotDrafts()
     {
-        var response = await client.GetAsync("/api/search?q=Alex");
+        var response = await client.GetAsync("/api/search?q=.NET");
         var json = await response.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("/cv", json);
@@ -492,35 +490,36 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task SearchReturnsMatchingSectionWithAnchorAndSnippet()
     {
-        var response = await client.GetAsync("/api/search?q=Alex");
+        var response = await client.GetAsync("/api/search?q=.NET");
         var results = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.Contains(results.EnumerateArray(), item =>
             item.GetProperty("path").GetString()!.StartsWith("/cv#", StringComparison.Ordinal)
-            && item.GetProperty("description").GetString()!.Contains("Alex", StringComparison.OrdinalIgnoreCase));
+            && item.GetProperty("description").GetString()!.Contains(".NET", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public async Task LegacySearchPageRedirectsToCv()
     {
         var noRedirect = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var response = await noRedirect.GetAsync("        /search?q=Alex");
+        var response = await noRedirect.GetAsync("        /search?q=sample");
         Assert.Equal(HttpStatusCode.MovedPermanently, response.StatusCode);
         Assert.Equal("/cv", response.Headers.Location?.OriginalString);
     }
 
     [Fact]
-    public async Task NameAppearsOnceInTitleAndNotInHeaderOrFooterText()
+    public async Task PageBrandUsesConfiguredSiteNameAndMonogram()
     {
+        var siteName = factory.Services.GetRequiredService<SiteContent>().Settings.SiteName;
         foreach (var path in new[] { "/", "/cv" })
         {
             var html = System.Net.WebUtility.HtmlDecode(await client.GetStringAsync(path));
             var title = System.Text.RegularExpressions.Regex.Match(html, "<title>(.*?)</title>").Groups[1].Value;
-            Assert.Single(System.Text.RegularExpressions.Regex.Matches(title, "Alex Exempel"));
+            Assert.Contains(siteName, title);
             var header = System.Text.RegularExpressions.Regex.Match(html, "<header class=\"site-header\">.*?</header>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
-            Assert.Contains(">AE</a>", header);
-            Assert.Contains("aria-label=\"Alex Exempel – startsida\"", header);
+            Assert.Contains($">{PageHeading.Monogram(siteName)}</a>", header);
+            Assert.Contains($"aria-label=\"{siteName} \u2013 startsida\"", header);
             var footer = System.Text.RegularExpressions.Regex.Match(html, "<footer>.*?</footer>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
-            Assert.DoesNotContain("Alex Exempel", footer);
+            Assert.DoesNotContain(siteName, footer);
         }
     }
 

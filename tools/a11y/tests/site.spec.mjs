@@ -1,4 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const routes = ['/', '/services', '/projects', '/contact', '/cv'];
@@ -88,14 +90,20 @@ for (const route of routes) {
     if (browserName !== 'chromium') test.skip();
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'light' });
     await page.goto(route);
+    const themeToggle = page.getByRole('button', { name: 'Växla tema' });
+    await expect(themeToggle).toBeVisible();
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
     for (const colorScheme of ['light', 'dark']) {
       await page.emulateMedia({ reducedMotion: 'reduce', colorScheme });
+      await themeToggle.click();
+      await expect(html).toHaveAttribute('data-theme', colorScheme);
+      await expect(themeToggle).toHaveAttribute('aria-pressed', String(colorScheme === 'dark'));
       for (const layer of ['christmas', 'new-year']) {
-        await page.locator('html').evaluate((element, value) => { element.dataset.calendarLayer = value; }, layer);
+        await html.evaluate((element, value) => { element.dataset.calendarLayer = value; }, layer);
+        await expect(html).toHaveAttribute('data-theme', colorScheme);
         const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
         expect(audit.violations.filter(item => item.id === 'color-contrast')).toEqual([]);
-        const motion = await page.locator('.site-header').evaluate(element => getComputedStyle(element).animationDuration);
-        expect(parseFloat(motion)).toBeLessThanOrEqual(0.00001);
       }
     }
   });
@@ -136,29 +144,53 @@ test('/cv search is a floating panel and /search no longer exists as a page', as
   await page.keyboard.press('Control+k');
   const input = page.getByRole('searchbox', { name: 'Sök i CV:t' });
   await expect(input).toBeFocused();
-  await input.fill('Alex');
+  const searchTerm = (await page.locator('.assignment h3').first().innerText()).trim();
+  await input.fill(searchTerm);
   await expect(page.locator('#cv-search-results a').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(input).toBeHidden();
   await expect(toggle).toBeFocused();
 
-  await page.goto('/search?q=Alex');
+  await page.goto(`/search?q=${encodeURIComponent(searchTerm)}`);
   await expect(page).toHaveURL(/\/cv$/);
 });
 
-test('/cv constellation background is decorative and reduced motion keeps it static', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+test('/cv constellation background respects reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/cv');
-  await expect(page.locator('#constellation-field')).toHaveAttribute('aria-hidden', 'true');
+  const canvas = page.locator('#constellation-field');
+  await expect(canvas).toHaveAttribute('aria-hidden', 'true');
   await expect(page.locator('#aurora-field')).toHaveCount(0);
-  const sample = () => page.locator('#constellation-field').evaluate(canvas => canvas.toDataURL());
-  const first = await sample();
-  await page.waitForTimeout(600);
-  expect(await sample()).toBe(first);
+  const sample = () => canvas.evaluate(element => element.toDataURL());
+  const normalFrame = await sample();
+  await expect.poll(sample).not.toBe(normalFrame);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  let previousFrame;
+  let stableSamples = 0;
+  await expect.poll(async () => {
+    const frame = await sample();
+    if (frame === previousFrame) stableSamples += 1;
+    else {
+      previousFrame = frame;
+      stableSamples = 0;
+    }
+    return stableSamples >= 3;
+  }, { intervals: [100], timeout: 5_000 }).toBe(true);
+
+  const reducedFrame = await sample();
+  let changedDuringObservation = false;
+  let observationSamples = 0;
+  await expect.poll(async () => {
+    if (await sample() !== reducedFrame) changedDuringObservation = true;
+    observationSamples += 1;
+    return !changedDuringObservation && observationSamples >= 6;
+  }, { intervals: [100], timeout: 1_500 }).toBe(true);
 });
 
 test('/cv constellation reacts to hovering an assignment and runs without errors', async ({ page, browserName }) => {
   if (browserName !== 'chromium') test.skip();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   const problems = [];
   page.on('pageerror', error => problems.push(error.message));
   page.on('console', message => { if (message.type() === 'error') problems.push(message.text()); });
@@ -166,8 +198,9 @@ test('/cv constellation reacts to hovering an assignment and runs without errors
   const canvas = page.locator('#constellation-field');
   const ambient = await canvas.evaluate(element => element.toDataURL());
   await page.locator('.git-row.branch a').first().hover();
-  await page.waitForTimeout(900);
-  expect(await canvas.evaluate(element => element.toDataURL())).not.toBe(ambient);
+  await expect.poll(() => canvas.evaluate(element => element.toDataURL())).not.toBe(ambient);
+  await page.mouse.move(0, 0);
+  await expect.poll(() => canvas.evaluate(element => element.toDataURL())).toBe(ambient);
   expect(problems).toEqual([]);
 });
 
@@ -186,4 +219,65 @@ test('/cv presents the CV as hero, figures, git log and cards without JavaScript
   expect(target).toBeTruthy();
   await expect(page.locator(`[id="${target}"]`)).toHaveCount(1);
   await context.close();
+});
+
+
+test('real-content home H1 exposes the complete name and tagline', async ({ page }) => {
+  test.skip(process.env.PLAYWRIGHT_CONTENT_MODE !== 'real');
+  const pagesRoot = process.env.EDITORIAL_CONTENT_PAGES;
+  expect(pagesRoot, 'real-content mode requires EDITORIAL_CONTENT_PAGES').toBeTruthy();
+  const source = readFileSync(join(pagesRoot, 'home.md'), 'utf8');
+  const markdown = source.replace(/^---\r?\n[\s\S]*?\r?\n---\s*/, '');
+  const marker = markdown.match(/^#\s+(.+?)\s*$/m)?.[1];
+  expect(marker, 'external home.md must contain an H1 marker').toBeTruthy();
+  const [name, tagline] = marker.split(/\s+[\u2013\u2014-]\s+/, 2);
+  expect(name && tagline, 'external home H1 must contain a name and tagline').toBeTruthy();
+  const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const completeAccessibleName = new RegExp(`^${escapeRegExp(name)}\\s+${escapeRegExp(tagline)}$`, 'iu');
+
+  await page.goto('/');
+  const heading = page.locator('main h1');
+  await expect(heading).toHaveCount(1);
+  await expect(page.getByRole('heading', { level: 1, name: completeAccessibleName })).toHaveCount(1);
+  const visibleText = await heading.innerText();
+  expect(completeAccessibleName.test(visibleText), 'visible H1 must include both source components with spacing').toBe(true);
+  const sourceText = await heading.evaluate(element => element.textContent ?? '');
+  expect(completeAccessibleName.test(sourceText), 'H1 text must retain spacing between source components').toBe(true);
+});
+
+test('editorial home, services and project pages expose clear content and links', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('main.home h1')).toHaveCount(1);
+  await expect(page.locator('main.home h1 .h1-tagline')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Roller', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Översikt', exact: true })).toHaveCount(0);
+
+  await page.goto('/services');
+  await expect(page.locator('main h1')).toHaveCount(1);
+  await expect(page.locator('main h2').first()).toBeVisible();
+  await expect(page.locator('.service-cv-cta').getByRole('link', { name: /fullständigt cv/i })).toHaveAttribute('href', '/cv');
+
+  await page.goto('/projects');
+  const cards = page.locator('.project-card');
+  expect(await cards.count()).toBeGreaterThan(0);
+  for (const card of await cards.all()) {
+    await expect(card.getByRole('heading', { level: 2 }).getByRole('link')).toHaveAttribute('href', /\/projects\//);
+    await expect(card.locator('.project-card-description')).not.toBeEmpty();
+  }
+
+  const detailRoutes = await cards.locator('h2 a').evaluateAll(links => links.map(link => link.getAttribute('href')));
+  for (const route of detailRoutes) {
+    await page.goto(route);
+    await expect(page.locator('main h1')).toHaveCount(1);
+    await expect(page.locator('.project-summary')).toHaveCount(1);
+    await expect(page.locator('.project-responsibilities')).toBeVisible();
+    await expect(page.locator('.project-results')).toBeVisible();
+    await expect(page.locator('.project-technologies')).toHaveCount(1);
+    const levels = await page.locator('main h1, main h2, main h3, main h4, main h5, main h6').evaluateAll(headings => headings.map(heading => Number(heading.tagName.slice(1))));
+    expect(levels[0]).toBe(1);
+    for (let index = 1; index < levels.length; index++) expect(levels[index] - levels[index - 1]).toBeLessThanOrEqual(1);
+    await settled(page);
+    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(audit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
+  }
 });

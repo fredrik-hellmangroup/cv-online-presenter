@@ -7,6 +7,4 @@ type: "page"
 ---
 # Uppdrag
 
-## Uppdragshistorik
-
-- [Exempelplattformen](/projects/demo-platform)
+Ett urval syntetiska exempel på uppdrag och lösningar.
