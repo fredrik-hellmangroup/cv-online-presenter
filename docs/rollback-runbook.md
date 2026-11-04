@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-03
 
-Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. The legacy `rollback-iis.ps1` script is not used because it needs local filesystem and app-pool access that Beebyte does not provide.
+Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. No local-filesystem/app-pool rollback script is used on the shared Beebyte host because it requires access to the local filesystem and app pool, which Beebyte does not provide.
 
 ```mermaid
 flowchart LR

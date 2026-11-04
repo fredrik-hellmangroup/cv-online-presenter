@@ -14,8 +14,8 @@ production dispatch, push, PR, tag, or deployment action.
    their existing conditions are true. Add a source-contract regression
    assertion in `test-deploy-beebyte-iis.ps1`.
 2. **Remove legacy local-IIS scripts** only after a tracked repository-wide
-   reference check. Update rollback runbook wording, delete
-   `deploy-iis.ps1` and `rollback-iis.ps1`, and retain all listed Beebyte and
+   reference check. Update rollback runbook wording, delete the two unused
+   local-IIS scripts, and retain all listed Beebyte and
    production-state scripts.
 3. **Rename the manual workflow** to
    `.github/workflows/manual-production-recovery.yml`. Update workflow/run
@@ -44,9 +44,9 @@ production dispatch, push, PR, tag, or deployment action.
   (including npm, .NET, content, architecture, and any workflow-defined tests).
 - Parse `.github/workflows/manual-production-recovery.yml` using an available
   YAML parser.
-- Search tracked files for `deploy-iis.ps1`, `rollback-iis.ps1`,
-  `msdeploy-experiment`, and `MSDeploy experiment`; expected no remaining
-  references. Confirm required jobs/check names are unchanged.
+- Search tracked files for the deleted script paths and retired workflow
+  identity; expected no remaining references. Confirm required jobs/check
+  names are unchanged.
 - Never run a production deployment or workflow dispatch. The operator must
   cut a new release tag from fixed `main`; re-running `v1.0.12` uses pre-fix
   code.
