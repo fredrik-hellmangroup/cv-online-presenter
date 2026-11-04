@@ -6,7 +6,7 @@ Production rollback is a manual redeployment of an earlier immutable GitHub Rele
 
 ```mermaid
 flowchart LR
-    A["Choose immutable release"] --> B["Dispatch MSDeploy experiment from main"]
+    A["Choose immutable release"] --> B["Dispatch Manual production recovery from main"]
     B --> C["Validate candidate and LKG digests"]
     C --> D["Deploy through Web Deploy"]
     D --> E{"Health, exact metadata, marker absent?"}
@@ -21,7 +21,7 @@ flowchart LR
 
 1. Confirm the protected `production-state` branch has a valid `lkg-v1.json` and that its exact recorded immutable package is available. The workflow validates this prior LKG before any sync; never select a rollback based on tag ordering or `latest`.
 2. Choose the desired immutable `cv-online-presenter-<tag>.zip` on GitHub Releases. A published release is not proof it was deployed; the workflow updates LKG only after verified live deployment.
-3. Run **MSDeploy experiment** from `main`.
+3. Run **Manual production recovery** from `main`.
 4. Set `confirm_production` and enter the semantic tag or exact `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
 5. The workflow checks the tag is reachable from `main`, verifies the downloaded bytes against the GitHub asset digest, verifies the embedded metadata, and validates the prior LKG asset before sync.
 6. `/health`, exact live `/build-metadata.json`, and the active root marker check must pass. The successful manual rollback is then recorded as the actual live LKG using a non-force state-branch update.

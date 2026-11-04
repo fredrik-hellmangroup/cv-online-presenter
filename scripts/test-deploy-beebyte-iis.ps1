@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $deployScriptPath = Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1'
 $offlinePagePath = Join-Path $repositoryRoot 'deployment\app_offline.htm'
-$workflowPath = Join-Path $repositoryRoot '.github\workflows\msdeploy-experiment.yml'
+$workflowPath = Join-Path $repositoryRoot '.github\workflows\manual-production-recovery.yml'
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\release.yml'
 $installerScriptPath = Join-Path $PSScriptRoot 'ensure-webdeploy.ps1'
 $temporarySourcePath = Join-Path $repositoryRoot ".test-state-msdeploy-$([guid]::NewGuid().ToString('N'))"
@@ -164,8 +164,12 @@ foreach ($requiredWorkflowFragment in @(
         'run-production-deployment.ps1'
     )) {
     if (-not $workflow.Contains($requiredWorkflowFragment)) {
-        throw "The MSDeploy workflow is missing '$requiredWorkflowFragment'."
+        throw "The manual production recovery workflow is missing '$requiredWorkflowFragment'."
     }
+}
+$manualArtifactName = 'manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}'
+if ([regex]::Matches($workflow, [regex]::Escape($manualArtifactName)).Count -ne 3) {
+    throw 'The manual production recovery package upload and both downloads must use the same run-attempt-specific artifact name.'
 }
 if ($workflow.Contains('choco install')) {
     throw 'The production deploy job must not execute an unverified Chocolatey package.'
@@ -288,7 +292,7 @@ try {
     }
     if (
         $validPage.Output -notmatch 'Certificate validation policy self-test passed' -or
-        $validPage.Output -notmatch 'Validated MSDeploy experiment inputs'
+        $validPage.Output -notmatch 'Validated MSDeploy inputs for site'
     ) {
         throw "Validation did not report certificate-policy and input success. Output: $($validPage.Output)"
     }

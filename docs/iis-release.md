@@ -47,7 +47,7 @@ Before pushing a release tag, confirm:
 
 ## Deployment and manual recovery
 
-The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [MSDeploy experiment workflow](../.github/workflows/msdeploy-experiment.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment jobs have read-only repository permissions; a separate, minimal `contents: write` job commits the verified LKG record only after deployment verification succeeds.
+The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [Manual production recovery workflow](../.github/workflows/manual-production-recovery.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment permissions and durable production-state writes are described below.
 
 Safety and verification:
 
@@ -63,7 +63,7 @@ Safety and verification:
 ## Manual rollback steps
 
 1. Confirm the protected `production-state` branch contains a valid `lkg-v1.json` and the exact immutable package asset is available.
-2. Dispatch **MSDeploy experiment** from `main`, set `confirm_production`, and enter the desired existing semantic release or `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
+2. Dispatch **Manual production recovery** from `main`, set `confirm_production`, and enter the desired existing semantic release or `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
 3. The workflow verifies tag reachability, the GitHub-published digest and downloaded package bytes, embedded metadata, and the prior LKG asset before production sync.
 4. Confirm health, exact build metadata, and the `/app_offline.htm` marker observation pass. A successful manual rollback updates LKG to that actual live artifact using a non-force state-branch push.
 
