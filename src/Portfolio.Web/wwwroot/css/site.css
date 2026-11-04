@@ -152,6 +152,10 @@ main.home article:not(.cv) > h1 + p {
 main.home .cv-actions { margin-top: 2rem; justify-content: center; }
 main.home article { margin-inline: auto; text-align: center; }
 main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+:root:has(main.home) .site-header { flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+:root:has(main.home) .brand-wrap,
+:root:has(main.home) nav { justify-content: center; }
+:root:has(main.home) footer { justify-content: center; text-align: center; }
 /* Sub pages: centered column and hero (title, accent rule, lead), left-aligned body text for readability. */
 main:not(.home) article:not(.cv) { margin-inline: auto; }
 main:not(.home) article:not(.cv) > h1 { text-align: center; }

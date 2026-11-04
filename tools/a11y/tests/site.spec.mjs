@@ -222,6 +222,42 @@ test('/cv presents the CV as hero, figures, git log and cards without JavaScript
 });
 
 
+test('homepage presentation is centered from header through footer', async ({ page }) => {
+  await page.goto('/');
+  const alignment = await page.evaluate(() => {
+    const header = document.querySelector('.site-header');
+    const brand = header?.querySelector('.brand-wrap');
+    const nav = header?.querySelector('nav');
+    const article = document.querySelector('main.home article');
+    const footer = document.querySelector('footer');
+    if (!header || !brand || !nav || !article || !footer) return null;
+
+    return {
+      header: {
+        flexDirection: getComputedStyle(header).flexDirection,
+        alignItems: getComputedStyle(header).alignItems,
+        justifyContent: getComputedStyle(header).justifyContent,
+        textAlign: getComputedStyle(header).textAlign
+      },
+      brand: getComputedStyle(brand).justifyContent,
+      navigation: getComputedStyle(nav).justifyContent,
+      article: getComputedStyle(article).textAlign,
+      footer: {
+        justifyContent: getComputedStyle(footer).justifyContent,
+        textAlign: getComputedStyle(footer).textAlign
+      }
+    };
+  });
+
+  expect(alignment).toEqual({
+    header: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+    brand: 'center',
+    navigation: 'center',
+    article: 'center',
+    footer: { justifyContent: 'center', textAlign: 'center' }
+  });
+});
+
 test('real-content home renders the source name H1 and role separately', async ({ page }) => {
   test.skip(process.env.PLAYWRIGHT_CONTENT_MODE !== 'real');
   const pagesRoot = process.env.EDITORIAL_CONTENT_PAGES;
