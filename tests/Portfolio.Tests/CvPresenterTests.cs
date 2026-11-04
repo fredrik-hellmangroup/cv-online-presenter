@@ -7,6 +7,10 @@ public sealed class CvPresenterTests
     private const string Cv = """
         # SYNTHETIC PERSON
 
+        Synthetic Role Headline
+
+        Introductory text that remains in the article body.
+
         ## Roles
         - Synthetic Role A
         - Synthetic Role B
@@ -63,9 +67,9 @@ public sealed class CvPresenterTests
         Example language
         """;
 
-    private static CvView Build()
+    private static CvView Build(string? document = null)
     {
-        var sample = Cv.Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal);
+        var sample = (document ?? Cv).Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal);
         var html = new MarkdownContentService().Render(sample);
         var headings = new CvHeadings(
             Roles: "Roles", Overview: "Overview", Industries: "Industries",
@@ -79,12 +83,25 @@ public sealed class CvPresenterTests
     {
         var view = Build();
         Assert.Equal("SYNTHETIC PERSON", view.Name);
+        Assert.Equal("Synthetic Role Headline", view.Tagline);
+        Assert.DoesNotContain("Synthetic Role Headline", view.BeforeHistoryHtml);
+        Assert.Contains("Introductory text that remains in the article body.", view.BeforeHistoryHtml);
         Assert.Equal("Example Organization A \u00b7 Synthetic Role A \u00b7 sedan 2023", view.Kicker);
         Assert.Equal(["Synthetic Role A", "Synthetic Role B"], view.Roles);
         Assert.Equal("Synthetic profile summary.", view.Summary);
         Assert.Equal(
             [(18, "+", "\u00e5rs erfarenhet"), (3, "", "uppdrag"), (3, "", "branscher"), (5, "", "nyckelteknologier")],
             view.Figures.Select(figure => (figure.Count, figure.Suffix, figure.Label)));
+    }
+
+
+    [Fact]
+    public void TaglineIsNullWhenNoParagraphFollowsTheName()
+    {
+        var document = Cv.Replace("Synthetic Role Headline", string.Empty, StringComparison.Ordinal)
+            .Replace("Introductory text that remains in the article body.", string.Empty, StringComparison.Ordinal);
+
+        Assert.Null(Build(document).Tagline);
     }
 
     [Fact]
