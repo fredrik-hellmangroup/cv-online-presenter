@@ -26,7 +26,7 @@ public static class PageHeading
     public static string SplitFirstH1(string renderedHtml) =>
         H1Pattern.Replace(
             renderedHtml,
-            match => $"{match.Groups["open"].Value}<span class=\"h1-name\">{match.Groups["name"].Value}</span>"
+            match => $"{match.Groups["open"].Value}<span class=\"h1-name\">{match.Groups["name"].Value}</span> "
                 + $"<span class=\"h1-tagline\">{match.Groups["tagline"].Value}</span>{match.Groups["close"].Value}",
             1);
 

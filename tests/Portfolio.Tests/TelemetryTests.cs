@@ -39,7 +39,8 @@ public sealed class TelemetryTests
         var response = await client.GetAsync("/api/search?q=private-query-marker");
 
         Assert.True(response.IsSuccessStatusCode);
-        var activity = Assert.Single(activities, item => item.DisplayName == "http.request");
+        var activity = Assert.Single(activities, item => item.DisplayName == "http.request"
+            && Equals(item.GetTagItem("http.route"), "/api/search"));
         Assert.Equal("/api/search", activity.GetTagItem("http.route"));
         var releaseIdentity = factory.Services.GetRequiredService<ReleaseIdentity>();
         Assert.Equal(releaseIdentity.BuildId, activity.GetTagItem("service.version"));

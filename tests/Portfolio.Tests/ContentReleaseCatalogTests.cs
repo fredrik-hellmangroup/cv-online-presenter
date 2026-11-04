@@ -5,6 +5,7 @@ using Portfolio.Content;
 
 namespace Portfolio.Tests;
 
+[Collection(WebHostCollection.Name)]
 public sealed class ContentReleaseCatalogTests : IDisposable
 {
     private readonly ITestOutputHelper output;
@@ -55,13 +56,13 @@ public sealed class ContentReleaseCatalogTests : IDisposable
     [Fact]
     public async Task AppServesTheActiveReleaseAfterRestartAndFallsBackWhenItIsBroken()
     {
-        WriteRelease("good", "Release Person");
+        WriteRelease("good", "SYNTHETIC RELEASE PERSON");
         new ContentReleaseCatalog(root).WriteActiveReleaseId("good");
 
         await using (var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("Content:ReleasesRoot", root)))
         {
             var html = await factory.CreateClient().GetStringAsync("/");
-            Assert.Contains("Release Person", html);
+            Assert.Contains("SYNTHETIC RELEASE PERSON", html);
         }
 
         File.WriteAllText(Path.Combine(root, "good", "pages", "home.md"), "invalid");
@@ -69,15 +70,17 @@ public sealed class ContentReleaseCatalogTests : IDisposable
         {
             var response = await factory.CreateClient().GetAsync("/");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            Assert.Contains("Alex Exempel", await response.Content.ReadAsStringAsync());
+            var fallbackHtml = await response.Content.ReadAsStringAsync();
+            Assert.Contains("<main", fallbackHtml);
+            Assert.DoesNotContain("SYNTHETIC RELEASE PERSON", fallbackHtml);
         }
     }
 
     [Fact]
     public async Task FailedPersistLeavesTheServedSnapshotUnchanged()
     {
-        WriteRelease("first", "First Person");
-        WriteRelease("second", "Second Person");
+        WriteRelease("first", "SYNTHETIC FIRST");
+        WriteRelease("second", "SYNTHETIC SECOND");
         var loader = new ContentSnapshotLoader();
         var store = new ContentSnapshotStore(await loader.LoadAsync(Path.Combine(root, "first", "pages")), loader, "first");
         var before = store.Current.Version;
@@ -122,7 +125,7 @@ public sealed class ContentReleaseCatalogTests : IDisposable
     [Fact]
     public async Task ActivationEndpointUsesTheTokenFileAndAFolderRelativeToTheApp()
     {
-        WriteRelease("good", "Release Person");
+        WriteRelease("good", "SYNTHETIC RELEASE PERSON");
         var token = new string('t', ContentReleaseCatalog.MinimumActivationTokenLength);
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("Content:ReleasesRoot", root));
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });

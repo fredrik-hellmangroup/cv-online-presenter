@@ -65,11 +65,13 @@ var configuredActivationToken = builder.Configuration["Content:ActivationToken"]
 // A relative root (appsettings.Production.json) resolves against the app folder, so no host-level environment variables are needed.
 var releaseCatalog = string.IsNullOrWhiteSpace(releasesRoot)
     ? null
-    : new ContentReleaseCatalog(Path.GetFullPath(releasesRoot, builder.Environment.ContentRootPath));
+    : new ContentReleaseCatalog(ContentReleaseCatalog.ValidateReleasesRoot(
+        Path.GetFullPath(releasesRoot, builder.Environment.ContentRootPath),
+        builder.Environment.ContentRootPath));
 string? ResolveActivationToken() => !string.IsNullOrWhiteSpace(configuredActivationToken)
     ? configuredActivationToken.Length >= ContentReleaseCatalog.MinimumActivationTokenLength ? configuredActivationToken : null
     : releaseCatalog?.ReadActivationToken();
-var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath);
+var contentRoot = ResolveContentRoot(builder.Environment.ContentRootPath, builder.Configuration["Content:PagesRoot"]);
 var loader = new ContentSnapshotLoader(PortfolioRoutes.CorePages.Values.ToArray());
 var (initialSnapshot, activeReleaseId, startupWarning) = await LoadInitialSnapshotAsync(loader, releaseCatalog, contentRoot);
 var store = new ContentSnapshotStore(initialSnapshot, loader, activeReleaseId);
@@ -320,8 +322,16 @@ static async Task<(ContentSnapshot Snapshot, string? ActiveReleaseId, string? Wa
     return (await loader.LoadAsync(bundledPages), null, warning);
 }
 
-static string ResolveContentRoot(string webRoot)
+static string ResolveContentRoot(string webRoot, string? configuredPagesRoot)
 {
+    if (!string.IsNullOrWhiteSpace(configuredPagesRoot))
+    {
+        var configuredPath = Path.GetFullPath(configuredPagesRoot, webRoot);
+        if (!Directory.Exists(configuredPath))
+            throw new DirectoryNotFoundException("Configured Content:PagesRoot directory does not exist.");
+        return configuredPath;
+    }
+
     var candidates = new[]
     {
         Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "content", "pages")),

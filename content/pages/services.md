@@ -7,14 +7,11 @@ type: "page"
 ---
 # Kompetens
 
-## Kompetensområden
-- Lösningsarkitektur och teknisk riktning nära implementation
-- Backendutveckling i .NET/C#
-- Systemintegration mellan interna system och externa tjänster
-- CI/CD och plattformsarbete för stabil leverans
-- Modernisering av befintliga system
+## Lösningsarkitektur
+Teknisk riktning nära implementation och ett helhetsperspektiv på system och leverans.
 
-**Nyckelteknik**
-- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server
-- Integration: REST, RabbitMQ, gRPC
-- Moln och DevOps: GitHub Actions, Docker, Bicep
+## Backend och integration
+Syntetiska exempel på backendutveckling, API:er och integrationer mellan system.
+
+## Plattform och modernisering
+Arbetssätt för stabil leverans och stegvis utveckling av befintliga lösningar.

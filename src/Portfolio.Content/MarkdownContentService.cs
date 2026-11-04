@@ -78,6 +78,15 @@ public sealed class MarkdownContentService
 
         foreach (var document in items)
         {
+            if (document.Type.Equals("project", StringComparison.OrdinalIgnoreCase))
+            {
+                var segments = document.Slug.Split('/');
+                if (segments.Length != 2
+                    || !segments[0].Equals("projects", StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(segments[1]))
+                    errors.Add(new(document.SourcePath, "Project slug must match the one-level '/projects/{slug}' route."));
+            }
+
             void Require(string value, string field)
             {
                 if (string.IsNullOrWhiteSpace(value)) errors.Add(new(document.SourcePath, $"Required field '{field}' is missing."));
@@ -176,18 +185,51 @@ public sealed class MarkdownContentService
 
     public async Task<IReadOnlyList<ContentDocument>> LoadDirectoryAsync(string contentRoot, CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(contentRoot)) return [];
         var root = Path.GetFullPath(contentRoot);
+        try
+        {
+            ContentPathGuard.EnsureOrdinaryDirectory(root, "Markdown pages root");
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return [];
+        }
+        var canonicalRoot = ContentPathGuard.CanonicalizeExistingPath(root);
         var documents = new List<ContentDocument>();
-        foreach (var file in Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(canonicalRoot);
+
+        while (pendingDirectories.TryPop(out var directory))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var relative = Path.GetRelativePath(root, file);
-            var slug = Path.ChangeExtension(relative, null).Replace('\\', '/');
-            var source = await File.ReadAllTextAsync(file, cancellationToken);
-            documents.Add(Parse(slug, relative, source));
+            ContentPathGuard.EnsureOrdinaryDirectory(directory, "Markdown content directory");
+            var canonicalDirectory = ContentPathGuard.CanonicalizeExistingPath(directory);
+            ContentPathGuard.EnsureWithinRoot(canonicalRoot, canonicalDirectory, "Markdown content directory");
+
+            foreach (var entry in Directory.EnumerateFileSystemEntries(canonicalDirectory).Order(StringComparer.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException($"Content entry '{entry}' must not be a reparse point.");
+
+                var resolvedEntry = ContentPathGuard.CanonicalizeExistingPath(entry);
+                ContentPathGuard.EnsureWithinRoot(canonicalRoot, resolvedEntry, "Content entry");
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    pendingDirectories.Push(resolvedEntry);
+                    continue;
+                }
+
+                if (!Path.GetExtension(entry).Equals(".md", StringComparison.OrdinalIgnoreCase)) continue;
+                var relative = Path.GetRelativePath(canonicalRoot, resolvedEntry);
+                var slug = Path.ChangeExtension(relative, null).Replace('\\', '/');
+                var source = await File.ReadAllTextAsync(resolvedEntry, cancellationToken);
+                documents.Add(Parse(slug, relative, source));
+            }
         }
-        return documents;
+
+        return documents.OrderBy(document => document.SourcePath, StringComparer.Ordinal).ToArray();
     }
 
     private static (string FrontMatter, string Markdown) SplitFrontMatter(string source, string file)

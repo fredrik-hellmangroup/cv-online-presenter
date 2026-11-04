@@ -1,0 +1,70 @@
+@using Portfolio.Content
+@using System.Collections
+@using System.Text.RegularExpressions
+
+<div class="project-detail">
+    @foreach (var section in Sections)
+    {
+        @if (string.IsNullOrWhiteSpace(section.Heading))
+        {
+            <div class="project-intro">@((MarkupString)Content.RenderMarkdown(section.Markdown))</div>
+            @if (!string.IsNullOrWhiteSpace(Summary))
+            {
+                <section class="project-summary" aria-label="Sammanfattning">
+                    <h2>Sammanfattning</h2>
+                    <p>@Summary</p>
+                </section>
+            }
+        }
+        else if (SectionClass(section.Heading) == "project-summary" && !string.IsNullOrWhiteSpace(Summary))
+        {
+            @* The front-matter summary is rendered once above; omit any duplicate Markdown summary section. *@
+        }
+        else if (SectionClass(section.Heading) == "project-technologies" && Technologies.Count > 0)
+        {
+            @* The normalized technology list below is the canonical display for this metadata. *@
+        }
+        else
+        {
+            <section class="@SectionClass(section.Heading)">
+                @((MarkupString)Content.RenderMarkdown(section.Markdown))
+            </section>
+        }
+    }
+    @if (Technologies.Count > 0)
+    {
+        <section class="project-technologies" aria-label="Teknik">
+            <h2>Teknik</h2>
+            <ul>
+                @foreach (var technology in Technologies)
+                {
+                    <li>@technology</li>
+                }
+            </ul>
+        </section>
+    }
+    <p class="project-actions"><a href="/projects">Till alla uppdrag</a> · <a href="/cv">Fullständigt CV</a></p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ContentDocument Document { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<ClassifiedSection> Sections { get; set; } = [];
+    [Inject] private SiteContent Content { get; set; } = default!;
+
+    private string Summary => Document.Metadata.TryGetValue("summary", out var value) ? value?.ToString() ?? string.Empty : string.Empty;
+    private List<string> Technologies => Document.Metadata.TryGetValue("technologies", out var value)
+        ? value is IEnumerable sequence and not string
+            ? sequence.Cast<object?>().Where(item => item is not null).Select(item => item!.ToString()!).ToList()
+            : (value?.ToString() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+        : [];
+
+    private static string SectionClass(string heading)
+    {
+        var normalized = Regex.Replace(heading.ToLowerInvariant(), @"[^\p{L}\p{N}]+", " ").Trim();
+        if (normalized.Contains("ansvar") || normalized.Contains("responsibilit")) return "project-responsibilities";
+        if (normalized.Contains("result") || normalized.Contains("outcome")) return "project-results";
+        if (normalized.Contains("teknik") || normalized.Contains("technolog") || normalized.Contains("technology")) return "project-technologies";
+        if (normalized.Contains("sammanfatt") || normalized.Contains("summary")) return "project-summary";
+        return "project-section";
+    }
+}

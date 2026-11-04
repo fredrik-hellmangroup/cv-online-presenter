@@ -28,6 +28,8 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
 
     public string Render(ContentDocument document) => renderer.Render(document.Markdown);
 
+    public string RenderMarkdown(string markdown) => renderer.Render(markdown);
+
     // The CV view is derived from the rendered CV page, so it is cached per content snapshot.
     private static readonly Lock CvLock = new();
     private static string? cachedCvVersion;

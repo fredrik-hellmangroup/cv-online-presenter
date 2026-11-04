@@ -27,6 +27,34 @@ public sealed class ContentReleaseCatalog
 
     public string Root { get; }
 
+    public static string ValidateReleasesRoot(string releasesRoot, string appContentRoot)
+    {
+        if (string.IsNullOrWhiteSpace(releasesRoot)) throw new ArgumentException("A releases root is required.", nameof(releasesRoot));
+        if (string.IsNullOrWhiteSpace(appContentRoot)) throw new ArgumentException("An app content root is required.", nameof(appContentRoot));
+
+        ContentPathGuard.EnsureNoReparsePointsInExistingPath(releasesRoot, "content releases root");
+        ContentPathGuard.EnsureNoReparsePointsInExistingPath(appContentRoot, "app content root");
+        var root = Path.GetFullPath(releasesRoot);
+        var appRoot = Path.GetFullPath(appContentRoot);
+        var appDataPath = Path.Combine(appRoot, "App_Data");
+        ContentPathGuard.EnsureNoReparsePointsInExistingPath(appDataPath, "app data root");
+        var appDataRoot = Path.GetFullPath(appDataPath);
+        if (IsSameOrWithin(root, appRoot) && !IsSameOrWithin(root, appDataRoot))
+            throw new InvalidOperationException("Content:ReleasesRoot must be outside the app directory except for its documented App_Data location.");
+        return root;
+    }
+
+    private static bool IsSameOrWithin(string path, string directory)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullDirectory = Path.GetFullPath(directory);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var directoryPrefix = fullDirectory.EndsWith(Path.DirectorySeparatorChar) || fullDirectory.EndsWith(Path.AltDirectorySeparatorChar)
+            ? fullDirectory
+            : fullDirectory + Path.DirectorySeparatorChar;
+        return fullPath.Equals(fullDirectory, comparison) || fullPath.StartsWith(directoryPrefix, comparison);
+    }
+
     public static bool IsValidReleaseId(string? releaseId) => !string.IsNullOrEmpty(releaseId)
         && releaseId.Length <= 100
         && releaseId.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_');

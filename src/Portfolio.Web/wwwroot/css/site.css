@@ -370,3 +370,20 @@ a.git-msg { text-decoration-color: rgba(var(--particle-rgb), .5); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Editorial project cards and detail sections keep generated content scannable. */
+.project-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; margin-top: 2rem; }
+.project-card { min-width: 0; padding: 1.25rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.project-card h2 { margin: 0; padding: 0; border: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.project-card h2 a { color: var(--text); text-decoration-color: var(--accent); }
+.project-card-description { margin-bottom: 0; color: var(--muted); }
+.project-detail { display: grid; gap: 1.5rem; }
+.project-detail > section, .project-detail > .project-intro { min-width: 0; }
+.project-detail > section { padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.project-detail > section h2 { margin-top: 0; }
+.project-detail > section.project-technologies ul { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; }
+.project-detail > section.project-technologies li { padding: .25rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-solid); }
+.project-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.service-cv-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1rem; margin-top: 3rem; padding: 1.5rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.service-cv-cta p { margin: 0; }

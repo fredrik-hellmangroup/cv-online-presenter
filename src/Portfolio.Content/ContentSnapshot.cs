@@ -27,14 +27,26 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
 
     public async Task<ContentSnapshot> LoadAsync(string pagesRoot, CancellationToken cancellationToken = default)
     {
-        var settingsPath = Path.GetFullPath(Path.Combine(pagesRoot, "..", "site.json"));
-        var settingsJson = await File.ReadAllTextAsync(settingsPath, cancellationToken);
+        var fullPagesRoot = Path.GetFullPath(pagesRoot);
+        ContentPathGuard.EnsureOrdinaryDirectory(fullPagesRoot, "Content pages root");
+        var canonicalPagesRoot = ContentPathGuard.CanonicalizeExistingPath(fullPagesRoot);
+        var releaseRoot = Directory.GetParent(fullPagesRoot)?.FullName
+            ?? throw new InvalidOperationException("The content pages root must have a parent directory.");
+        ContentPathGuard.EnsureOrdinaryDirectory(releaseRoot, "Content release root");
+        var canonicalReleaseRoot = ContentPathGuard.CanonicalizeExistingPath(releaseRoot);
+        ContentPathGuard.EnsureWithinRoot(canonicalReleaseRoot, canonicalPagesRoot, "Pages root");
+
+        var settingsPath = Path.Combine(releaseRoot, "site.json");
+        ContentPathGuard.EnsureOrdinaryFile(settingsPath, "Content site.json");
+        var canonicalSettingsPath = ContentPathGuard.CanonicalizeExistingPath(settingsPath);
+        ContentPathGuard.EnsureWithinRoot(canonicalReleaseRoot, canonicalSettingsPath, "Content site.json");
+        var settingsJson = await File.ReadAllTextAsync(canonicalSettingsPath, cancellationToken);
         var settings = JsonSerializer.Deserialize<SiteIdentitySettings>(settingsJson, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidOperationException("The content/site.json configuration is invalid.");
         if (settings.SupportedLocales is null || settings.SupportedLocales.Length == 0 || string.IsNullOrWhiteSpace(settings.SiteName))
             throw new InvalidOperationException("The content/site.json identity is incomplete.");
 
-        var documents = await contentService.LoadDirectoryAsync(pagesRoot, cancellationToken);
+        var documents = await contentService.LoadDirectoryAsync(canonicalPagesRoot, cancellationToken);
         var locales = settings.SupportedLocales.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var errors = contentService.Validate(documents, locales).ToList();
         foreach (var slug in requiredPublishedSlugs ?? [])
