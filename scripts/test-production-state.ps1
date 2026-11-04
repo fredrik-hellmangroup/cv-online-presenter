@@ -487,6 +487,7 @@ try {
         Assert-True (-not $manual.Contains('tags: ["recovery/**"]')) 'recovery tags must not trigger automatic deployment'
 
         $runner = Get-Content -LiteralPath (Join-Path $repoRoot 'scripts/run-production-deployment.ps1') -Raw
+        Assert-True ($runner.Contains('"refs/tags/${SourceTag}:refs/tags/${SourceTag}"')) 'source-tag fetch refspec must use unambiguous PowerShell interpolation'
         Assert-True ($runner.Contains('ExpectedPackageSha256')) 'deployment runner does not accept a package-job digest'
         Assert-True ($runner.Contains('$published.digest -cne $ExpectedPackageSha256.ToLowerInvariant()')) 'release package digest is not compared with the package-job digest'
         Assert-True ($runner.Contains('Assert-PackageSha256 -Path $resolvedPackagePath -ExpectedSha256 $ExpectedPackageSha256')) 'manual package bytes are not bound to the package-job digest'
