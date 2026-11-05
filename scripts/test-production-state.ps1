@@ -164,6 +164,7 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
                 throw 'push rejected'
             }
             $pendingBox.value = $null
+            if ($Flags.noisyWriteState) { '[production-state abc123] production-state: record verified live artifact' }
             return New-LkgRecord `
                 -Artifact $candidate `
                 -VerifiedAtUtc '2026-01-02T00:00:00Z' `
@@ -372,6 +373,12 @@ try {
         Assert-True ($state.artifact.packageSha256 -eq $script:testPendingBox.value.prior) 'failed state write advanced the old LKG pointer'
         Assert-True ($script:calls.IndexOf('verifyCandidate') -lt $script:calls.IndexOf('writeState')) 'state write preceded verification'
         Assert-True (-not ($script:calls -contains 'syncRollback')) 'state failure triggered rollback'
+    }
+    Test-Case 'stray pipeline output from the state write does not hide the LKG record' {
+        $ops = New-Ops $state $rollbackPath @{ noisyWriteState = $true }
+        $result = Invoke-LkgDeployment $ops $candidate
+        Assert-True ($result.Status -eq 'DeployedAndRecorded') 'noisy state write was not recorded as deployed'
+        Assert-True ($result.Record.artifact.packageSha256 -ceq $candidate.packageSha256) 'LKG record was not the candidate artifact'
     }
     Test-Case 'ambiguous state write fails distinctly and asks reconciliation' {
         $ops = New-Ops $state $rollbackPath @{ stateFail = $true }

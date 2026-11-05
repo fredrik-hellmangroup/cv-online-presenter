@@ -202,7 +202,9 @@ function Invoke-LkgDeployment {
 
     # Candidate is live. Updating LKG and removing pending must be one non-force state-branch commit.
     try {
-        $record = & $Operations.WriteState $Candidate
+        $record = @(& $Operations.WriteState $Candidate) |
+            Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties['schemaVersion'] } |
+            Select-Object -Last 1
         Assert-LkgRecord -Record $record
         return [PSCustomObject]@{ Status = 'DeployedAndRecorded'; Record = $record }
     }
