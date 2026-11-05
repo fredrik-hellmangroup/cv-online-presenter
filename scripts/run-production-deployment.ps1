@@ -61,7 +61,7 @@ function Invoke-StateBranchCommit {
     if ($LASTEXITCODE -ne 0) { throw 'Could not stage production-state files.' }
     git -C $StateDirectory config user.name 'github-actions[bot]'
     git -C $StateDirectory config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-    git -C $StateDirectory commit -m $Message
+    git -C $StateDirectory commit -m $Message | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the production-state commit.' }
 
     # Non-force push is a compare-and-swap; scoped credentials never enter persistent git config.

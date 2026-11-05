@@ -29,6 +29,13 @@ param(
     # is the content-releases root. Sync is additive and never deletes existing releases.
     [switch]$ActivationTokenOnly,
 
+    # App deploys retry the sync while IIS still holds DLL locks right after app_offline.htm is written.
+    [ValidateRange(0, 20)]
+    [int]$FileInUseRetryAttempts = 6,
+
+    [ValidateRange(1, 60)]
+    [int]$FileInUseRetryDelaySeconds = 10,
+
     [switch]$WhatIf,
 
     [switch]$ValidateOnly
@@ -501,27 +508,50 @@ try {
             )
         }
 
-        $source = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
-            [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
-            $resolvedSourcePath,
-            $sourceOptions
-        )
         $result = $null
-        try {
-            $result = $source.SyncTo(
-                $destinationProviderOptions,
-                $destinationOptions,
-                $syncOptions
+        $attempt = 0
+        while ($null -eq $result) {
+            $attempt++
+            $source = [Microsoft.Web.Deployment.DeploymentManager]::CreateObject(
+                [Microsoft.Web.Deployment.DeploymentWellKnownProvider]::ContentPath,
+                $resolvedSourcePath,
+                $sourceOptions
             )
-        }
-        catch {
-            # Web Deploy hides the real remote cause in nested exceptions; surface it for diagnosis.
-            $nested = $_.Exception
-            while ($null -ne $nested) {
-                Write-Output ("MSDeploy error detail: [{0}] {1}" -f $nested.GetType().Name, $nested.Message)
-                $nested = $nested.InnerException
+            try {
+                $result = $source.SyncTo(
+                    $destinationProviderOptions,
+                    $destinationOptions,
+                    $syncOptions
+                )
             }
-            throw
+            catch {
+                # Web Deploy hides the real remote cause in nested exceptions; surface it for diagnosis.
+                $nested = $_.Exception
+                $fileInUse = $false
+                while ($null -ne $nested) {
+                    Write-Output ("MSDeploy error detail: [{0}] {1}" -f $nested.GetType().Name, $nested.Message)
+                    if ($nested.Message -match 'ERROR_FILE_IN_USE|locked by an external process') {
+                        $fileInUse = $true
+                    }
+                    $nested = $nested.InnerException
+                }
+                # After app_offline.htm lands IIS needs a few seconds to unload the app and release its DLLs.
+                # Only that lock is retried; every other failure still aborts so the caller can roll back.
+                if (-not $fileInUse -or $attempt -gt $FileInUseRetryAttempts) {
+                    throw
+                }
+                Write-Output (
+                    "Destination files are still locked; retrying MSDeploy sync in {0}s (retry {1} of {2})." -f
+                    $FileInUseRetryDelaySeconds,
+                    $attempt,
+                    $FileInUseRetryAttempts
+                )
+                Start-Sleep -Seconds $FileInUseRetryDelaySeconds
+            }
+            finally {
+                $source.Dispose()
+                $source = $null
+            }
         }
         if ($result.Errors -gt 0) {
             throw "MSDeploy reported $($result.Errors) synchronization error(s)."
