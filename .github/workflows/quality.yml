@@ -40,6 +40,7 @@ jobs:
       - run: npm run content:source:validate
       - run: npm run content:check
       - run: npm run content:validate
+      - run: npm audit --audit-level=moderate
       - run: npm ci --prefix client
       - run: npm ci --prefix tools/a11y
       - run: npm run build

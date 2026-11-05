@@ -101,6 +101,8 @@ test('reusable validation checks app identity and validates all caller content',
   assert.match(getStep(steps, 'Validate source and generated content'), /content:check/);
   assert.match(getStep(steps, 'Validate content with the Node.js validator'), /content:validate/);
   assert.match(getStep(steps, 'Validate content with the .NET validator'), /dotnet run --project tools\/Portfolio\.Content\.Validator/);
+  assert.match(getStep(steps, 'Audit trusted content tooling dependencies'), /npm audit --audit-level=moderate/);
+  assert.match(getStep(steps, 'Scan caller content repository for secrets'), /gitleaks:v8\.30\.1/);
 });
 
 test('deployment gates all writes on validation and retains protected deployment semantics', () => {
@@ -189,6 +191,7 @@ test('quality required job keeps its existing name and runs content checks', () 
   assert.match(buildAndSecurity, /^      - run: npm run content:source:validate$/m);
   assert.match(buildAndSecurity, /^      - run: npm run content:check$/m);
   assert.match(buildAndSecurity, /^      - run: npm run content:validate$/m);
+  assert.match(buildAndSecurity, /^      - run: npm audit --audit-level=moderate$/m);
   assert.match(buildAndSecurity, /^      - run: npm run validate:content$/m);
   assert.match(quality, /Run VERSION bump validation tests/);
 });

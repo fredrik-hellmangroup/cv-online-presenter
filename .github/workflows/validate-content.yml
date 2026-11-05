@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: windows-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Validate application checkout inputs
         shell: pwsh
@@ -73,10 +73,16 @@ jobs:
         working-directory: app
         shell: pwsh
         run: npm ci
+      - name: Audit trusted content tooling dependencies
+        working-directory: app
+        shell: pwsh
+        run: npm audit --audit-level=moderate
       - name: Test content tooling
         working-directory: app
         shell: pwsh
         run: npm run test:content
+      - name: Scan caller content repository for secrets
+        run: docker run --rm -v "${{ github.workspace }}/content-repo:/repo" zricethezav/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --exit-code 1
       - name: Validate source and generated content
         working-directory: app
         shell: pwsh
