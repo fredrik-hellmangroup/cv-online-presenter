@@ -1,0 +1,95 @@
+name: Reusable content validation
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        description: Repository containing the trusted application validator and content tooling
+        required: true
+        type: string
+      app_sha:
+        description: Exact 40-character application commit to validate against
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Validate application checkout inputs
+        shell: pwsh
+        env:
+          APP_REPOSITORY: ${{ inputs.app_repository }}
+          APP_SHA: ${{ inputs.app_sha }}
+        run: |
+          if ($env:APP_REPOSITORY -cne 'fredrik-hellmangroup/cv-online-presenter') {
+            throw 'app_repository must be the trusted application repository.'
+          }
+          if ($env:APP_SHA -cnotmatch '^[a-f0-9]{40}$') {
+            throw 'app_sha must be a full 40-character lowercase Git commit SHA.'
+          }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+          path: content-repo
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.app_repository }}
+          ref: ${{ inputs.app_sha }}
+          fetch-depth: 0
+          path: app
+          persist-credentials: false
+      - name: Verify exact application commit
+        shell: pwsh
+        env:
+          APP_SHA: ${{ inputs.app_sha }}
+        run: |
+          git -C app fetch --no-tags origin refs/heads/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch the trusted application main branch.'
+          }
+          git -C app merge-base --is-ancestor $env:APP_SHA FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw 'app_sha must be reachable from the trusted application main branch.'
+          }
+          $actual = (git -C app rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:APP_SHA) {
+            throw 'The application checkout does not match app_sha.'
+          }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: app/global.json
+      - name: Install trusted content tooling
+        working-directory: app
+        shell: pwsh
+        run: npm ci
+      - name: Test content tooling
+        working-directory: app
+        shell: pwsh
+        run: npm run test:content
+      - name: Validate source and generated content
+        working-directory: app
+        shell: pwsh
+        env:
+          APP_SHA: ${{ inputs.app_sha }}
+        run: |
+          npm run content:source:validate -- --root ../content-repo --app-commit-sha $env:APP_SHA
+          npm run content:check -- --root ../content-repo --app-commit-sha $env:APP_SHA
+      - name: Validate content with the Node.js validator
+        working-directory: app
+        shell: pwsh
+        run: npm run content:validate -- --root ../content-repo
+      - name: Validate content with the .NET validator
+        working-directory: app
+        shell: pwsh
+        run: dotnet run --project tools/Portfolio.Content.Validator -- --content ../content-repo/content/pages
