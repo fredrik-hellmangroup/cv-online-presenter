@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "runId": "42115886615",
+  "runAttempt": "1",
+  "createdAtUtc": "2026-11-05T21:50:22.6520590Z",
+  "candidate": {
+    "releaseTag": "recovery/manual-42115886615-1",
+    "assetName": "cv-online-presenter-manual-42115886615-1.zip",
+    "commit": "8a00928dce258c1d2024a32af7e27ed893023d55",
+    "packageSha256": "688e2cc066eed70115199b4fd11bbc73a2eb99a317bea9058b7c9c7122f8e4ae"
+  },
+  "priorLkgPackageSha256": "c5c33008b0888327223fd4708f5ba318a58a50b50e53d37edef26c721183ccdd"
+}
