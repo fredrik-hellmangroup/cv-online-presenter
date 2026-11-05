@@ -20,6 +20,10 @@ The Swedish heading names are defaults in `CvHeadings`; pass another `CvHeadings
 
 Other sections (for example `## Kompetensområden` and `## Språk`) render as normal Markdown.
 
+## Services technology explorer
+
+`/services` renders the grouped `SkillGroups` and `Assignments` derived by `CvPresenter` below the services Markdown and before the CV call to action. The filter narrows the chips and group cards in place, reports visible/total counts, and exposes a no-match message. Selecting a technology toggles `aria-pressed`, updates the live usage status from assignment keywords, and sends the selected skill to the constellation; Escape clears the selection unless the CV search panel is open. The explorer is not rendered on the home page. Its buttons and counts are server-rendered so the skill content remains available without JavaScript; filtering and pinning are progressive client enhancements.
+
 ## Git log
 
 `GitGraphLayout` lays assignments out like `git log --graph`: each assignment is a branch that is merged into the trunk when it ends and branched off when it starts, newest first. Overlapping assignments get separate lanes, ongoing assignments start at the `HEAD` row, and single-year assignments are a branch and a merge in the same year. The short commit ids are a stable hash of the title and carry no meaning. Rows link to the matching assignment card.

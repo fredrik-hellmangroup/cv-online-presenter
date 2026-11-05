@@ -9,6 +9,7 @@ import {
   toNodes
 } from '../wwwroot/js/skills.js';
 import { LABEL_HEIGHT, clampRange, placeNodes } from '../wwwroot/js/constellation-layout.js';
+import { shouldAnimateConstellation } from '../wwwroot/js/constellation-engine.js';
 
 const groups = [
   { name: 'Plattform', skills: ['.NET', 'C#', 'ASP.NET Core', 'SQL Server'] },
@@ -84,4 +85,11 @@ test('constellation data is parsed defensively', () => {
   const parsed = parseConstellationData(JSON.stringify({ groups, assignments: [{ title: 'A', keywords: ['x'] }] }));
   assert.equal(parsed?.groups.length, 2);
   assert.equal(parsed?.assignments.length, 1);
+});
+
+
+test('reduced motion and hidden documents keep the constellation static', () => {
+  assert.equal(shouldAnimateConstellation(false, true), true);
+  assert.equal(shouldAnimateConstellation(true, true), false);
+  assert.equal(shouldAnimateConstellation(false, false), false);
 });

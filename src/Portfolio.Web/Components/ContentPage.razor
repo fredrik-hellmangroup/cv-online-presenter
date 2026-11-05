@@ -53,10 +53,10 @@ else
            aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
     </div>
     <nav aria-label="Huvudnavigation">
-        <a href="/services">Kompetens</a>
-        <a href="/projects">Projekt</a>
-        <a href="/cv">CV</a>
-        <a href="/contact">Kontakt</a>
+        <a href="/services" aria-current="@(path == "/services" ? "page" : null)">Kompetens</a>
+        <a href="/projects" aria-current="@(path == "/projects" || path.StartsWith("/projects/", StringComparison.OrdinalIgnoreCase) ? "page" : null)">Projekt</a>
+        <a href="/cv" aria-current="@(path == "/cv" ? "page" : null)">CV</a>
+        <a href="/contact" aria-current="@(path == "/contact" ? "page" : null)">Kontakt</a>
     </nav>
     @if (page is not null)
     {
@@ -107,6 +107,38 @@ else
                 else
                 {
                     @((MarkupString)Content.Render(page))
+                    @if (path == "/services" && Content.Cv is { SkillGroups.Count: > 0 } servicesCv)
+                    {
+                        var technologyCount = servicesCv.SkillGroups.Sum(group => group.Skills.Count);
+                        <section class="service-technologies" aria-labelledby="service-technologies-heading">
+                            <h2 id="service-technologies-heading">Teknik i uppdragen</h2>
+                            <p>Välj en teknik för att markera den i bakgrunden och se vilka tekniker som använts tillsammans i uppdragen.</p>
+                            <div class="tech-panel">
+                                <div class="tech-filter">
+                                    <label class="visually-hidden" for="technology-filter">Filtrera tekniker</label>
+                                    <input id="technology-filter" data-tech-filter type="search" aria-controls="service-skill-groups"
+                                           placeholder="Filtrera tekniker…" autocomplete="off" />
+                                    <span class="tech-count" data-tech-count aria-live="polite" aria-atomic="true">@technologyCount tekniker</span>
+                                </div>
+                                <p class="tech-status" data-pin-status role="status" aria-live="polite" aria-atomic="true">Ingen teknik markerad</p>
+                                <div id="service-skill-groups" class="skill-groups service-skill-groups">
+                                    @foreach (var group in servicesCv.SkillGroups)
+                                    {
+                                        <div class="skill-group" role="group" aria-label="@group.Name">
+                                            <h3 class="skill-group-name">@group.Name</h3>
+                                            <ul class="skill-chips">
+                                                @foreach (var skill in group.Skills)
+                                                {
+                                                    <li data-tech-item><button type="button" class="skill-btn" data-skill="@skill" aria-pressed="false">@skill</button></li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                </div>
+                                <p class="tech-empty" data-tech-empty hidden>Inga tekniker matchar din sökning.</p>
+                            </div>
+                        </section>
+                    }
                     @if (path == "/services")
                     {
                         <aside class="service-cv-cta" aria-label="Fördjupad profil">

@@ -1,5 +1,5 @@
 import { EGG_REVEAL_EVENT } from './easter-egg-engine.js';
-import { CV_QUERY_EVENT } from './events.js';
+import { CV_QUERY_EVENT, SKILL_PIN_EVENT, type SkillPinEvent } from './events.js';
 import type { ExperienceEngine } from './experience.js';
 import { LABEL_HEIGHT, WOBBLE, clampRange, placeNodes } from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
@@ -33,11 +33,11 @@ interface Packet {
 }
 
 const MAX_PIXEL_RATIO = 1.5;
-const MAX_PACKETS = 26;
+const MAX_PACKETS = 40;
 const AMBIENT_GLOW = 0.38;
 const DIM_GLOW = 0.07;
 const NARROW_VIEWPORT = 700;
-const POINTER_RADIUS = 140;
+const POINTER_RADIUS = 190;
 // Start page only: the cursor wakes nearby nodes, clicks send out a shockwave and a random node pulses now and then.
 const WAKE_RADIUS = 220;
 const SHOCK_RADIUS = 300;
@@ -49,6 +49,9 @@ const TAU = Math.PI * 2;
 const SIDE_INSET = 24;
 const BOTTOM_INSET = 88;
 const TOP_GAP = 16;
+
+export const shouldAnimateConstellation = (reducedMotion: boolean, documentVisible: boolean): boolean =>
+  !reducedMotion && documentVisible;
 
 const keywordsOf = (target: EventTarget | null): string[] | null => {
   const element = target instanceof Element ? target.closest('[data-keywords], [data-skill]') : null;
@@ -94,6 +97,9 @@ export class ConstellationEngine implements ExperienceEngine {
     let ambientEdges: SkillEdge[] = edges.filter(edge => edge.strong);
     let query = '';
     let hovered: string[] | null = null;
+    let pinned: string[] | null = null;
+    const pageKeywords = document.querySelector<HTMLElement>('[data-page-keywords]')
+      ?.dataset.pageKeywords?.split('|').filter(Boolean) ?? null;
     let inView: string[] | null = null;
     let width = 0;
     let height = 0;
@@ -150,7 +156,7 @@ export class ConstellationEngine implements ExperienceEngine {
     };
 
     const recompute = () => {
-      const keywords = hovered ?? inView;
+      const keywords = hovered ?? pinned ?? inView ?? pageKeywords;
       if (query.trim()) focus = nodesMatchingQuery(nodes, query);
       else if (keywords) focus = nodesMatching(nodes, keywords);
       else focus = null;
@@ -218,8 +224,14 @@ export class ConstellationEngine implements ExperienceEngine {
     const update = (delta: number, time: number) => {
       if (playful) updatePlay(time);
       for (const body of bodies) {
-        const targetX = body.hx + Math.sin(time / 1700 + body.phase) * WOBBLE;
-        const targetY = body.hy + Math.cos(time / 2100 + body.phase) * WOBBLE;
+        const targetX = body.hx
+          + Math.sin(time / 1700 + body.phase) * WOBBLE * 1.8
+          + Math.cos(time / 4300 + body.phase * 1.7) * 14
+          + Math.sin(time / 7200) * 16;
+        const targetY = body.hy
+          + Math.cos(time / 2100 + body.phase) * WOBBLE * 1.8
+          + Math.sin(time / 5100 + body.phase * 1.3) * 12
+          + Math.cos(time / 8300) * 12;
         let forceX = (targetX - body.x) * 0.02;
         let forceY = (targetY - body.y) * 0.02;
         const dx = body.x - pointer.x;
@@ -289,7 +301,7 @@ export class ConstellationEngine implements ExperienceEngine {
         }
         context.fillStyle = body.glow > 0.6 ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
         context.beginPath();
-        context.arc(body.x, body.y, 2.2 + body.glow * 2.8, 0, TAU);
+        context.arc(body.x, body.y, 2.8 + body.glow * 3.2, 0, TAU);
         context.fill();
         if (narrow && !playful && body.glow < 0.6) continue;
         context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
@@ -309,7 +321,7 @@ export class ConstellationEngine implements ExperienceEngine {
       cancelAnimationFrame(frame);
       frame = 0;
       refreshColour();
-      if (motion.matches || document.hidden) {
+      if (!shouldAnimateConstellation(motion.matches, !document.hidden)) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
         return;
@@ -341,6 +353,11 @@ export class ConstellationEngine implements ExperienceEngine {
     document.addEventListener('pointerout', onLeave);
     document.addEventListener('focusin', onEnter);
     document.addEventListener('focusout', onLeave);
+    document.addEventListener(SKILL_PIN_EVENT, event => {
+      const skill = (event as SkillPinEvent).detail.skill;
+      pinned = skill ? [skill] : null;
+      recompute();
+    });
     document.addEventListener(CV_QUERY_EVENT, event => {
       query = (event as CustomEvent<string>).detail ?? '';
       recompute();

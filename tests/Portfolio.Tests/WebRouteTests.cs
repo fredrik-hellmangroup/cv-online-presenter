@@ -39,6 +39,34 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task ServicesRendersCvSkillsExplorerAfterMarkdownAndKeepsItOffHomePage()
+    {
+        var response = await client.GetAsync("/services");
+        var html = await response.Content.ReadAsStringAsync();
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(cv);
+        Assert.NotEmpty(cv.SkillGroups);
+        var explorerIndex = html.IndexOf("id=\"service-technologies-heading\"", StringComparison.Ordinal);
+        var ctaIndex = html.IndexOf("service-cv-cta", StringComparison.Ordinal);
+        Assert.True(explorerIndex >= 0, "The services page should render the technology explorer.");
+        Assert.True(ctaIndex > explorerIndex, "The CV CTA should follow the technology explorer.");
+        Assert.Contains("Teknik i uppdragen", html);
+        Assert.Contains("for=\"technology-filter\"", html);
+        Assert.Contains("data-tech-filter", html);
+        Assert.Contains("data-tech-count", html);
+        Assert.Contains("data-pin-status", html);
+        Assert.Contains("data-tech-empty", html);
+        Assert.Contains("data-skill=\"", html);
+        Assert.Contains("aria-pressed=\"false\"", html);
+        Assert.Equal(cv.SkillGroups.Sum(group => group.Skills.Count), Regex.Matches(html, "data-tech-item").Count);
+
+        var home = await client.GetStringAsync("/");
+        Assert.DoesNotContain("data-tech-filter", home);
+    }
+
+    [Fact]
     public async Task UnknownProjectReturns404()
     {
         var response = await client.GetAsync("/projects/nonexistent");
