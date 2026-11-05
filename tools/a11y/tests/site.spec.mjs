@@ -6,8 +6,10 @@ import { expect, test } from '@playwright/test';
 const routes = ['/', '/services', '/projects', '/contact', '/cv'];
 
 // Entrance animations and colour transitions change computed colours mid-flight, which would skew contrast checks.
+// Animations replaced by a theme switch reject `finished` with AbortError; they are no longer running, so that is settled too.
 const settled = page => page.evaluate(() => Promise.all(
-  document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)
+  document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => undefined))
 ));
 
 test('unknown URLs return a useful, private 404', async ({ page }) => {
@@ -196,11 +198,16 @@ test('/cv constellation reacts to hovering an assignment and runs without errors
   page.on('console', message => { if (message.type() === 'error') problems.push(message.text()); });
   await page.goto('/cv');
   const canvas = page.locator('#constellation-field');
+  // Layout and obstacle measurement finish a frame or two after load; capture the ambient frame once they have.
+  await page.evaluate(() => document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
   const ambient = await canvas.evaluate(element => element.toDataURL());
+  const frame = () => canvas.evaluate(element => element.toDataURL());
   await page.locator('.git-row.branch a').first().hover();
-  await expect.poll(() => canvas.evaluate(element => element.toDataURL())).not.toBe(ambient);
+  await expect.poll(frame).not.toBe(ambient);
+  const hovered = await frame();
   await page.mouse.move(0, 0);
-  await expect.poll(() => canvas.evaluate(element => element.toDataURL())).toBe(ambient);
+  // Leaving the hover hands the highlight back to the section in view, so the frame changes again rather than matching the first frame.
+  await expect.poll(frame).not.toBe(hovered);
   expect(problems).toEqual([]);
 });
 
@@ -214,10 +221,12 @@ test('/cv presents the CV as hero, figures, git log and cards without JavaScript
   expect(await page.locator('.assignment').count()).toBeGreaterThanOrEqual(5);
   expect(await page.locator('.assignment .tags li').count()).toBeGreaterThan(10);
   expect(await page.locator('.skill-group .chips li').count()).toBeGreaterThan(10);
-  const firstLink = page.locator('.git-row.branch a').first();
-  const target = (await firstLink.getAttribute('href'))?.slice(1);
-  expect(target).toBeTruthy();
-  await expect(page.locator(`[id="${target}"]`)).toHaveCount(1);
+  const hrefs = await page.locator('.git-row.branch a').evaluateAll(links => links.map(link => link.getAttribute('href')));
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) {
+    if (href?.startsWith('#')) await expect(page.locator(`[id="${href.slice(1)}"]`)).toHaveCount(1);
+    else expect(href).toMatch(/^\/projects\//);
+  }
   await context.close();
 });
 
@@ -304,7 +313,7 @@ test('editorial home, services and project pages expose clear content and links'
   for (const route of detailRoutes) {
     await page.goto(route);
     await expect(page.locator('main h1')).toHaveCount(1);
-    await expect(page.locator('.project-summary')).toHaveCount(1);
+    await expect(page.locator('.project-intro')).toHaveCount(1);
     await expect(page.locator('.project-responsibilities')).toBeVisible();
     await expect(page.locator('.project-results')).toBeVisible();
     await expect(page.locator('.project-technologies')).toHaveCount(1);
