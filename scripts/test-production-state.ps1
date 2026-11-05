@@ -334,7 +334,7 @@ try {
         $record = New-LkgRecord `
             -Artifact $manual `
             -VerifiedAtUtc '2026-01-03T00:00:00Z' `
-            -Workflow 'MSDeploy experiment' `
+            -Workflow 'Manual production recovery' `
             -RunId '88' `
             -RunAttempt '1'
         Assert-True ($null -eq $record.artifact.sourceTag) 'manual-main source tag must be null'
@@ -463,7 +463,7 @@ try {
     }
     Test-Case 'release and manual workflows use bounded deployment with isolated permissions' {
         $repoRoot = Split-Path -Parent $PSScriptRoot
-        foreach ($workflow in @('release.yml', 'msdeploy-experiment.yml')) {
+        foreach ($workflow in @('release.yml', 'manual-production-recovery.yml')) {
             $text = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/$workflow") -Raw
             Assert-True ($text.Contains('group: production-deployment')) "$workflow lacks shared production concurrency"
             Assert-True ($text.Contains('ref: production-state')) "$workflow does not read durable production state"
@@ -480,7 +480,7 @@ try {
         Assert-True ($release.IndexOf('publish-release:') -lt $release.IndexOf('deploy:')) 'release publication must precede deployment'
         Assert-True ($release.Contains('contents: read') -and $release.Contains('contents: write')) 'release write scope is not isolated'
 
-        $manual = Get-Content -LiteralPath (Join-Path $repoRoot '.github/workflows/msdeploy-experiment.yml') -Raw
+        $manual = Get-Content -LiteralPath (Join-Path $repoRoot '.github/workflows/manual-production-recovery.yml') -Raw
         Assert-True ($manual.Contains('archive_manual_recovery:')) 'manual-main recovery publication is not isolated'
         Assert-True ($manual.Contains('--target $env:SOURCE_COMMIT')) 'manual recovery tag does not point to the packaged source commit'
         Assert-True ($manual.Contains('recovery/manual-')) 'manual recovery prefix is missing'

@@ -378,7 +378,7 @@ if ($ValidateOnly) {
         throw 'Microsoft.Web.Deployment.dll must have a valid Authenticode signature.'
     }
     Assert-CertificateValidationPolicy -Certificate $assemblySignature.SignerCertificate
-    Write-Output "Validated MSDeploy experiment inputs for site '$deploySiteName'."
+    Write-Output "Validated MSDeploy inputs for site '$deploySiteName'."
     return
 }
 if (-not (Test-Path -LiteralPath $WebDeployAssemblyPath -PathType Leaf)) {
@@ -569,4 +569,4 @@ finally {
     }
 }
 
-Write-Output "MSDeploy experiment completed for site '$deploySiteName'."
+Write-Output "MSDeploy sync completed for site '$deploySiteName'."

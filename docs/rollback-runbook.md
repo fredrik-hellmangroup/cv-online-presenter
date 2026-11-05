@@ -2,11 +2,11 @@
 
 Last updated: 2026-11-03
 
-Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. The legacy `rollback-iis.ps1` script is not used because it needs local filesystem and app-pool access that Beebyte does not provide.
+Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. No local-filesystem/app-pool rollback script is used on the shared Beebyte host because it requires access to the local filesystem and app pool, which Beebyte does not provide.
 
 ```mermaid
 flowchart LR
-    A["Choose immutable release"] --> B["Dispatch MSDeploy experiment from main"]
+    A["Choose immutable release"] --> B["Dispatch Manual production recovery from main"]
     B --> C["Validate candidate and LKG digests"]
     C --> D["Deploy through Web Deploy"]
     D --> E{"Health, exact metadata, marker absent?"}
@@ -21,7 +21,7 @@ flowchart LR
 
 1. Confirm the protected `production-state` branch has a valid `lkg-v1.json` and that its exact recorded immutable package is available. The workflow validates this prior LKG before any sync; never select a rollback based on tag ordering or `latest`.
 2. Choose the desired immutable `cv-online-presenter-<tag>.zip` on GitHub Releases. A published release is not proof it was deployed; the workflow updates LKG only after verified live deployment.
-3. Run **MSDeploy experiment** from `main`.
+3. Run **Manual production recovery** from `main`.
 4. Set `confirm_production` and enter the semantic tag or exact `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
 5. The workflow checks the tag is reachable from `main`, verifies the downloaded bytes against the GitHub asset digest, verifies the embedded metadata, and validates the prior LKG asset before sync.
 6. `/health`, exact live `/build-metadata.json`, and the active root marker check must pass. The successful manual rollback is then recorded as the actual live LKG using a non-force state-branch update.
@@ -38,7 +38,7 @@ Before either workflow syncs, it reads and validates the LKG record, downloads t
 
 For a manual-main deployment, a separate restricted publication job archives the exact package artifact first as `recovery/manual-<run-id>-<attempt>` with a uniquely named asset and explicitly targets the source commit used to package. The deployment job verifies the release asset digest and bytes against the SHA-256 produced by the package job before deployment; that prefix cannot trigger the automatic `v*.*.*` release workflow. The release locator becomes LKG only after successful live verification. A manual rollback similarly records the selected immutable release as the actual live artifact only after successful verification.
 
-After candidate and prior LKG package identities are validated, but before the first production sync, the workflow commits `pending-v1.json` to `production-state` while preserving `lkg-v1.json`. The non-force push is a compare-and-swap; a failed/ambiguous pending write prevents any production mutation. On successful candidate verification, one non-force state commit replaces LKG and clears pending. After automatic rollback succeeds and live health, exact metadata, and marker absence are verified, a non-force commit clears pending while retaining the old LKG. Failed/ambiguous rollback or final state update leaves pending in place. Subsequent automatic tag deployments fail closed before sync while pending exists. A manual operator may explicitly set `reconcile_pending` on the MSDeploy workflow to deploy/verify a chosen immutable artifact; stale LKG is never used for rollback in that recovery run, and pending clears only after the new candidate is verified and recorded. GitHub branch state and IIS cannot be changed atomically; ambiguous outcomes require operator reconciliation. The writer token is supplied only to the workflow deployment step, removed from the child MSDeploy process, and state updates use non-force pushes.
+After candidate and prior LKG package identities are validated, but before the first production sync, the workflow commits `pending-v1.json` to `production-state` while preserving `lkg-v1.json`. The non-force push is a compare-and-swap; a failed/ambiguous pending write prevents any production mutation. On successful candidate verification, one non-force state commit replaces LKG and clears pending. After automatic rollback succeeds and live health, exact metadata, and marker absence are verified, a non-force commit clears pending while retaining the old LKG. Failed/ambiguous rollback or final state update leaves pending in place. Subsequent automatic tag deployments fail closed before sync while pending exists. A manual operator may explicitly set `reconcile_pending` on the **Manual production recovery** workflow to deploy/verify a chosen immutable artifact; stale LKG is never used for rollback in that recovery run, and pending clears only after the new candidate is verified and recorded. GitHub branch state and IIS cannot be changed atomically; ambiguous outcomes require operator reconciliation. The writer token is supplied only to the workflow deployment step, removed from the child MSDeploy process, and state updates use non-force pushes.
 
 Cleanup is limited to the existing Web Deploy ContentPath/AppOffline lifecycle. There is no established remote marker delete/readback API, so the workflow does not claim or attempt separate deletion; after restored health and metadata pass, it checks `/app_offline.htm` for the offline marker. It does not use a `finally` cleanup. Runner loss, network interruption, or WMSvc interruption can prevent restoration or confirmation. No unconditional recovery/cleanup guarantee is possible. `App_Data` and `.well-known` are preserved by the existing sync exclusions. No app-pool restart is attempted.
 
