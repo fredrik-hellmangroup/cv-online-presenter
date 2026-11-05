@@ -1,29 +1,39 @@
 ---
 title: "Demokommunen"
-description: "Syntetiskt demouppdrag: flera system som utbyter information via en liten integrationskomponent."
+description: "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på hur flera system kan utbyta information via en liten integrationskomponent."
-technologies: [".NET", "REST", "Docker", "Bicep"]
-links: "Inga externa länkar"
-period: "2012 – 2014"
-role: "Integrationsutvecklare (demo)"
-industry: "Offentlig sektor (exempel)"
-category: "Offentlig sektor"
-order: 6
+summary: "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system."
+technologies: [".NET","REST","Docker","Bicep"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Demokommunen"
+sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
 ---
+
 # Demokommunen
 
-Ett syntetiskt exempel på hur flera system kan utbyta information via en liten integrationskomponent.
+**Period:** 2013 – 2015
+**Roll:** Integrationsutvecklare (syntetiskt exempel)
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittade informationsflöden i offentlig sektor. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+## Sammanfattning
 
-## Arbetssätt och teknik
-- Skissade ett fiktivt REST-baserat informationsflöde.
-- Beskriver en .NET-tjänst som går att köra i en container.
-- Visar en enkel infrastrukturdefinition med Bicep.
+Ett påhittat informationsflöde mellan fristående demotjänster.
 
-## Exempel på utfall
+## Ansvar och genomförande
+
+- Skissade ett REST-baserat informationsflöde för exempeldatamängder.
+- Beskrev en containerbaserad tjänst och syntetisk infrastruktur.
+
+## Resultat
+
 Ett påhittat kommunscenario, utan personuppgifter eller verkliga system.
+
+## Teknik
+
+- .NET
+- REST
+- Docker
+- Bicep
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

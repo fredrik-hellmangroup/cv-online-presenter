@@ -1,29 +1,39 @@
 ---
 title: "Exempelintegrationen"
-description: "Syntetiskt demouppdrag: en integrationsyta med HTTP-baserade och kontraktsstyrda gränssnitt."
+description: "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på en integrationsyta med både HTTP-baserade och kontraktsstyrda gränssnitt."
-technologies: ["REST", "gRPC", "Docker", "Bicep"]
-links: "Inga externa länkar"
-period: "2016"
-role: "Integrationsutvecklare (demo)"
-industry: "Integration (exempel)"
-category: "Integration"
-order: 3
+summary: "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
+technologies: ["REST","gRPC","Docker","Bicep"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Exempelintegrationen"
+sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
 ---
+
 # Exempelintegrationen
 
-Ett syntetiskt exempel på en integrationsyta med både HTTP-baserade och kontraktsstyrda gränssnitt.
+**Period:** 2019 – 2021
+**Roll:** Integrationsutvecklare (syntetiskt exempel)
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittad integrationsyta mellan fristående system. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+## Sammanfattning
 
-## Arbetssätt och teknik
-- Jämförde REST och gRPC för olika typer av demotrafik.
-- Paketerade en minimal tjänst i Docker för lokal körning.
-- Visar hur infrastruktur kan beskrivas reproducerbart med Bicep.
+En fiktiv integrationsyta mellan fristående exempelkomponenter.
 
-## Exempel på utfall
+## Ansvar och genomförande
+
+- Jämförde REST och gRPC för syntetisk demotrafik.
+- Beskrev reproducerbar paketering för lokal körning.
+
+## Resultat
+
 Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat.
+
+## Teknik
+
+- REST
+- gRPC
+- Docker
+- Bicep
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

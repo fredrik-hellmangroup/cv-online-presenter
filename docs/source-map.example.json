@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "source": "content/sources/master-cv.md",
+  "generatedPages": [
+    {
+      "path": "content/pages/cv.md",
+      "type": "page",
+      "title": "CV",
+      "description": "Sam gör vardagens arbetsflöden tydligare med hållbara digitala verktyg.",
+      "locale": "sv-SE",
+      "status": "draft",
+      "sourceSection": "Entire source"
+    },
+    {
+      "path": "content/pages/home.md",
+      "type": "page",
+      "title": "Sam Exempel – Systemutvecklare och lösningsarkitekt",
+      "description": "Sam bygger begripliga digitala tjänster för små team.",
+      "locale": "sv-SE",
+      "status": "draft",
+      "heroTagline": "Sam hjälper små team att förenkla återkommande arbetsuppgifter."
+    },
+    {
+      "path": "content/pages/services.md",
+      "type": "page",
+      "title": "Kompetens",
+      "description": "Systemdesign och tydlig teknisk riktning med praktiskt fokus",
+      "locale": "sv-SE",
+      "status": "draft",
+      "sourceSection": "Kompetensområden",
+      "competenceBlocks": [
+        {
+          "title": "Systemdesign",
+          "sourceLines": [
+            "- Systemdesign och tydlig teknisk riktning med praktiskt fokus"
+          ]
+        },
+        {
+          "title": "API-design",
+          "sourceLines": [
+            "- API-design som förenklar samarbete mellan team"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects.md",
+      "type": "page",
+      "title": "Uppdrag",
+      "description": "Uppdragshistorik",
+      "locale": "sv-SE",
+      "status": "draft",
+      "sourceSection": "Uppdragshistorik",
+      "selectedProjects": [
+        {
+          "section": "Projekt Nordstjärna",
+          "path": "/projects/nordstjarna",
+          "summary": "Planeringen blev tydligare och återkommande uppgifter enklare att följa."
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects/nordstjarna.md",
+      "type": "project",
+      "title": "Projekt Nordstjärna",
+      "description": "Planeringen blev tydligare och återkommande uppgifter enklare att följa.",
+      "locale": "sv-SE",
+      "status": "draft",
+      "summary": "Planeringen blev tydligare och återkommande uppgifter enklare att följa.",
+      "links": "Inga externa länkar publicerade",
+      "sourceSection": "Uppdragshistorik / Projekt Nordstjärna",
+      "sourceHeading": "Projekt Nordstjärna"
+    }
+  ],
+  "bootstrapOutputSha256": {
+    "content/pages/cv.md": "0000000000000000000000000000000000000000000000000000000000000000",
+    "content/pages/home.md": "0000000000000000000000000000000000000000000000000000000000000000",
+    "content/pages/services.md": "0000000000000000000000000000000000000000000000000000000000000000",
+    "content/pages/projects.md": "0000000000000000000000000000000000000000000000000000000000000000",
+    "content/pages/projects/nordstjarna.md": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       app_repository:
-        description: Repository containing the trusted deployment scripts and validator
+        description: Exact owner/repository from the caller's uses reference; it must contain the pinned app SHA and trusted tooling
         required: true
         type: string
       app_sha:
-        description: Exact 40-character application commit to deploy with
+        description: Same immutable 40-character literal SHA as the caller's uses reference and generated content provenance
         required: true
         type: string
       activate_release_id:
@@ -31,6 +31,7 @@ concurrency:
 
 jobs:
   validate:
+    if: inputs.activate_release_id == ''
     uses: ./.github/workflows/validate-content.yml
     with:
       app_repository: ${{ inputs.app_repository }}
@@ -38,7 +39,15 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      ${{
+        !cancelled() &&
+        github.ref == 'refs/heads/main' &&
+        (
+          needs.validate.result == 'success' ||
+          (inputs.activate_release_id != '' && needs.validate.result == 'skipped')
+        )
+      }}
     runs-on: windows-latest
     environment: production-content
     env:
@@ -52,18 +61,34 @@ jobs:
       APP_SHA: ${{ inputs.app_sha }}
       ROLLBACK_RELEASE_ID: ${{ inputs.activate_release_id }}
     steps:
+      - name: Verify reusable workflow identity
+        shell: pwsh
+        env:
+          APP_REPOSITORY: ${{ inputs.app_repository }}
+          APP_SHA: ${{ inputs.app_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          # job.workflow_* identifies this workflow's source.
+          # These properties are GitHub.com-only; missing values on GHES fail closed.
+          if ($env:APP_REPOSITORY -cnotmatch '^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$') {
+            throw 'app_repository must use owner/repository form.'
+          }
+          if ($env:APP_SHA -cnotmatch '^[a-f0-9]{40}$') {
+            throw 'app_sha must be a full 40-character lowercase Git commit SHA.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_REPOSITORY) -or $env:APP_REPOSITORY -cne $env:WORKFLOW_REPOSITORY) {
+            throw 'app_repository must match the repository that supplied this reusable workflow.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_SHA) -or $env:APP_SHA -cne $env:WORKFLOW_SHA) {
+            throw 'app_sha must match the commit that supplied this reusable workflow.'
+          }
       - name: Validate deployment configuration and required secrets
         shell: pwsh
         env:
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
           CONTENT_ACTIVATION_TOKEN: ${{ secrets.CONTENT_ACTIVATION_TOKEN }}
         run: |
-          if ($env:APP_REPOSITORY -cne 'fredrik-hellmangroup/cv-online-presenter') {
-            throw 'app_repository must be the trusted application repository.'
-          }
-          if ($env:APP_SHA -cnotmatch '^[a-f0-9]{40}$') {
-            throw 'app_sha must be a full 40-character lowercase Git commit SHA.'
-          }
           if ([string]::IsNullOrWhiteSpace($env:CONTENT_ACTIVATION_TOKEN)) {
             throw 'CONTENT_ACTIVATION_TOKEN is required.'
           }
@@ -99,6 +124,7 @@ jobs:
             }
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.ROLLBACK_RELEASE_ID == ''
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.sha }}

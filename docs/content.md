@@ -1,35 +1,102 @@
 # Markdown content
 
-Each Markdown file starts with YAML front matter delimited by `---`. Required fields are `title`, `description`, `locale`, `status`, and `type`. `status` is either `draft` or `published`. `locale` must appear in `content/site.json` under `supportedLocales`; an unavailable translation must not be listed there.
+Last updated: 2026-11-06
 
-Type-specific required fields are: `page` (`title`, `description`), `profile` (`displayName`, `headline`, `summary`), `experience` (`role`, `organization`, `dates`, `highlights`), `project` (`title`, `summary`, `technologies`, `links`), and `service` or `skill` (`label`, `description`).
+Each Markdown file starts with YAML front matter delimited by `---`. Every
+document requires non-empty `title`, `description`, `locale`, `status`, and
+`type`. `status` is `draft` or `published`; `locale` must be listed in
+`content/site.json` under `supportedLocales`.
 
-Run `dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages` to validate the documents from the app repository. Invalid YAML, missing fields, unsupported locales, unknown statuses, empty published bodies, unsafe URL schemes, and unresolved internal links return a non-zero exit code with a file-specific message.
+Type-specific required fields are:
 
-Markdown is rendered with raw HTML disabled and sanitized HTML. Only `http`, `https`, `mailto`, and `tel` URL schemes are permitted in rendered links. Other schemes are rejected by validation and removed during sanitization.
+| `type` | Required fields in addition to the common fields |
+|---|---|
+| `page` | `title`, `description` (already required for every document) |
+| `profile` | `displayName`, `headline`, `summary` |
+| `experience` | `role`, `organization`, `dates`, `highlights` |
+| `project` | `title`, `summary`, `technologies` |
+| `service` or `skill` | `label`, `description` |
+
+`links` is **not required** for project metadata. If present, it must be a
+non-empty string; it is not a list of Markdown destinations and does not create
+a link by itself. Use Markdown links in the page body for actual links. Those
+body destinations are validated separately.
+
+The Node.js validator reports malformed front matter, missing fields,
+unsupported locales, invalid statuses, empty published bodies, raw HTML, and
+unsafe URL destinations. For links from published pages, it permits the core
+application routes and one-level routes for published project documents; a
+generic published slug does not automatically become an approved app route.
+Relative destinations are resolved against the current page. The synthetic
+test suite covers approved and rejected routes. The .NET validator
+independently checks page metadata, project route shape, locale, publication
+status, and that internal links resolve to published pages. Both validators
+are used by the shared content-validation workflow. Rendered Markdown has raw
+HTML disabled and sanitized; permitted schemes are `http`, `https`, `mailto`,
+and `tel`.
+
+From the app repository root, validate the public synthetic template with:
+
+```powershell
+npm run content:validate
+dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages
+```
+
+For private content, point the Node command at the private content root with
+`--root <content-root>` and the .NET command at
+`<content-root>\content\pages`. Do not copy private files into this repository.
 
 ## Project pages and the project list
 
-Besides the required fields, a `project` document may carry presentation metadata. All of it is optional; what is missing is simply not shown.
+The app's published project route is one level deep:
+`/projects/{slug}`. Nested project paths such as `/projects/a/b` are rejected
+by the .NET validator. This app-route hierarchy is separate from the
+source-map hierarchy used to find evidence in the canonical CV; see
+[source-map.md](source-map.md#source-evidence-and-project-hierarchy).
 
-| Field | Used for |
-| --- | --- |
-| `summary` | Card text on `/projects`, and the lead paragraph under the heading when the Markdown intro has no paragraph of its own. |
-| `technologies` | Tags on the card (which also light up the constellation on hover) and the technology buttons under "Teknik i uppdraget". |
-| `period`, `role`, `industry` | The fact cards (Period, Roll, Bransch) under the heading. |
-| `category` | The word after the period on the card; falls back to `industry`. |
-| `assignment` | The title of the matching assignment in the CV, when it differs from the project's title. The CV links each assignment (git log and card) to the project whose `title` or `assignment` matches. |
-| `order` | Sort order on `/projects` (ascending); projects without it come last, alphabetically. |
+The required project metadata is `title`, `summary`, and `technologies`
+(alongside the common fields). The following presentation metadata is
+optional:
 
-Section headings are classified by name: "Ansvar…"/"Arbetssätt…" (responsibilities), "Resultat…"/"Utfall…" (results), and "Teknik"/"Teknik i …" (technologies, replaced by the buttons). A summary card is added only when the intro text differs from `summary`.
+| Field | Current use |
+|---|---|
+| `summary` | Text on the `/projects` card; also shown as the lead if the detail-page introduction has no paragraph, or as a summary section when it differs from the intro. |
+| `technologies` | Tags on the project card and technology buttons on the detail page. |
+| `period`, `role`, `industry` | Optional fact cards on the project detail page. |
+| `category` | Card label after the period; falls back to `industry`. |
+| `assignment` | Alternate title used when linking a CV assignment to a project whose title differs. |
+| `order` | Ascending project-list order; missing or invalid values sort last, then by title. |
+| `links` | Optional non-empty string accepted as metadata; the current project renderer does not treat it as a URL list. |
 
-The `/projects` page shows the heading and the introduction before the first `##` of `projects.md`; the cards are generated. `/contact` ends with "Fortsätt utforska", cards built from the title and description of `services`, `projects` and `cv`.
+Project detail H2 headings are classified for presentation: headings containing
+“Ansvar”, “Arbetssätt”, or “Responsibilit…” are responsibility sections;
+“Result”, “Outcome”, or “Utfall” identify result sections; “Sammanfatt…” or
+“Summary” identify summary sections; and “Teknik”, “Tekniker”, “Teknik i …”,
+“Technology”, or “Technologies” identify technology sections. The front-matter summary and
+technology list are shown in their dedicated UI, so duplicate Markdown
+sections of those kinds are omitted when that metadata is present. Other H2
+sections render as ordinary project sections.
 
-`/services` opens with a two-column hero built by `PageHero` from the Markdown: the `#` heading and the paragraphs before the first `##` form the left column, and every `##` with its text becomes an item in the panel on the right. The front matter of the page may add `kicker` (small line above the heading), `panelEyebrow` and `panelTitle` (the panel's heading); all are optional. A page without a `#` heading or without any `##` section is rendered as plain Markdown instead.
+The `/projects` page uses its authored Markdown introduction before the first
+`##`; project cards are drawn from published project documents. A project's
+front-matter route is derived from its path under `content/pages/projects/`.
 
+## Page hero and editorial ownership
 
-## Editorial page ownership
+On `/services`, a Markdown `#` heading and the paragraphs before the first
+`##` form the lead; each `##` section becomes an item in the hero panel. The
+optional `kicker`, `panelEyebrow`, and `panelTitle` front-matter fields supply
+the hero's small labels and panel title. Without a suitable H1 and at least one
+H2 section, the page renders as ordinary Markdown.
 
-The private content generator owns the single H1 for every published non-CV page. The app does not infer a title H1 from front matter: it renders the authored Markdown heading and surrounding editorial content. Project detail metadata supplies the summary and technology tags; section headings in Markdown provide the responsibilities and results sections. The CV is the exception: its `CvPresenter`/`CvHero` owns the H1 and structured CV layout.
+The generator owns the single H1 for published non-CV pages and emits it from
+the mapped metadata. The CV is the exception: `CvPresenter`/`CvHero` owns its
+H1 and structured layout. Project detail metadata supplies the summary and
+technology UI, while the Markdown body supplies the introduction and editorial
+sections.
 
-For integration checks against generated content, set `EDITORIAL_CONTENT_PAGES` to the external generated `content/pages` directory when running the app's `EditorialPageTests`. The test reads the directory in place; it neither copies nor records its facts. See [repositories.md](repositories.md#generated-content-validation).
+For integration checks against generated content, set
+`EDITORIAL_CONTENT_PAGES` to the external generated `content/pages` directory
+when running the app's `EditorialPageTests`. The test reads that directory in
+place; it neither copies nor records its facts. See
+[repositories.md](repositories.md#generated-content-validation).

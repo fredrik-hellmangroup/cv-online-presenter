@@ -1,11 +1,22 @@
 {
   "name": "cv-online-presenter",
   "private": true,
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "gray-matter": "4.0.3",
+    "markdown-it": "14.1.0"
+  },
   "scripts": {
     "check:architecture": "node scripts/check-module-boundaries.mjs",
     "build": "npm --prefix client run build && node scripts/copy-client-assets.mjs",
     "build:dotnet": "dotnet build CvOnlinePresenter.sln --configuration Release",
     "build:metadata": "node scripts/write-build-metadata.mjs",
+    "content:source:validate": "node scripts/content/generate-content.mjs --validate-source",
+    "content:generate": "node scripts/content/generate-content.mjs --write",
+    "content:check": "node scripts/content/generate-content.mjs --check",
+    "content:validate": "node scripts/content/validate-content.mjs",
+    "content:active-release:verify": "node scripts/content/verify-active-release.mjs",
+    "test:content": "node --test scripts/content/*.test.mjs",
     "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages",
     "test:a11y": "npm run build && npm --prefix tools/a11y test"
   }

@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "source": "content/sources/master-cv.md",
+  "generatedPages": [
+    {
+      "path": "content/pages/cv.md",
+      "type": "page",
+      "title": "CV",
+      "description": "Erfaren konsult som kombinerar arkitektur med praktisk utveckling.",
+      "locale": "sv-SE",
+      "status": "published",
+      "sourceSection": "Entire source",
+      "approvedCvPublicationText": {
+        "employmentLine": {
+          "source": "- Konsult hos Exempel Konsult AB, 2022 - pågående",
+          "published": "- Oberoende konsult, 2022 - pågående"
+        }
+      }
+    },
+    {
+      "path": "content/pages/home.md",
+      "type": "page",
+      "title": "Alex Exempel – Senior lösningsarkitekt och utvecklare",
+      "description": "Alex arbetar nära användare och utvecklare för att göra vardagens verktyg tydligare.",
+      "locale": "sv-SE",
+      "status": "published",
+      "heroTagline": "Alex hjälper små team att bygga begripliga digitala tjänster."
+    },
+    {
+      "path": "content/pages/services.md",
+      "type": "page",
+      "title": "Kompetens",
+      "description": "Systemdesign och teknisk riktning med praktiskt fokus",
+      "locale": "sv-SE",
+      "status": "published",
+      "sourceSection": "Kompetensområden",
+      "competenceBlocks": [
+        {
+          "title": "Systemdesign",
+          "sourceLines": [
+            "- Systemdesign och teknisk riktning med praktiskt fokus"
+          ]
+        },
+        {
+          "title": "API:er",
+          "sourceLines": [
+            "- Tillförlitliga API:er och informationsflöden"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects.md",
+      "type": "page",
+      "title": "Uppdrag",
+      "description": "Uppdragshistorik",
+      "locale": "sv-SE",
+      "status": "published",
+      "sourceSection": "Uppdragshistorik",
+      "selectedProjects": [
+        {
+          "section": "Projekt Kompass",
+          "path": "/projects/kompass",
+          "summary": "Planering blev tydligare och återkommande uppgifter enklare att följa."
+        },
+        {
+          "section": "Projekt Lanternan",
+          "path": "/projects/lanternan",
+          "summary": "Arrangörer kunde samordna aktiviteter med färre manuella steg."
+        },
+        {
+          "section": "Projekt Grön Stig",
+          "path": "/projects/gron-stig",
+          "summary": "Besökare hittade närliggande utflykter på ett överskådligt sätt."
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects/kompass.md",
+      "type": "project",
+      "title": "Projekt Kompass",
+      "description": "Planering blev tydligare och återkommande uppgifter enklare att följa.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Planering blev tydligare och återkommande uppgifter enklare att följa.",
+      "sourceSection": "Uppdragshistorik / Projekt Kompass",
+      "sourceHeading": "Projekt Kompass"
+    },
+    {
+      "path": "content/pages/projects/lanternan.md",
+      "type": "project",
+      "title": "Projekt Lanternan",
+      "description": "Arrangörer kunde samordna aktiviteter med färre manuella steg.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Arrangörer kunde samordna aktiviteter med färre manuella steg.",
+      "sourceSection": "Uppdragshistorik / Projekt Lanternan",
+      "sourceHeading": "Projekt Lanternan"
+    },
+    {
+      "path": "content/pages/projects/gron-stig.md",
+      "type": "project",
+      "title": "Projekt Grön Stig",
+      "description": "Besökare hittade närliggande utflykter på ett överskådligt sätt.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Besökare hittade närliggande utflykter på ett överskådligt sätt.",
+      "sourceSection": "Uppdragshistorik / Projekt Grön Stig",
+      "sourceHeading": "Projekt Grön Stig"
+    }
+  ],
+  "bootstrapOutputSha256": {
+    "content/pages/cv.md": "fa44047597b4d6ece8f35e07f64fd7b51fb88a79110bf7709d2b76ca59246042",
+    "content/pages/home.md": "58b49aa13fdf8ee1b459429f9879919c58ce3d199c5a36f7f25024fa99d0dfb4",
+    "content/pages/services.md": "c8b77cd3ee109047a715720a098387ac8b59446664c32bdea2f6ecc51949e449",
+    "content/pages/projects.md": "1d142ea011e5d163ad32d2ab420fdfb79b42d0a4ff61de9d3489c6a29937b03b",
+    "content/pages/projects/kompass.md": "d129f28eb7fa26fa5ea84d3fb16250cb9bb5ee8b7d2dc084249119909bb6d037",
+    "content/pages/projects/lanternan.md": "6eb12c63f70553a98677e8c937923b0bb011adb82d932e302bd703694acd7b33",
+    "content/pages/projects/gron-stig.md": "361bb1c9b3fa84116e1d6c844fde7480a541f21257a380f6750cdd71b0bdf41b"
+  }
+}

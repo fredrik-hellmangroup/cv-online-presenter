@@ -60,9 +60,35 @@ function assertRequiredInput(workflow, name) {
   assert.match(input, /^        type: string$/m);
 }
 
+function assertRepositoryBinding(workflow) {
+  const input = getIndentedBlock(workflow, 6, 'app_repository');
+  assert.match(input, /Exact owner\/repository from the caller's uses reference/);
+  assert.doesNotMatch(workflow, /fredrik-hellmangroup\/cv-online-presenter/);
+}
+
 function assertRequiredSecret(workflow, name) {
   const secret = getIndentedBlock(workflow, 6, name);
   assert.match(secret, /^        required: true$/m);
+}
+
+function assertOptionalSecret(workflow, name) {
+  const secret = getIndentedBlock(workflow, 6, name);
+  assert.match(secret, /^        required: false$/m);
+}
+
+function assertPinnedAppShaInput(workflow) {
+  const input = getIndentedBlock(workflow, 6, 'app_sha');
+  assert.match(input, /Same immutable 40-character literal SHA as the caller's uses reference and generated content provenance/);
+}
+
+function assertWorkflowIdentityGuard(step) {
+  assert.match(step, /WORKFLOW_REPOSITORY: \$\{\{ job\.workflow_repository \}\}/);
+  assert.match(step, /WORKFLOW_SHA: \$\{\{ job\.workflow_sha \}\}/);
+  assert.match(step, /\$env:APP_REPOSITORY -cne \$env:WORKFLOW_REPOSITORY/);
+  assert.match(step, /\$env:APP_SHA -cne \$env:WORKFLOW_SHA/);
+  assert.match(step, /\[string\]::IsNullOrWhiteSpace\(\$env:WORKFLOW_REPOSITORY\)/);
+  assert.match(step, /\[string\]::IsNullOrWhiteSpace\(\$env:WORKFLOW_SHA\)/);
+  assert.match(step, /GitHub\.com-only; missing values on GHES fail closed/);
 }
 
 function assertCallWorkflow(workflow) {
@@ -73,16 +99,21 @@ test('reusable validation checks app identity and validates all caller content',
   assertCallWorkflow(validation);
   assertRequiredInput(validation, 'app_repository');
   assertRequiredInput(validation, 'app_sha');
+  assertRepositoryBinding(validation);
+  assertPinnedAppShaInput(validation);
 
   const steps = getSteps(getIndentedBlock(validation, 2, 'validate'));
   const validateInputs = getStep(steps, 'Validate application checkout inputs');
+  assertWorkflowIdentityGuard(validateInputs);
   assert.match(validateInputs, /APP_SHA/);
-  assert.match(validateInputs, /fredrik-hellmangroup\/cv-online-presenter/);
+  assert.match(validateInputs, /APP_REPOSITORY -cnotmatch '\^\[A-Za-z0-9-\]\+\/\[A-Za-z0-9._-\]\+\$'/);
   const contentCheckout = steps.find(step => step.includes('path: content-repo'));
   const appCheckout = steps.find(step => step.includes('path: app'));
   assert.ok(contentCheckout);
   assert.match(contentCheckout, /^          ref: \$\{\{ github\.sha \}\}$/m);
   assert.ok(appCheckout);
+  assert.ok(steps.indexOf(validateInputs) < steps.indexOf(appCheckout), 'workflow identity is verified before app checkout');
+  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
   assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
   assert.match(appCheckout, /^          fetch-depth: 0$/m);
   const verifyApp = getStep(steps, 'Verify exact application commit');
@@ -109,21 +140,35 @@ test('deployment gates all writes on validation and retains protected deployment
   assertCallWorkflow(deployment);
   assertRequiredInput(deployment, 'app_repository');
   assertRequiredInput(deployment, 'app_sha');
+  assertRepositoryBinding(deployment);
+  assertPinnedAppShaInput(deployment);
   assertRequiredSecret(deployment, 'DEPLOY_PASSWORD');
   assertRequiredSecret(deployment, 'CONTENT_ACTIVATION_TOKEN');
 
   const concurrency = getIndentedBlock(deployment, 0, 'concurrency');
   assert.match(concurrency, /^  group: deploy-content$/m);
   assert.match(concurrency, /^  cancel-in-progress: false$/m);
-  assert.match(getIndentedBlock(deployment, 2, 'deploy'), /^    needs: validate$/m);
-  const deployJob = getIndentedBlock(deployment, 2, 'deploy');
-  assert.match(deployJob, /^    if: github\.ref == 'refs\/heads\/main'$/m);
+  const validationJob = getIndentedBlock(deployment, 2, 'validate');
+  assert.match(validationJob, /^    if: inputs\.activate_release_id == ''$/m);
+  assert.match(validationJob, /^    uses: \.\/\.github\/workflows\/validate-content\.yml$/m);
+  assert.match(validationJob, /app_repository: \$\{\{ inputs\.app_repository \}\}/);
+  assert.match(validationJob, /app_sha: \$\{\{ inputs\.app_sha \}\}/);
+  const deployJobDefinition = getIndentedBlock(deployment, 2, 'deploy');
+  assert.match(deployJobDefinition, /^    needs: validate$/m);
+  assert.match(deployJobDefinition, /!cancelled\(\)/);
+  assert.match(deployJobDefinition, /needs\.validate\.result == 'success'/);
+  assert.match(deployJobDefinition, /inputs\.activate_release_id != '' && needs\.validate\.result == 'skipped'/);
+  assert.match(deployJobDefinition, /github\.ref == 'refs\/heads\/main'/);
+  const deployJob = deployJobDefinition;
   assert.match(deployJob, /^    environment: production-content$/m);
 
   const steps = getSteps(deployJob);
-  assert.match(getStep(steps, 'Validate deployment configuration and required secrets'), /fredrik-hellmangroup\/cv-online-presenter/);
+  const workflowIdentity = getStep(steps, 'Verify reusable workflow identity');
+  assertWorkflowIdentityGuard(workflowIdentity);
+  assert.doesNotMatch(workflowIdentity, /secrets\./);
   const appCheckout = steps.find(step => step.includes('path: app'));
   assert.ok(appCheckout, 'application checkout is unconditional, including rollback runs');
+  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
   assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
   assert.match(appCheckout, /^          fetch-depth: 0$/m);
   assert.doesNotMatch(appCheckout, /^        if:/m);
@@ -132,6 +177,10 @@ test('deployment gates all writes on validation and retains protected deployment
   assert.match(verifyApp, /git -C app merge-base --is-ancestor \$env:APP_SHA FETCH_HEAD/);
   assert.match(verifyApp, /git -C app rev-parse HEAD/);
   assert.match(getStep(steps, 'Validate deployment configuration and required secrets'), /CONTENT_ACTIVATION_TOKEN is required/);
+  assert.ok(steps.indexOf(workflowIdentity) < steps.indexOf(appCheckout), 'workflow identity is verified before checkouts');
+  const contentCheckout = steps.find(step => step.includes('path: content-repo'));
+  assert.ok(contentCheckout);
+  assert.match(contentCheckout, /^        if: env\.ROLLBACK_RELEASE_ID == ''$/m);
 
   const packageIndex = steps.findIndex(step => step.includes('name: Package release'));
   const uploadIndex = steps.findIndex(step => step.includes('name: Upload release folder with Web Deploy'));
@@ -141,6 +190,7 @@ test('deployment gates all writes on validation and retains protected deployment
   assert.match(uploadStep, /^        shell: powershell$/m);
   assert.match(uploadStep, /^          DEPLOY_PASSWORD: \$\{\{ secrets\.DEPLOY_PASSWORD \}\}$/m);
   const activationStep = getStep(steps, 'Preview, activate, and verify release');
+  assert.doesNotMatch(activationStep, /^        if:/m);
   assert.match(activationStep, /CONTENT_ACTIVATION_TOKEN: \$\{\{ secrets\.CONTENT_ACTIVATION_TOKEN \}\}/);
   assert.match(activationStep, /preview\/\$releaseId.*-TimeoutSec 30/);
   assert.match(activationStep, /activate\/\$releaseId.*-TimeoutSec 30/);
@@ -153,8 +203,10 @@ test('provisioning is main-only, serialized, and protects the selected token', (
   assertCallWorkflow(provisioning);
   assertRequiredInput(provisioning, 'app_repository');
   assertRequiredInput(provisioning, 'app_sha');
+  assertRepositoryBinding(provisioning);
+  assertPinnedAppShaInput(provisioning);
   assertRequiredSecret(provisioning, 'DEPLOY_PASSWORD');
-  assertRequiredSecret(provisioning, 'CONTENT_ACTIVATION_TOKEN_NEXT');
+  assertOptionalSecret(provisioning, 'CONTENT_ACTIVATION_TOKEN_NEXT');
   assertRequiredSecret(provisioning, 'CONTENT_ACTIVATION_TOKEN');
   assert.match(getIndentedBlock(provisioning, 0, 'concurrency'), /^  group: deploy-content$/m);
   assert.match(getIndentedBlock(provisioning, 0, 'concurrency'), /^  cancel-in-progress: false$/m);
@@ -163,9 +215,12 @@ test('provisioning is main-only, serialized, and protects the selected token', (
   assert.match(provisionJob, /^    if: github\.ref == 'refs\/heads\/main'$/m);
   assert.match(provisionJob, /^    environment: production-content$/m);
   const steps = getSteps(provisionJob);
-  assert.match(getStep(steps, 'Validate deployment configuration'), /fredrik-hellmangroup\/cv-online-presenter/);
+  const workflowIdentity = getStep(steps, 'Validate deployment configuration');
+  assertWorkflowIdentityGuard(workflowIdentity);
   const appCheckout = steps.find(step => step.includes('path: app'));
   assert.ok(appCheckout);
+  assert.ok(steps.indexOf(workflowIdentity) < steps.indexOf(appCheckout), 'workflow identity is verified before app checkout');
+  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
   assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
   assert.match(appCheckout, /^          fetch-depth: 0$/m);
   const verifyApp = getStep(steps, 'Verify exact application commit');
@@ -180,6 +235,9 @@ test('provisioning is main-only, serialized, and protects the selected token', (
   assert.match(upload, /CONTENT_ACTIVATION_TOKEN_PRIMARY: \$\{\{ secrets\.CONTENT_ACTIVATION_TOKEN \}\}/);
   assert.match(upload, /CONTENT_ACTIVATION_TOKEN_NEXT -ErrorAction SilentlyContinue/);
   assert.match(upload, /CONTENT_ACTIVATION_TOKEN_PRIMARY -ErrorAction SilentlyContinue/);
+  assert.match(upload, /if \(\$env:USE_PRIMARY_SECRET -ceq 'true'\)[\s\S]*?\$env:CONTENT_ACTIVATION_TOKEN_PRIMARY[\s\S]*?else[\s\S]*?\$env:CONTENT_ACTIVATION_TOKEN_NEXT/);
+  assert.doesNotMatch(upload, /IsNullOrWhiteSpace\(\$env:CONTENT_ACTIVATION_TOKEN_NEXT\)/);
+  assert.match(upload, /IsNullOrWhiteSpace\(\$token\)/);
   assert.match(upload, /WriteAllText\(\(Join-Path \$tokenDirectory 'activation-token\.txt'\), \$token/);
 });
 

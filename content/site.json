@@ -2,8 +2,8 @@
     "supportedLocales": [
         "sv-SE"
     ],
-    "contactEmail": "demo@example.com",
-    "siteName": "Alex Exempel",
-    "companyName": "Exempelbolaget AB",
-    "siteUrl": "https://example.com"
+    "contactEmail": "demo@example.invalid",
+    "siteName": "Demo Consultant",
+    "companyName": "Example Studio",
+    "siteUrl": "https://example.invalid"
 }

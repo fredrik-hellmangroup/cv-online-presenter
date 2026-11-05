@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       app_repository:
-        description: Repository containing the trusted application validator and content tooling
+        description: Exact owner/repository from the caller's uses reference; it must contain the pinned app SHA and trusted tooling
         required: true
         type: string
       app_sha:
-        description: Exact 40-character application commit to validate against
+        description: Same immutable 40-character literal SHA as the caller's uses reference and generated content provenance
         required: true
         type: string
 
@@ -24,12 +24,22 @@ jobs:
         env:
           APP_REPOSITORY: ${{ inputs.app_repository }}
           APP_SHA: ${{ inputs.app_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
-          if ($env:APP_REPOSITORY -cne 'fredrik-hellmangroup/cv-online-presenter') {
-            throw 'app_repository must be the trusted application repository.'
+          # job.workflow_* identifies this workflow's source, including local nested calls.
+          # These properties are GitHub.com-only; missing values on GHES fail closed.
+          if ($env:APP_REPOSITORY -cnotmatch '^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$') {
+            throw 'app_repository must use owner/repository form.'
           }
           if ($env:APP_SHA -cnotmatch '^[a-f0-9]{40}$') {
             throw 'app_sha must be a full 40-character lowercase Git commit SHA.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_REPOSITORY) -or $env:APP_REPOSITORY -cne $env:WORKFLOW_REPOSITORY) {
+            throw 'app_repository must match the repository that supplied this reusable workflow.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_SHA) -or $env:APP_SHA -cne $env:WORKFLOW_SHA) {
+            throw 'app_sha must match the commit that supplied this reusable workflow.'
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

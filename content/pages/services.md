@@ -1,22 +1,22 @@
 ---
 title: "Kompetens"
-description: "Teknisk riktning, backend och integrationer samt plattform och modernisering."
+description: "Systemdesign och teknisk riktning med praktiskt fokus"
 locale: "sv-SE"
 status: "published"
 type: "page"
-kicker: "Kompetens · syntetisk demo"
-panelEyebrow: "Tre delar i samma helhet"
-panelTitle: "Kompetens med sammanhang."
+source: "sources/master-cv.md"
+sourceSection: "Kompetensområden"
+sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
 ---
-# Teknik med riktning och helhet.
 
-Från teknisk riktning nära implementation till system som fungerar tillsammans och lösningar som kan utvecklas stegvis.
+# Kompetens
 
-## Lösningsarkitektur
-Teknisk riktning nära implementation.
+## Systemdesign
 
-## Backend och integration
-Backendutveckling, API:er och flöden mellan system.
+- Systemdesign och teknisk riktning med praktiskt fokus
 
-## Plattform och modernisering
-Stabil leverans och stegvis utveckling av befintliga lösningar.
+## API:er
+
+- API:er och integrationsflöden med tydliga gränser
+
+[Läs hela CV:t](/cv)

@@ -1,29 +1,39 @@
 ---
 title: "Exempelplattformen"
-description: "Syntetiskt demouppdrag: en påhittad plattform som byggs stegvis med tydliga gränser."
+description: "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på hur en ny plattform kan byggas stegvis med tydliga gränser och ett enkelt integrationslager."
-technologies: ["ASP.NET Core", "SQL Server", "REST", "Docker"]
-links: "Inga externa länkar"
-period: "2023 – pågående"
-role: "Lösningsarkitekt (demo)"
-industry: "Teknikdemo (exempel)"
-category: "Teknikdemo"
-order: 1
+summary: "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund."
+technologies: ["ASP.NET Core","SQL Server","REST","Docker"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Exempelplattformen"
+sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
 ---
+
 # Exempelplattformen
 
-Ett syntetiskt exempel på hur en ny plattform kan byggas stegvis med tydliga gränser och ett enkelt integrationslager.
+**Period:** 2023 – 2025
+**Roll:** Lösningsarkitekt (syntetiskt exempel)
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittad plattform för interna arbetsflöden. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+## Sammanfattning
 
-## Arbetssätt och teknik
-- Skissade en modulär lösningsstruktur för demoinnehållet.
-- Byggde API-exempel i ASP.NET Core och kopplade dem till en SQL Server-datamodell.
-- Beskriver ett påhittat arbetsflöde för paketering och integration.
+En syntetisk beskrivning av en modulär demoplattform.
 
-## Exempel på utfall
-Ett fiktivt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund.
+## Ansvar och genomförande
+
+- Skissade en modulär lösningsstruktur för demonstrationsinnehåll.
+- Beskrev ett enkelt integrationslager för exempeldata.
+
+## Resultat
+
+Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund.
+
+## Teknik
+
+- ASP.NET Core
+- SQL Server
+- REST
+- Docker
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

@@ -1,29 +1,39 @@
 ---
 title: "Demoportalen"
-description: "Syntetiskt demouppdrag: en portal där bakgrundsjobb, datahantering och leverans samverkar."
+description: "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på en portal där bakgrundsjobb, datahantering och automatiserad leverans samverkar."
-technologies: [".NET", "SQL Server", "RabbitMQ", "GitHub Actions"]
-links: "Inga externa länkar"
-period: "2018 – 2023"
-role: "Backendutvecklare (demo)"
-industry: "Tjänsteplattform (exempel)"
-category: "Tjänsteplattform"
-order: 2
+summary: "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall."
+technologies: [".NET","SQL Server","RabbitMQ","GitHub Actions"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Demoportalen"
+sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
 ---
+
 # Demoportalen
 
-Ett syntetiskt exempel på en portal där bakgrundsjobb, datahantering och automatiserad leverans samverkar.
+**Period:** 2021 – 2023
+**Roll:** Backendutvecklare (syntetiskt exempel)
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittad portal med köbaserade arbetsflöden. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+## Sammanfattning
 
-## Arbetssätt och teknik
-- Formgav ett fiktivt API och dess datalager i .NET och SQL Server.
-- Modellerade meddelandeflöden med RabbitMQ som demo.
-- Beskriver en förenklad bygg- och kontrollkedja med GitHub Actions.
+En syntetisk portal med köbaserade arbetsflöden.
 
-## Exempel på utfall
-Ett påhittat exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall.
+## Ansvar och genomförande
+
+- Skissade ett fiktivt API och en exempelmodell för data.
+- Beskrev asynkrona arbetsflöden utan verkliga driftmått.
+
+## Resultat
+
+Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall.
+
+## Teknik
+
+- .NET
+- SQL Server
+- RabbitMQ
+- GitHub Actions
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)
