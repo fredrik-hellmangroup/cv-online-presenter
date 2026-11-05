@@ -12,16 +12,12 @@ function Assert-LkgRecord {
     foreach ($name in @('sourceTag', 'commit', 'appRevision', 'contentRevision', 'buildId', 'packageSha256', 'releaseTag', 'assetName', 'workflow', 'runId', 'runAttempt')) {
         if ($null -eq $Record.artifact.PSObject.Properties[$name]) { throw "LKG artifact is missing '$name'." }
     }
-    if ($Record.artifact.sourceTag -and $Record.artifact.sourceTag -notmatch '^v\d+\.\d+\.\d+$') { throw 'LKG sourceTag is invalid.' }
+    if ($Record.artifact.sourceTag -notmatch '^v\d+\.\d+\.\d+$') { throw 'LKG sourceTag is invalid.' }
     if ($Record.artifact.commit -notmatch '^[a-f0-9]{40,64}$') { throw 'LKG commit is invalid.' }
     if ($Record.artifact.appRevision -cne $Record.artifact.commit) { throw 'LKG commit must match the embedded appRevision.' }
     if ($Record.artifact.packageSha256 -notmatch '^[a-f0-9]{64}$') { throw 'LKG packageSha256 is invalid.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.releaseTag) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.assetName)) { throw 'LKG immutable release locator is required.' }
-    if ($Record.artifact.sourceTag) {
-        if ($Record.artifact.releaseTag -cne $Record.artifact.sourceTag -or $Record.artifact.assetName -cne "cv-online-presenter-$($Record.artifact.sourceTag).zip") { throw 'LKG source release locator does not match its tag.' }
-    } elseif ($Record.artifact.releaseTag -notmatch '^recovery/manual-\d+-\d+$' -or $Record.artifact.assetName -notmatch '^cv-online-presenter-manual-\d+-\d+\.zip$') {
-        throw 'A manual-main LKG must identify its immutable recovery release asset.'
-    }
+    if ($Record.artifact.releaseTag -cne $Record.artifact.sourceTag -or $Record.artifact.assetName -cne "cv-online-presenter-$($Record.artifact.sourceTag).zip") { throw 'LKG source release locator does not match its tag.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.appRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.contentRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.buildId)) { throw 'LKG build metadata must be complete.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.workflow) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runId) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runAttempt)) { throw 'LKG workflow evidence must be complete.' }
     if ($Record.verifiedAtUtc -is [DateTime]) {
@@ -143,9 +139,7 @@ function Invoke-LkgDeployment {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][hashtable]$Operations,
-        [Parameter(Mandatory = $true)]$Candidate,
-        [switch]$ArchiveCandidateBeforeDeploy,
-        [switch]$AllowPendingRecovery
+        [Parameter(Mandatory = $true)]$Candidate
     )
 
     foreach ($operation in @('ReadState', 'ReadPending', 'ResolveRollbackPackage', 'ValidateCandidate', 'SetPending', 'SyncCandidate', 'VerifyCandidate', 'SyncRollback', 'VerifyRollback', 'ClearPending', 'WriteState')) {
@@ -153,36 +147,26 @@ function Invoke-LkgDeployment {
     }
 
     # A pending record means the preceding run could have changed production without advancing LKG.
-    # Automatic releases must stop before resolving/syncing anything; only an explicit manual recovery may proceed.
+    # Deployment must stop before resolving/syncing anything until an operator reconciles it.
     $prior = & $Operations.ReadState
     Assert-LkgRecord -Record $prior
     $pending = & $Operations.ReadPending
-    if ($pending -and -not $AllowPendingRecovery) { throw 'A production deployment is pending reconciliation; automatic deployment is blocked before sync.' }
-    if ($pending -and $AllowPendingRecovery -and -not $pending.candidate) { throw 'Pending production state is malformed; manual reconciliation cannot proceed.' }
+    if ($pending) { throw 'A production deployment is pending reconciliation; automatic deployment is blocked before sync.' }
 
-    # Validate both immutable package identities before durably setting/replacing pending state.
+    # Validate both immutable package identities before durably setting pending state.
     $rollbackPackage = & $Operations.ResolveRollbackPackage $prior.artifact
     if ($null -eq $rollbackPackage -or [string]::IsNullOrWhiteSpace([string]$rollbackPackage.path)) { throw 'Recorded rollback package is unavailable.' }
     Assert-PackageSha256 -Path $rollbackPackage.path -ExpectedSha256 $prior.artifact.packageSha256 | Out-Null
     & $Operations.ValidateCandidate $Candidate
-    if ($ArchiveCandidateBeforeDeploy) {
-        if (-not $Operations.ContainsKey('ArchiveCandidate') -or $Operations.ArchiveCandidate -isnot [scriptblock]) { throw 'Manual-main deployment requires an immutable recovery archive operation.' }
-        $Candidate = & $Operations.ArchiveCandidate $Candidate
-        & $Operations.ValidateCandidate $Candidate
-    }
 
     # Must be durable before the first production mutation. The LKG record itself is not changed here.
     & $Operations.SetPending $Candidate $prior.artifact
-    $pendingRecovery = [bool]$pending
     try {
         & $Operations.SyncCandidate $Candidate
         & $Operations.VerifyCandidate $Candidate
     }
     catch {
         $primaryFailure = $_.Exception.Message
-        if ($pendingRecovery) {
-            throw "Manual recovery deployment failed: $primaryFailure. Existing pending state remains for operator reconciliation; stale LKG rollback was intentionally not attempted."
-        }
         try {
             & $Operations.SyncRollback $rollbackPackage $prior.artifact
             & $Operations.VerifyRollback $prior.artifact

@@ -115,7 +115,7 @@ A hotfix uses the same protected app release path; it does not bypass review, ta
 flowchart TD
     C["Content rollback: choose confirmed prior releaseId"] --> CP["Private Deploy content workflow previews and activates it"]
     CP --> CS["Runtime serves prior content snapshot; app binary unchanged"]
-    A["App rollback: select confirmed immutable package"] --> AP["Manual production recovery from main"]
+    A["App rollback: revert on main and release a new version"] --> AP["Release workflow on the new tag"]
     AP --> AV["Verify health, metadata, and marker state"]
     AV --> AS["Prior app binary; active content pointer remains independent"]
 ```
@@ -128,7 +128,7 @@ Use [rollback-runbook.md](rollback-runbook.md) for app package recovery and [con
 | Design, component, or rendering change | Public app PR, then protected version tag | App quality gates and Chromium/Firefox/WebKit matrix | Immutable app package deployed and verified; content snapshot remains separate | Redeploy a confirmed immutable app package |
 | App hotfix | Public app hotfix PR and normal protected version tag | Targeted regression plus all required gates; no bypass | Standard app deployment and verification | Same bounded app rollback procedure |
 | Content rollback | Private content workflow manual release selection | Existing release and preview validation | Active snapshot pointer changes only | Stop before activation if preview fails |
-| App rollback | Public app's Manual production recovery workflow | LKG/package digests, health, exact metadata, marker observation | App package changes; content root is preserved | One bounded recovery attempt; operator escalation if it fails |
+| App rollback | Public app's release workflow on a new version tag (revert on `main`) | LKG/package digests, health, exact metadata, marker observation | App package changes; content root is preserved | One bounded automatic restore of the prior LKG; operator escalation if it fails |
 
 ## Generated-content validation
 

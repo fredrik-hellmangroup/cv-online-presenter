@@ -23,7 +23,7 @@ After the live exercise, a second local cycle deployed app revision `76574844116
 
 Before promotion, destination cleanup was hardened so stale release files are deleted instead of preserved. A new remote `WhatIf` reported 106 updates and 12 deletions. The corresponding live synchronization completed with the same counts, exact current-artifact metadata passed, and the hardened rollback completed with 106 updates and 2 deletions. Final health and exact `v1.0.8` metadata passed, temporary certificate trust was absent, and production was again left on `v1.0.8`.
 
-MSDeploy was then promoted to the tag-driven primary release workflow; **Manual production recovery** remains the immutable-package rollback path and FTPS remains break-glass only.
+MSDeploy was then promoted to the tag-driven primary release workflow; the manual recovery workflow was later removed (rollback is now a revert plus a new release) and FTPS remains break-glass only.
 
 
 ## 503 incident evidence (2026-11-02)

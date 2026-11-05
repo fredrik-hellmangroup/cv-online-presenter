@@ -160,6 +160,5 @@ jobs:
             -StateDirectory 'production-state' `
             -StateRecordPath 'state-record/lkg-v1.json' `
             -ExpectedPackageSha256 $env:PACKAGE_SHA256 `
-            -Mode release `
             -SourceCommit $env:SOURCE_COMMIT `
             -SourceTag $env:SOURCE_TAG
