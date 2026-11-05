@@ -5,12 +5,14 @@ import { CvSearchEngine } from './cv-search-engine.js';
 import { CvTocEngine } from './cv-toc-engine.js';
 import { EasterEggEngine } from './easter-egg-engine.js';
 import { startExperience } from './experience.js';
+import { HeroTabsEngine } from './hero-tabs-engine.js';
 import { PrintEngine } from './print-engine.js';
 import { ThemeEngine } from './theme-engine.js';
 import { TechnologyFilterEngine } from './technology-filter-engine.js';
 
 startExperience([
   new ConstellationEngine(),
+  new HeroTabsEngine(),
   new TechnologyFilterEngine(),
   new ThemeEngine(),
   new EasterEggEngine(),
