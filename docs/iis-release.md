@@ -49,6 +49,17 @@ Before pushing a release tag, confirm:
 
 The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [Manual production recovery workflow](../.github/workflows/manual-production-recovery.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment permissions and durable production-state writes are described below.
 
+## Creating a release
+
+The version lives only in git tags. Instead of tagging and pushing by hand, dispatch the [Create release workflow](../.github/workflows/create-release.yml) from `main`, choose `patch`, `minor` or `major`, and enable `confirm_release`. It:
+
+1. Refuses to run from any branch except `main`.
+2. Requires a successful `Quality gates` push run for the exact commit being released.
+3. Calculates the next tag from the highest existing `vMAJOR.MINOR.PATCH` tag (`scripts/get-next-release-tag.ps1`) and creates it at that commit through the API, which fails rather than moving an existing tag.
+4. Starts the release workflow with `workflow_dispatch` on the new tag. Tags created with `GITHUB_TOKEN` do not trigger the tag-push workflow, so this explicit dispatch replaces the push trigger; the release workflow rejects dispatches that are not on a `vMAJOR.MINOR.PATCH` tag.
+
+If the tag was created but the dispatch failed, run `gh workflow run release.yml --ref vX.Y.Z`. Pushing a `v*.*.*` tag by hand still triggers the release workflow as before.
+
 Safety and verification:
 
 - The shared helper `scripts/ensure-webdeploy.ps1` uses the Microsoft Web Deploy client. If it is missing, it installs the official MSI after checking its SHA-256 digest and signature.
