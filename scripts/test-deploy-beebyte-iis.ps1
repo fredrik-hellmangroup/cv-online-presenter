@@ -134,6 +134,10 @@ foreach ($requiredDeployFragment in @(
         'ActivationTokenOnly DeployContentPath must exactly match DeploySiteName/App_Data/content-releases.'
         'activation-token.txt must not have leading or trailing whitespace.'
         'App_Data(?:[\\/]|$)'
+        'ERROR_FILE_IN_USE|locked by an external process'
+        '$FileInUseRetryAttempts'
+        '$FileInUseRetryDelaySeconds'
+        'Start-Sleep -Seconds $FileInUseRetryDelaySeconds'
     )) {
     if (-not $deployScript.Contains($requiredDeployFragment)) {
         throw "The helper is missing offline-template bootstrap fragment '$requiredDeployFragment'."
