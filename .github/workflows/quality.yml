@@ -56,6 +56,9 @@ jobs:
       - name: Run isolated production recovery failure tests
         shell: pwsh
         run: ./scripts/test-production-state.ps1
+      - name: Run VERSION bump validation tests
+        shell: pwsh
+        run: ./scripts/test-assert-version-bump.ps1
 
   browser-quality:
     # The three-browser matrix already ran on the PR. After merge, main only re-runs the fast build/security gate.
