@@ -1,0 +1,48 @@
+name: Version guard
+
+# The VERSION file is the release switch: merging a change to it on main creates the release tag.
+# It may only change in a pull request that touches nothing else (see the Release PR template).
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  version-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Require VERSION changes to be isolated and a valid bump
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $changed = @(git diff --name-only "$env:BASE_SHA...$env:HEAD_SHA")
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list the files changed by this pull request.' }
+          if ($changed -cnotcontains 'VERSION') {
+            Write-Output 'VERSION is not changed; nothing to guard.'
+            return
+          }
+
+          $template = 'Open release PRs with ?template=release.md (.github/PULL_REQUEST_TEMPLATE/release.md).'
+          git cat-file -e "$($env:BASE_SHA):VERSION" 2>$null
+          $versionExistsOnBase = $LASTEXITCODE -eq 0
+          if ($versionExistsOnBase -and $changed.Count -ne 1) {
+            throw "A pull request that changes VERSION must change no other file. Also changed: $(($changed | Where-Object { $_ -cne 'VERSION' }) -join ', '). $template"
+          }
+
+          $version = (git show "$($env:HEAD_SHA):VERSION") -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read VERSION from the pull request head.' }
+          $version = $version.TrimEnd("`n")
+          $tags = @(git tag --list 'v*')
+          $arguments = @{ Version = $version; ExistingTags = $tags }
+          if (-not $versionExistsOnBase) { $arguments['AllowCurrent'] = $true }
+          $tag = & ./scripts/assert-version-bump.ps1 @arguments
+          Write-Output "VERSION $version is valid; merging will release $tag."

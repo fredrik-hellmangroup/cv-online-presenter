@@ -49,6 +49,16 @@ Before pushing a release tag, confirm:
 
 The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [Manual production recovery workflow](../.github/workflows/manual-production-recovery.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment permissions and durable production-state writes are described below.
 
+## Creating a release
+
+The `VERSION` file at the repository root holds the version of the next (or current) release as `MAJOR.MINOR.PATCH`. A release is made by merging a pull request that changes **only** that file; do not tag by hand.
+
+1. Open a PR that bumps `VERSION` using the release template: `https://github.com/<owner>/<repo>/compare/main...<branch>?template=release.md` (or pick `release.md` from the PR description templates). The bump must be exactly one patch, minor or major step after the highest existing `vX.Y.Z` tag.
+2. The **Version guard** check fails the PR if any other file changes with `VERSION`, if the content is not strictly `MAJOR.MINOR.PATCH`, or if it is not a valid next version (`scripts/assert-version-bump.ps1`). Make *Version guard* a required status check in the `main` ruleset so this is enforced at merge.
+3. After the merge, **Quality gates** run on the `main` commit. When they succeed, the **Tag release from VERSION** workflow creates tag `vX.Y.Z` at that exact commit through the API (it never moves an existing tag) and starts the release workflow on it. Tags created with `GITHUB_TOKEN` do not trigger the tag-push workflow, so the release workflow is started with `workflow_dispatch`; it rejects dispatches that are not on a `vMAJOR.MINOR.PATCH` tag.
+
+If the tag was created but the release did not start, re-run the *Tag release from VERSION* run, or run `gh workflow run release.yml --ref vX.Y.Z`. Pushing a `v*.*.*` tag by hand still triggers the release workflow, but bypasses the guard and should be avoided.
+
 Safety and verification:
 
 - The shared helper `scripts/ensure-webdeploy.ps1` uses the Microsoft Web Deploy client. If it is missing, it installs the official MSI after checking its SHA-256 digest and signature.
