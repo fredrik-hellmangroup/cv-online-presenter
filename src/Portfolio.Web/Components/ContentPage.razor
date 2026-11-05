@@ -131,7 +131,8 @@ else
                 {
                     @if (hero is not null)
                     {
-                        var showTechniques = Content.Cv is { SkillGroups.Count: > 0 };
+                        var heroSkillGroups = Content.Cv is { SkillGroups.Count: > 0 } heroCv ? heroCv.SkillGroups : null;
+                        var showTechniques = heroSkillGroups is not null;
                         var kicker = ProjectMetadata.Text(page, "kicker");
                         var panelEyebrow = ProjectMetadata.Text(page, "panelEyebrow");
                         var panelTitle = ProjectMetadata.Text(page, "panelTitle");
@@ -160,15 +161,61 @@ else
                                 {
                                     <p class="page-hero-panel-title">@panelTitle</p>
                                 }
-                                <ul class="page-hero-list">
-                                    @foreach (var item in hero.Items)
-                                    {
-                                        <li>
-                                            <strong>@item.Heading</strong>
-                                            <div class="page-hero-item-text">@((MarkupString)item.BodyHtml)</div>
-                                        </li>
-                                    }
-                                </ul>
+                                @if (hero.Groups.Count > 0)
+                                {
+                                    <div class="hero-tabs" data-hero-tabs>
+                                        @foreach (var group in hero.Groups)
+                                        {
+                                            <section class="hero-tab-panel" data-hero-tab-panel>
+                                                <h2 class="hero-tab-heading" data-hero-tab-label>@group.Heading</h2>
+                                                @if (group.LeadHtml.Length > 0)
+                                                {
+                                                    <div class="hero-tab-lead">@((MarkupString)group.LeadHtml)</div>
+                                                }
+                                                <ul class="page-hero-list">
+                                                    @foreach (var item in group.Items)
+                                                    {
+                                                        <li>
+                                                            <strong>@item.Heading</strong>
+                                                            <div class="page-hero-item-text">@((MarkupString)item.BodyHtml)</div>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            </section>
+                                        }
+                                        @if (heroSkillGroups is not null)
+                                        {
+                                            <section class="hero-tab-panel" data-hero-tab-panel>
+                                                <h2 class="hero-tab-heading" data-hero-tab-label>Teknik</h2>
+                                                @foreach (var skillGroup in heroSkillGroups)
+                                                {
+                                                    <div class="hero-chip-group">
+                                                        <p class="hero-chip-group-name">@skillGroup.Name</p>
+                                                        <ul class="hero-chips">
+                                                            @foreach (var skill in skillGroup.Skills)
+                                                            {
+                                                                <li>@skill</li>
+                                                            }
+                                                        </ul>
+                                                    </div>
+                                                }
+                                                <p class="hero-tab-more"><a href="#service-technologies-heading">Filtrera och utforska teknikerna <span aria-hidden="true">↓</span></a></p>
+                                            </section>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <ul class="page-hero-list">
+                                        @foreach (var item in hero.Items)
+                                        {
+                                            <li>
+                                                <strong>@item.Heading</strong>
+                                                <div class="page-hero-item-text">@((MarkupString)item.BodyHtml)</div>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
                             </aside>
                         </section>
                     }

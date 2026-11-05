@@ -75,7 +75,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     public async Task ServicesStartsWithATwoColumnHeroAndAPanelOfItsSections()
     {
         var html = await client.GetStringAsync("/services");
-        var hero = Regex.Match(html, "<section class=\"page-hero\">.*?</section>", RegexOptions.Singleline).Value;
+        var hero = Regex.Match(html, "<section class=\"page-hero\">.*?</aside>", RegexOptions.Singleline).Value;
 
         Assert.NotEmpty(hero);
         Assert.Contains("class=\"page-hero-kicker\"", hero);
@@ -83,7 +83,11 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("href=\"#service-technologies-heading\"", hero);
         Assert.Contains("href=\"/cv\"", hero);
         Assert.Contains("<aside class=\"page-hero-panel\"", hero);
-        Assert.Equal(3, Regex.Matches(hero, "<li>").Count);
+        Assert.Contains("data-hero-tabs", hero);
+        Assert.Equal(["Bygga", "Leverera", "Domän", "Teknik"],
+            Regex.Matches(hero, "<h2 class=\"hero-tab-heading\" data-hero-tab-label>(.*?)</h2>").Select(match => WebUtility.HtmlDecode(match.Groups[1].Value)));
+        Assert.Equal(4, Regex.Matches(hero, "<strong>").Count);
+        Assert.Contains("href=\"#service-technologies-heading\">Filtrera och utforska", hero);
         Assert.Single(Regex.Matches(html, "<h1[ >]"));
         Assert.True(html.IndexOf("service-technologies-heading\">", StringComparison.Ordinal) > html.IndexOf("page-hero", StringComparison.Ordinal));
     }
