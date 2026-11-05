@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "runId": "42119457755",
+  "runAttempt": "1",
+  "createdAtUtc": "2026-11-05T22:14:44.6121260Z",
+  "candidate": {
+    "releaseTag": "v1.0.13",
+    "assetName": "cv-online-presenter-v1.0.13.zip",
+    "commit": "ec7fa96a3297c1cdad6966f955c93779725ac9e7",
+    "packageSha256": "7e9b171205bfb2d0bbc7c327a34ac8b9ef20314e8cbed4ef9015413fd866dc02"
+  },
+  "priorLkgPackageSha256": "c5c33008b0888327223fd4708f5ba318a58a50b50e53d37edef26c721183ccdd"
+}
