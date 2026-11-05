@@ -1,10 +1,10 @@
 ---
 title: "Uppdrag"
-description: "Urval av syntetiska demouppdrag."
+description: "Sex påhittade exempel med egna detaljsidor och avgränsade teknikurval."
 locale: "sv-SE"
 status: "published"
 type: "page"
 ---
 # Uppdrag
 
-Ett urval syntetiska exempel på uppdrag och lösningar.
+Sex påhittade uppdrag med egna detaljsidor. Peka på ett uppdrag så lyser dess teknik upp i bakgrunden.

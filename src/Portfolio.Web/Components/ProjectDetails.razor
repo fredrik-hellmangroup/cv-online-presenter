@@ -1,14 +1,33 @@
 @using Portfolio.Content
-@using System.Collections
 @using System.Text.RegularExpressions
 
-<div class="project-detail">
+<div class="project-detail" data-page-keywords="@string.Join("|", Technologies)">
     @foreach (var section in Sections)
     {
         @if (string.IsNullOrWhiteSpace(section.Heading))
         {
-            <div class="project-intro">@((MarkupString)Content.RenderMarkdown(section.Markdown))</div>
-            @if (!string.IsNullOrWhiteSpace(Summary))
+            var intro = Content.RenderMarkdown(section.Markdown);
+            var introHasLead = intro.Contains("<p", StringComparison.OrdinalIgnoreCase);
+            <div class="project-intro">
+                <nav class="breadcrumb" aria-label="Brödsmulor">
+                    <a href="/projects">Uppdrag</a> <span aria-hidden="true">/</span> <span aria-current="page">@Document.Title</span>
+                </nav>
+                @((MarkupString)intro)
+                @if (!introHasLead && !string.IsNullOrWhiteSpace(Summary))
+                {
+                    <p>@Summary</p>
+                }
+            </div>
+            @if (Facts.Count > 0)
+            {
+                <dl class="project-facts">
+                    @foreach (var (label, value) in Facts)
+                    {
+                        <div><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+            }
+            @if (introHasLead && !string.IsNullOrWhiteSpace(Summary) && !RepeatsSummary(intro, Summary))
             {
                 <section class="project-summary" aria-label="Sammanfattning">
                     <h2>Sammanfattning</h2>
@@ -18,7 +37,7 @@
         }
         else if (SectionClass(section.Heading) == "project-summary" && !string.IsNullOrWhiteSpace(Summary))
         {
-            @* The front-matter summary is rendered once above; omit any duplicate Markdown summary section. *@
+            @* The front-matter summary is shown once, as the lead or the summary card; omit any duplicate Markdown summary section. *@
         }
         else if (SectionClass(section.Heading) == "project-technologies" && Technologies.Count > 0)
         {
@@ -34,13 +53,15 @@
     @if (Technologies.Count > 0)
     {
         <section class="project-technologies" aria-label="Teknik">
-            <h2>Teknik</h2>
-            <ul>
+            <h2>Teknik i uppdraget</h2>
+            <p class="tech-hint">Välj en teknik för att markera den i bakgrunden.</p>
+            <ul class="skill-chips">
                 @foreach (var technology in Technologies)
                 {
-                    <li>@technology</li>
+                    <li><button type="button" class="skill-btn" data-skill="@technology" aria-pressed="false">@technology</button></li>
                 }
             </ul>
+            <p class="tech-status" data-pin-status role="status" aria-live="polite"></p>
         </section>
     }
     <p class="project-actions"><a href="/projects">Till alla uppdrag</a> · <a href="/cv">Fullständigt CV</a></p>
@@ -51,19 +72,31 @@
     [Parameter, EditorRequired] public IReadOnlyList<ClassifiedSection> Sections { get; set; } = [];
     [Inject] private SiteContent Content { get; set; } = default!;
 
-    private string Summary => Document.Metadata.TryGetValue("summary", out var value) ? value?.ToString() ?? string.Empty : string.Empty;
-    private List<string> Technologies => Document.Metadata.TryGetValue("technologies", out var value)
-        ? value is IEnumerable sequence and not string
-            ? sequence.Cast<object?>().Where(item => item is not null).Select(item => item!.ToString()!).ToList()
-            : (value?.ToString() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
-        : [];
+    private string Summary => ProjectMetadata.Text(Document, "summary");
+    private IReadOnlyList<string> Technologies => ProjectMetadata.Technologies(Document);
+
+    // Period, role and industry are optional front matter; only the facts that are provided are shown.
+    private IReadOnlyList<(string Label, string Value)> Facts => new[]
+    {
+        ("Period", ProjectMetadata.Text(Document, "period")),
+        ("Roll", ProjectMetadata.Text(Document, "role")),
+        ("Bransch", ProjectMetadata.Text(Document, "industry"))
+    }.Where(fact => fact.Item2.Length > 0).ToList();
+
+    // The summary is shown once: a lead paragraph that already says the same makes the summary card redundant.
+    private static bool RepeatsSummary(string introHtml, string summary)
+    {
+        static string Normalize(string value) => Regex.Replace(value, @"\s+", " ").Trim();
+        var text = Normalize(System.Net.WebUtility.HtmlDecode(Regex.Replace(introHtml, "<[^>]+>", " ")));
+        return text.Contains(Normalize(summary), StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string SectionClass(string heading)
     {
         var normalized = Regex.Replace(heading.ToLowerInvariant(), @"[^\p{L}\p{N}]+", " ").Trim();
-        if (normalized.Contains("ansvar") || normalized.Contains("responsibilit")) return "project-responsibilities";
-        if (normalized.Contains("result") || normalized.Contains("outcome")) return "project-results";
-        if (normalized.Contains("teknik") || normalized.Contains("technolog") || normalized.Contains("technology")) return "project-technologies";
+        if (normalized.Contains("ansvar") || normalized.Contains("arbetssätt") || normalized.Contains("responsibilit")) return "project-responsibilities";
+        if (normalized.Contains("result") || normalized.Contains("outcome") || normalized.Contains("utfall")) return "project-results";
+        if (normalized is "teknik" or "tekniker" or "technology" or "technologies" || normalized.StartsWith("teknik i ", StringComparison.Ordinal)) return "project-technologies";
         if (normalized.Contains("sammanfatt") || normalized.Contains("summary")) return "project-summary";
         return "project-section";
     }

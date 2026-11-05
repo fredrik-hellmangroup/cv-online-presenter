@@ -20,6 +20,11 @@ public sealed class CvPresenterTests
 
         Additional synthetic text.
 
+        ## Practical
+        - Available: From 1 Feb 2027
+        - Work model: Hybrid
+        - Malformed line without a separator
+
         ## Expertise
         - Example technical capability
 
@@ -74,7 +79,7 @@ public sealed class CvPresenterTests
         var headings = new CvHeadings(
             Roles: "Roles", Overview: "Overview", Industries: "Industries",
             History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
-            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing");
+            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing", Practical: "Practical");
         return CvPresenter.Build(html, headings) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
     }
 
@@ -94,6 +99,29 @@ public sealed class CvPresenterTests
             view.Figures.Select(figure => (figure.Count, figure.Suffix, figure.Label)));
     }
 
+
+    [Fact]
+    public void PracticalFactsBecomeCardsAfterTheOverviewInsteadOfASection()
+    {
+        var view = Build();
+        var overview = view.BeforeHistoryHtml.IndexOf("id=\"overview\"", StringComparison.Ordinal);
+        var practical = view.BeforeHistoryHtml.IndexOf("class=\"practical\"", StringComparison.Ordinal);
+
+        Assert.True(overview >= 0 && practical > overview, "The practical cards should follow the overview text.");
+        Assert.Contains("<div><dt>Available</dt><dd>From 1 Feb 2027</dd></div>", view.BeforeHistoryHtml);
+        Assert.Contains("<div><dt>Work model</dt><dd>Hybrid</dd></div>", view.BeforeHistoryHtml);
+        Assert.DoesNotContain("Malformed line", view.BeforeHistoryHtml);
+        Assert.DoesNotContain("id=\"practical\"", view.BeforeHistoryHtml);
+    }
+
+    [Fact]
+    public void WithoutAPracticalSectionNoCardsAreRendered()
+    {
+        var document = System.Text.RegularExpressions.Regex.Replace(
+            Cv, @"## Practical.*?(?=## Expertise)", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        Assert.DoesNotContain("class=\"practical\"", Build(document).BeforeHistoryHtml);
+    }
 
     [Fact]
     public void TaglineIsNullWhenNoParagraphFollowsTheName()
@@ -123,6 +151,8 @@ public sealed class CvPresenterTests
         var view = Build();
         Assert.Equal(["Core", "Integration"], view.SkillGroups.Select(group => group.Name));
         Assert.Equal([".NET", "C#", "Azure"], view.SkillGroups[0].Skills);
+        Assert.Contains("data-keywords=\".NET|C#|Azure\"", view.BeforeHistoryHtml);
+        Assert.Contains("data-keywords=\"REST|MQTT\"", view.BeforeHistoryHtml);
         Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
         Assert.DoesNotContain("<strong>Key Technologies</strong>", view.BeforeHistoryHtml);
     }
@@ -148,6 +178,21 @@ public sealed class CvPresenterTests
         Assert.DoesNotContain("Roles", view.BeforeHistoryHtml);
         Assert.Contains("id=\"overview\"", view.BeforeHistoryHtml);
         Assert.Contains("id=\"employment\"", view.AfterHistoryHtml);
+    }
+
+    [Fact]
+    public void AssignmentsLinkToTheirProjectPageWhenOneIsFound()
+    {
+        var html = new MarkdownContentService().Render(Cv.Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal));
+        var headings = new CvHeadings(
+            Roles: "Roles", Overview: "Overview", Industries: "Industries",
+            History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
+            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing", Practical: "Practical");
+        var view = CvPresenter.Build(html, headings, title => title == "Sample Project Beta" ? "/projects/beta" : null)!;
+
+        Assert.Equal([null, "/projects/beta", null], view.Assignments.Select(item => item.Url));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(view.AssignmentsHtml, "class=\"assignment-link\""));
+        Assert.Contains("<a href=\"/projects/beta\">", view.AssignmentsHtml);
     }
 
     [Fact]

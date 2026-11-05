@@ -7,4 +7,4 @@ type: page
 ---
 # Kontakt
 
-Det här är en demosida. Lägg in egen kontakttext i det privata content-repot.
+Söker du en konsult, har ett uppdrag på gång eller vill bara bolla en idé? Hör av dig.

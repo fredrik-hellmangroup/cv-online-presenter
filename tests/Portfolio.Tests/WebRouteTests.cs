@@ -38,6 +38,56 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("<h1", html);
     }
 
+    [Theory]
+    [InlineData("/services")]
+    [InlineData("/Services")]
+    public async Task ServicesRendersCvSkillsExplorerAfterMarkdownAndKeepsItOffHomePage(string path)
+    {
+        var response = await client.GetAsync(path);
+        var html = await response.Content.ReadAsStringAsync();
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv;
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(cv);
+        Assert.NotEmpty(cv.SkillGroups);
+        var explorerIndex = html.IndexOf("id=\"service-technologies-heading\"", StringComparison.Ordinal);
+        var ctaIndex = html.IndexOf("service-cv-cta", StringComparison.Ordinal);
+        Assert.True(explorerIndex >= 0, "The services page should render the technology explorer.");
+        Assert.True(ctaIndex > explorerIndex, "The CV CTA should follow the technology explorer.");
+        Assert.Contains("Teknik i uppdragen", html);
+        Assert.Contains("for=\"technology-filter\"", html);
+        Assert.Contains("data-tech-filter", html);
+        Assert.Contains("data-tech-count", html);
+        Assert.Contains("data-pin-status", html);
+        Assert.Contains("data-tech-empty", html);
+        Assert.Contains("data-skill=\"", html);
+        Assert.Contains("aria-pressed=\"false\"", html);
+        Assert.Equal(cv.SkillGroups.Sum(group => group.Skills.Count), Regex.Matches(html, "data-tech-item").Count);
+        var decoded = System.Net.WebUtility.HtmlDecode(html);
+        foreach (var group in cv.SkillGroups)
+            Assert.Contains($"aria-label=\"{group.Name}\" data-keywords=\"{string.Join("|", group.Skills)}\"", decoded);
+
+        var home = await client.GetStringAsync("/");
+        Assert.DoesNotContain("data-tech-filter", home);
+    }
+
+    [Fact]
+    public async Task ServicesStartsWithATwoColumnHeroAndAPanelOfItsSections()
+    {
+        var html = await client.GetStringAsync("/services");
+        var hero = Regex.Match(html, "<section class=\"page-hero\">.*?</section>", RegexOptions.Singleline).Value;
+
+        Assert.NotEmpty(hero);
+        Assert.Contains("class=\"page-hero-kicker\"", hero);
+        Assert.Contains("<h1", hero);
+        Assert.Contains("href=\"#service-technologies-heading\"", hero);
+        Assert.Contains("href=\"/cv\"", hero);
+        Assert.Contains("<aside class=\"page-hero-panel\"", hero);
+        Assert.Equal(3, Regex.Matches(hero, "<li>").Count);
+        Assert.Single(Regex.Matches(html, "<h1[ >]"));
+        Assert.True(html.IndexOf("service-technologies-heading\">", StringComparison.Ordinal) > html.IndexOf("page-hero", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task UnknownProjectReturns404()
     {
@@ -507,7 +557,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
-    public async Task PageBrandUsesConfiguredSiteNameAndMonogram()
+    public async Task PageBrandLinksHomeWithTheWordHemAndNamesTheSite()
     {
         var siteName = factory.Services.GetRequiredService<SiteContent>().Settings.SiteName;
         foreach (var path in new[] { "/", "/cv" })
@@ -516,8 +566,10 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             var title = System.Text.RegularExpressions.Regex.Match(html, "<title>(.*?)</title>").Groups[1].Value;
             Assert.Contains(siteName, title);
             var header = System.Text.RegularExpressions.Regex.Match(html, "<header class=\"site-header\">.*?</header>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
-            Assert.Contains($">{PageHeading.Monogram(siteName)}</a>", header);
-            Assert.Contains($"aria-label=\"{siteName} \u2013 startsida\"", header);
+            Assert.Contains(">Hem</a>", header);
+            Assert.Contains($"aria-label=\"Hem \u2013 {siteName}\"", header);
+            Assert.Contains("id=\"brand-mark\"", header);
+            Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(System.Text.RegularExpressions.Regex.Match(header, "<svg.*?</svg>", System.Text.RegularExpressions.RegexOptions.Singleline).Value, "<circle ").Count);
             var footer = System.Text.RegularExpressions.Regex.Match(html, "<footer>.*?</footer>", System.Text.RegularExpressions.RegexOptions.Singleline).Value;
             Assert.DoesNotContain(siteName, footer);
         }
@@ -580,6 +632,76 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("class=\"assignment\"", html);
         Assert.Contains("class=\"skill-group\"", html);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<h1[ >]"));
+    }
+
+    [Fact]
+    public async Task ProjectsListShowsOrderedCardsWithMetaTagsAndKeywords()
+    {
+        var html = await client.GetStringAsync("/projects");
+        var titles = Regex.Matches(html, "<h2><a href=\"/projects/[^\"]+\">(.*?)</a></h2>").Select(match => match.Groups[1].Value).ToArray();
+
+        Assert.Equal(["Exempelplattformen", "Demoportalen", "Exempelintegrationen", "Demologistiken", "Demobanken", "Demokommunen"], titles);
+        Assert.Contains("<p>Sex p", html);
+        Assert.Contains("class=\"project-card-meta\"", html);
+        Assert.Contains("data-keywords=\"ASP.NET Core|SQL Server|REST|Docker\"", html);
+        Assert.Contains("<ul class=\"tags\">", html);
+        Assert.Contains("L\u00e4s om uppdraget", html);
+        Assert.DoesNotContain("<article class=\"project-card\"", html);
+    }
+
+    [Fact]
+    public async Task ProjectDetailHasBreadcrumbFactsAndTechnologyButtons()
+    {
+        var html = await client.GetStringAsync("/projects/demo-platform");
+
+        Assert.Contains("class=\"breadcrumb\"", html);
+        Assert.Contains("<dt>Period</dt>", html);
+        Assert.Contains("<dt>Roll</dt>", html);
+        Assert.Contains("<dt>Bransch</dt>", html);
+        Assert.Contains("data-page-keywords=\"ASP.NET Core|SQL Server|REST|Docker\"", html);
+        Assert.Contains("Teknik i uppdraget", html);
+        Assert.Contains("class=\"skill-btn\"", html);
+        Assert.Contains("data-skill=\"Docker\"", html);
+        Assert.Contains("data-pin-status", html);
+        Assert.DoesNotContain("Sammanfattning", html);
+    }
+
+    [Fact]
+    public async Task ContactPageLinksOnToTheOtherPages()
+    {
+        var html = await client.GetStringAsync("/contact");
+
+        Assert.Contains("id=\"utforska\"", html);
+        Assert.Contains("href=\"#utforska\"", html);
+        foreach (var route in new[] { "/services", "/projects", "/cv" })
+            Assert.Contains($"<h2><a href=\"{route}\">", html);
+    }
+
+    [Fact]
+    public async Task CvAssignmentsLinkToTheirProjectPages()
+    {
+        var html = await client.GetStringAsync("/cv");
+        var projects = factory.Services.GetRequiredService<SiteContent>().PublishedProjects;
+        var logLinks = Regex.Matches(html, "<a class=\"git-msg\" href=\"([^\"]+)\">").Select(match => match.Groups[1].Value).ToArray();
+
+        Assert.NotEmpty(logLinks);
+        Assert.All(logLinks, link => Assert.StartsWith("/projects/", link));
+        Assert.Equal(logLinks.Length, Regex.Matches(html, "class=\"assignment-link\"").Count);
+        Assert.All(logLinks, link => Assert.Contains(projects, project => "/" + project.Slug == link));
+    }
+
+    [Fact]
+    public async Task CvPutsHistoryAfterTheOverviewWithPracticalCardsAndPrintButton()
+    {
+        var html = await client.GetStringAsync("/cv");
+        var headings = Regex.Matches(html, "<h2 id=\"([a-z0-9-]+)\"").Select(match => match.Groups[1].Value).ToArray();
+
+        Assert.Equal(["oversikt", "uppdragshistorik", "kompetensomraden", "branscherfarenhet"], headings);
+        Assert.Contains("class=\"practical\"", html);
+        Assert.DoesNotContain("id=\"praktiskt\"", html);
+        Assert.Contains("data-print", html);
+        Assert.Contains("class=\"skill-btn\"", html);
+        Assert.Contains("data-skill=\".NET\"", html);
     }
 
     [Theory]

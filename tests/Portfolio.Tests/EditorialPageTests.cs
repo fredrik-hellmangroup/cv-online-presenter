@@ -70,7 +70,12 @@ public sealed class EditorialPageTests : IClassFixture<EditorialWebFactory>
         foreach (var project in projects)
         {
             var html = await GetHtml($"/{project.Slug}");
-            Assert.Single(Regex.Matches(html, "class=\"project-summary\""));
+            // The summary is the lead under the heading; a separate summary card appears only when the intro says something else.
+            var intro = System.Net.WebUtility.HtmlDecode(Regex.Match(html, "<div class=\"project-intro\">.*?</div>", RegexOptions.Singleline).Value);
+            var summary = project.Metadata["summary"].ToString()!;
+            Assert.True(
+                intro.Contains(summary, StringComparison.Ordinal) || Regex.Matches(html, "class=\"project-summary\"").Count == 1,
+                $"The summary of {project.Slug} should be shown once.");
             Assert.Contains("class=\"project-responsibilities\"", html);
             Assert.Contains("class=\"project-results\"", html);
             Assert.Single(Regex.Matches(html, "class=\"project-technologies\""));

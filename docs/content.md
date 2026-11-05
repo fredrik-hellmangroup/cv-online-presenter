@@ -8,6 +8,25 @@ Run `dotnet run --project tools/Portfolio.Content.Validator -- --content content
 
 Markdown is rendered with raw HTML disabled and sanitized HTML. Only `http`, `https`, `mailto`, and `tel` URL schemes are permitted in rendered links. Other schemes are rejected by validation and removed during sanitization.
 
+## Project pages and the project list
+
+Besides the required fields, a `project` document may carry presentation metadata. All of it is optional; what is missing is simply not shown.
+
+| Field | Used for |
+| --- | --- |
+| `summary` | Card text on `/projects`, and the lead paragraph under the heading when the Markdown intro has no paragraph of its own. |
+| `technologies` | Tags on the card (which also light up the constellation on hover) and the technology buttons under "Teknik i uppdraget". |
+| `period`, `role`, `industry` | The fact cards (Period, Roll, Bransch) under the heading. |
+| `category` | The word after the period on the card; falls back to `industry`. |
+| `assignment` | The title of the matching assignment in the CV, when it differs from the project's title. The CV links each assignment (git log and card) to the project whose `title` or `assignment` matches. |
+| `order` | Sort order on `/projects` (ascending); projects without it come last, alphabetically. |
+
+Section headings are classified by name: "Ansvar…"/"Arbetssätt…" (responsibilities), "Resultat…"/"Utfall…" (results), and "Teknik"/"Teknik i …" (technologies, replaced by the buttons). A summary card is added only when the intro text differs from `summary`.
+
+The `/projects` page shows the heading and the introduction before the first `##` of `projects.md`; the cards are generated. `/contact` ends with "Fortsätt utforska", cards built from the title and description of `services`, `projects` and `cv`.
+
+`/services` opens with a two-column hero built by `PageHero` from the Markdown: the `#` heading and the paragraphs before the first `##` form the left column, and every `##` with its text becomes an item in the panel on the right. The front matter of the page may add `kicker` (small line above the heading), `panelEyebrow` and `panelTitle` (the panel's heading); all are optional. A page without a `#` heading or without any `##` section is rendered as plain Markdown instead.
+
 
 ## Editorial page ownership
 

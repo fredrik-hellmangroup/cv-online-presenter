@@ -25,6 +25,11 @@
         <p class="cv-actions">
             <a class="button-link primary" href="#@HistoryId">Se uppdragen</a>
             <a class="button-link" href="/contact">Kontakta mig</a>
+            @if (!string.IsNullOrEmpty(PdfUrl))
+            {
+                <a class="button-link" href="@PdfUrl" download>Ladda ner PDF</a>
+            }
+            <button type="button" class="button-link" data-print hidden>Skriv ut</button>
         </p>
     </div>
     @if (!string.IsNullOrEmpty(PhotoUrl))
@@ -45,5 +50,6 @@
 @code {
     [Parameter, EditorRequired] public CvView View { get; set; } = default!;
     [Parameter] public string? PhotoUrl { get; set; }
+    [Parameter] public string? PdfUrl { get; set; }
     [Parameter] public string HistoryId { get; set; } = "uppdragshistorik";
 }
