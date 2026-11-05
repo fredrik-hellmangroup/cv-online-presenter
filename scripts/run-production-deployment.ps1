@@ -146,7 +146,7 @@ $operations = @{
         try { $operationState.priorRecord = ConvertFrom-LkgJson -Json (Get-Content -LiteralPath $statePath -Raw) }
         catch { throw "production-state LKG record is malformed: $($_.Exception.Message)" }
         return $operationState.priorRecord
-    }.GetNewClosure()
+    }
     ReadPending = {
         if (-not (Test-Path -LiteralPath $pendingPath -PathType Leaf)) { return $null }
         try { $operationState.pending = Get-Content -LiteralPath $pendingPath -Raw | ConvertFrom-Json }
@@ -156,7 +156,7 @@ $operations = @{
         }
         if ([int]$operationState.pending.schemaVersion -ne 1) { throw 'production-state pending schemaVersion must be 1.' }
         return $operationState.pending
-    }.GetNewClosure()
+    }
     SetPending = {
         param($artifact, $priorArtifact)
         $pending = [PSCustomObject]@{
@@ -169,7 +169,7 @@ $operations = @{
         }
         $pending | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $pendingPath -Encoding utf8
         Invoke-StateBranchCommit -Message 'production-state: mark deployment pending'
-    }.GetNewClosure()
+    }
     ResolveRollbackPackage = {
         param($artifact)
         $rollback = Get-ReleaseAsset -Tag $artifact.releaseTag -AssetName $artifact.assetName -Directory (Join-Path $env:RUNNER_TEMP 'issue56-rollback')
@@ -180,7 +180,7 @@ $operations = @{
         }
         $operationState.rollback = [PSCustomObject]@{ path = $rollback.path; publishPath = (Join-Path $env:RUNNER_TEMP 'issue56-rollback-publish') }
         return $operationState.rollback
-    }.GetNewClosure()
+    }
     ValidateCandidate = {
         param($artifact)
         if (-not (Test-Path -LiteralPath $artifact.path -PathType Leaf)) { throw 'Candidate package is missing.' }
@@ -191,7 +191,7 @@ $operations = @{
             if ([string]$metadata.$field -cne [string]$artifact.$field) { throw "Candidate embedded metadata '$field' does not match its artifact identity." }
         }
         if ([string]$metadata.appRevision -cne [string]$artifact.commit) { throw 'Candidate appRevision does not match its source commit.' }
-    }.GetNewClosure()
+                }
     ArchiveCandidate = {
         param($artifact)
         $tag = "recovery/manual-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
@@ -203,16 +203,16 @@ $operations = @{
         $artifact.assetName = $assetName
         $artifact.packageSha256 = $archived.digest
         return $artifact
-    }.GetNewClosure()
-    SyncCandidate = { param($artifact) Invoke-DeploySync -PublishDirectory $artifact.publishPath }.GetNewClosure()
-    VerifyCandidate = { param($artifact) Invoke-LiveVerification -PublishDirectory $artifact.publishPath }.GetNewClosure()
-    SyncRollback = { param($package, $artifact) Invoke-DeploySync -PublishDirectory $package.publishPath }.GetNewClosure()
+    }
+    SyncCandidate = { param($artifact) Invoke-DeploySync -PublishDirectory $artifact.publishPath }
+    VerifyCandidate = { param($artifact) Invoke-LiveVerification -PublishDirectory $artifact.publishPath }
+    SyncRollback = { param($package, $artifact) Invoke-DeploySync -PublishDirectory $package.publishPath }
     ClearPending = {
         param($artifact)
         if (Test-Path -LiteralPath $pendingPath -PathType Leaf) { Remove-Item -LiteralPath $pendingPath -Force }
         Invoke-StateBranchCommit -Message 'production-state: verified rollback restored prior LKG'
-    }.GetNewClosure()
-    VerifyRollback = { param($artifact) Invoke-LiveVerification -PublishDirectory $operationState.rollback.publishPath }.GetNewClosure()
+            }
+            VerifyRollback = { param($artifact) Invoke-LiveVerification -PublishDirectory $operationState.rollback.publishPath }
     WriteState = {
         param($artifact)
         $record = New-LkgRecord -Artifact $artifact -VerifiedAtUtc ([DateTime]::UtcNow.ToString('o')) -Workflow $env:GITHUB_WORKFLOW -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT
@@ -224,7 +224,7 @@ $operations = @{
             Write-Warning -Message "Durable production-state commit succeeded; $($mirrorResult.Warning)" -WarningAction Continue
         }
         return $record
-    }.GetNewClosure()
+    }
 }
 
 $candidateReleaseTag = $SourceTag

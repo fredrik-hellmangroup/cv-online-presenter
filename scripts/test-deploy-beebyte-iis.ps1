@@ -230,6 +230,9 @@ foreach ($requiredRunnerFragment in @(
         throw "The production orchestration is missing '$requiredRunnerFragment'."
     }
 }
+if ($productionRunner.Contains('GetNewClosure')) {
+    throw 'Production operations must not use GetNewClosure(); closures cannot resolve the runner''s script-scope functions such as Get-ReleaseAsset.'
+}
 $releaseWorkflow = [IO.File]::ReadAllText($releaseWorkflowPath)
 foreach ($requiredReleaseFragment in @(
         'name: production-msdeploy'
