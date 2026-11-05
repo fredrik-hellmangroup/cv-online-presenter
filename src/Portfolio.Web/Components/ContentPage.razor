@@ -48,9 +48,16 @@ else
 <a class="skip-link" href="#main">Hoppa till innehåll</a>
 <header class="site-header">
     <div class="brand-wrap">
-        <span id="brand-mark" class="brand-mark" aria-hidden="true"></span>
+        <span id="brand-mark" class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+                <path class="brand-mark-links" d="M5 17 12 6l7 11M5 17h14" />
+                <circle cx="12" cy="6" r="2.1" />
+                <circle cx="5" cy="17" r="1.7" />
+                <circle cx="19" cy="17" r="1.7" />
+            </svg>
+        </span>
         <a class="brand" href="/"
-           aria-label="@Content.Settings.SiteName – startsida">@PageHeading.Monogram(Content.Settings.SiteName)</a>
+           aria-label="Hem – @Content.Settings.SiteName">Hem</a>
     </div>
     <nav aria-label="Huvudnavigation">
         <a href="/services" aria-current="@(path == "/services" ? "page" : null)">Kompetens</a>
@@ -66,7 +73,7 @@ else
 <main id="main" class="@(isHome ? "home" : null)">
     @if (cv is not null)
     {
-        <CvHero View="cv" PhotoUrl="@photoUrl" HistoryId="@cv.HistoryId" />
+        <CvHero View="cv" PhotoUrl="@photoUrl" PdfUrl="@pdfUrl" HistoryId="@cv.HistoryId" />
     }
     <div class="page-layout">
         @if (isCv)
@@ -76,7 +83,7 @@ else
                 <ol id="cv-toc-list"></ol>
             </aside>
         }
-        <article class="@(cv is null ? null : "cv")">
+        <article class="@(cv is not null ? "cv" : hero is not null ? "wide" : null)">
             @if (page is not null)
             {
                 @if (cv is not null)
@@ -89,14 +96,30 @@ else
                 }
                 else if (path == "/projects")
                 {
-                    @((MarkupString)FirstHeadingHtml(Content.Render(page)))
+                    @((MarkupString)LeadHtml(Content.Render(page)))
                     <div class="project-grid">
-                        @foreach (var project in Content.PublishedProjects.OrderBy(item => item.Title, StringComparer.CurrentCulture))
+                        @foreach (var project in Content.PublishedProjects.OrderBy(ProjectMetadata.Order).ThenBy(item => item.Title, StringComparer.CurrentCulture))
                         {
-                            <article class="project-card">
+                            var technologies = ProjectMetadata.Technologies(project);
+                            var cardMeta = ProjectMetadata.CardMeta(project);
+                            <div class="project-card" data-keywords="@(technologies.Count > 0 ? string.Join("|", technologies) : null)">
+                                @if (cardMeta.Length > 0)
+                                {
+                                    <p class="project-card-meta">@cardMeta</p>
+                                }
                                 <h2><a href="/@project.Slug">@project.Title</a></h2>
-                                <p class="project-card-description">@MetadataText(project, "summary")</p>
-                            </article>
+                                <p class="project-card-description">@ProjectMetadata.Text(project, "summary")</p>
+                                @if (technologies.Count > 0)
+                                {
+                                    <ul class="tags">
+                                        @foreach (var technology in technologies)
+                                        {
+                                            <li>@technology</li>
+                                        }
+                                    </ul>
+                                }
+                                <p class="project-card-link"><a href="/@project.Slug">Läs om uppdraget &rarr;</a></p>
+                            </div>
                         }
                     </div>
                 }
@@ -106,13 +129,59 @@ else
                 }
                 else
                 {
-                    @((MarkupString)Content.Render(page))
-                    @if (path == "/services" && Content.Cv is { SkillGroups.Count: > 0 } servicesCv)
+                    @if (hero is not null)
+                    {
+                        var showTechniques = Content.Cv is { SkillGroups.Count: > 0 };
+                        var kicker = ProjectMetadata.Text(page, "kicker");
+                        var panelEyebrow = ProjectMetadata.Text(page, "panelEyebrow");
+                        var panelTitle = ProjectMetadata.Text(page, "panelTitle");
+                        <section class="page-hero">
+                            <div class="page-hero-copy">
+                                @if (kicker.Length > 0)
+                                {
+                                    <p class="page-hero-kicker">@kicker</p>
+                                }
+                                @((MarkupString)hero.HeadingHtml)
+                                <div class="page-hero-lead">@((MarkupString)hero.LeadHtml)</div>
+                                <p class="page-hero-actions">
+                                    @if (showTechniques)
+                                    {
+                                        <a class="button-link primary" href="#service-technologies-heading">Se teknikerna <span aria-hidden="true">↓</span></a>
+                                    }
+                                    <a class="button-link" href="/cv">Se demo-CV</a>
+                                </p>
+                            </div>
+                            <aside class="page-hero-panel" aria-label="@(panelTitle.Length > 0 ? panelTitle : "Delar")">
+                                @if (panelEyebrow.Length > 0)
+                                {
+                                    <p class="page-hero-kicker">@panelEyebrow</p>
+                                }
+                                @if (panelTitle.Length > 0)
+                                {
+                                    <p class="page-hero-panel-title">@panelTitle</p>
+                                }
+                                <ul class="page-hero-list">
+                                    @foreach (var item in hero.Items)
+                                    {
+                                        <li>
+                                            <strong>@item.Heading</strong>
+                                            <div class="page-hero-item-text">@((MarkupString)item.BodyHtml)</div>
+                                        </li>
+                                    }
+                                </ul>
+                            </aside>
+                        </section>
+                    }
+                    else
+                    {
+                        @((MarkupString)Content.Render(page))
+                    }
+                    @if (string.Equals(path, "/services", StringComparison.OrdinalIgnoreCase) && Content.Cv is { SkillGroups.Count: > 0 } servicesCv)
                     {
                         var technologyCount = servicesCv.SkillGroups.Sum(group => group.Skills.Count);
                         <section class="service-technologies" aria-labelledby="service-technologies-heading">
                             <h2 id="service-technologies-heading">Teknik i uppdragen</h2>
-                            <p>Välj en teknik för att markera den i bakgrunden och se vilka tekniker som använts tillsammans i uppdragen.</p>
+                            <p>Klicka på en teknik så markeras den i bakgrunden, tillsammans med de tekniker den använts med. Teknikerna länkas när de förekommer i samma uppdrag.</p>
                             <div class="tech-panel">
                                 <div class="tech-filter">
                                     <label class="visually-hidden" for="technology-filter">Filtrera tekniker</label>
@@ -120,12 +189,12 @@ else
                                            placeholder="Filtrera tekniker…" autocomplete="off" />
                                     <span class="tech-count" data-tech-count aria-live="polite" aria-atomic="true">@technologyCount tekniker</span>
                                 </div>
-                                <p class="tech-status" data-pin-status role="status" aria-live="polite" aria-atomic="true">Ingen teknik markerad</p>
+                                <p class="tech-status" data-pin-status role="status" aria-live="polite" aria-atomic="true"></p>
                                 <div id="service-skill-groups" class="skill-groups service-skill-groups">
                                     @foreach (var group in servicesCv.SkillGroups)
                                     {
-                                        <div class="skill-group" role="group" aria-label="@group.Name">
-                                            <h3 class="skill-group-name">@group.Name</h3>
+                                        <div class="skill-group" role="group" aria-label="@group.Name" data-keywords="@string.Join("|", group.Skills)">
+                                            <p class="skill-group-name">@group.Name</p>
                                             <ul class="skill-chips">
                                                 @foreach (var skill in group.Skills)
                                                 {
@@ -139,7 +208,7 @@ else
                             </div>
                         </section>
                     }
-                    @if (path == "/services")
+                    @if (string.Equals(path, "/services", StringComparison.OrdinalIgnoreCase))
                     {
                         <aside class="service-cv-cta" aria-label="Fördjupad profil">
                             <p>Vill du läsa mer om erfarenhet och uppdrag?</p>
@@ -150,6 +219,20 @@ else
                 @if (path == "/contact")
                 {
                     <ContactSection Email="@Content.Settings.ContactEmail" />
+                    <h2 id="utforska">Fortsätt utforska</h2>
+                    <p>Välj den del av profilen som bäst svarar mot din fråga.</p>
+                    <div class="project-grid">
+                        @foreach (var (route, index) in new[] { "/services", "/projects", "/cv" }.Select((route, index) => (route, index)))
+                        {
+                            var target = Content.FindByPath(route);
+                            if (target is null) continue;
+                            <div class="project-card">
+                                <p class="project-card-meta">@((index + 1).ToString("00"))</p>
+                                <h2><a href="@route">@target.Title</a></h2>
+                                <p class="project-card-description">@target.Description</p>
+                            </div>
+                        }
+                    </div>
                 }
             }
             else
@@ -196,7 +279,9 @@ else
 
     private ContentDocument? page;
     private CvView? cv;
+    private PageHeroView? hero;
     private string? photoUrl;
+    private string? pdfUrl;
     private string? constellationJson;
     private string path = "/";
     private string canonicalPath = "/";
@@ -211,14 +296,13 @@ StringComparison.OrdinalIgnoreCase)
 
     private string? canonicalUrl => page is null || Content.SiteUrl is null ? null : Content.SiteUrl + canonicalPath;
 
-    private static string FirstHeadingHtml(string html)
+    // The page heading and the introduction before the first section; sections of the editorial list are replaced by the cards.
+    private static string LeadHtml(string html)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(html, @"<h1(?:\s[^>]*)?>.*?</h1>", System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success ? match.Value : string.Empty;
+        var firstSection = html.IndexOf("<h2", StringComparison.OrdinalIgnoreCase);
+        return firstSection < 0 ? html : html[..firstSection];
     }
 
-    private static string MetadataText(ContentDocument document, string key) =>
-        document.Metadata.TryGetValue(key, out var value) ? value?.ToString() ?? string.Empty : string.Empty;
     private string VersionedAsset(string assetPath) => ReleaseIdentity.AppRevision.Length == 40
         && ReleaseIdentity.AppRevision.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f')
             ? $"{assetPath}?v={ReleaseIdentity.AppRevision}"
@@ -254,8 +338,15 @@ StringComparison.OrdinalIgnoreCase)
                 ?? $"/{page.Slug}";
         var cvView = Content.Cv;
         cv = isCv ? cvView : null;
+        hero = page is not null && page.Type == "page" && string.Equals(path, "/services", StringComparison.OrdinalIgnoreCase)
+            ? PageHero.Build(Content.Render(page))
+            : null;
         photoUrl = cv is not null &&  WebHost.WebRootFileProvider.GetFileInfo("img/profile.webp").Exists
             ? VersionedAsset("/img/profile.webp")
+            : null;
+        // The download button appears only when a PDF has been placed in wwwroot/downloads.
+        pdfUrl = cv is not null && WebHost.WebRootFileProvider.GetFileInfo("downloads/cv.pdf").Exists
+            ? VersionedAsset("/downloads/cv.pdf")
             : null;
         constellationJson = cvView is { SkillGroups.Count: > 0 }
             ? JsonSerializer.Serialize(

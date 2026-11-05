@@ -1,6 +1,6 @@
 ---
 title: "CV"
-description: "Syntetiskt demo-CV för Alex Exempel, lösningsarkitekt och senior konsult."
+description: "Roller, kompetensområden och uppdragshistorik samlade i demo-CV:t."
 locale: "sv-SE"
 status: "published"
 type: "page"
@@ -16,19 +16,11 @@ Lösningsarkitekt och senior konsult (demo)
 ## Översikt
 Påhittad senior konsult med över 10 års erfarenhet av backendutveckling, lösningsarkitektur och integrationer. Sidan är syntetisk demodata och beskriver ingen verklig person.
 
-## Kompetensområden
-- Lösningsarkitektur och teknisk riktning nära implementation
-- Backendutveckling i .NET/C#
-- Systemintegration och informationsflöden
-- CI/CD och plattformsarbete
-
-**Nyckelteknik**
-- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server, Entity Framework
-- Integration: REST, RabbitMQ, gRPC, OpenAPI
-- Moln och DevOps: GitHub Actions, Docker, Bicep, Azure
-
-## Branscherfarenhet
-Offentlig sektor, logistik, finans
+## Praktiskt
+- Tillgänglig: Från 1 feb 2027
+- Arbetsform: Hybrid · Stockholm eller distans
+- Språk: Svenska, engelska
+- Referenser: Kan lämnas på begäran
 
 ## Uppdragshistorik
 
@@ -103,3 +95,17 @@ Syntetiskt resultat.
 
 #### Nyckelord
 .NET, REST, Docker, Bicep
+
+## Kompetensområden
+- Lösningsarkitektur och teknisk riktning nära implementation
+- Backendutveckling i .NET/C#
+- Systemintegration och informationsflöden
+- CI/CD och plattformsarbete
+
+**Nyckelteknik**
+- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server, Entity Framework
+- Integration: REST, RabbitMQ, gRPC, OpenAPI
+- Moln och DevOps: GitHub Actions, Docker, Bicep, Azure
+
+## Branscherfarenhet
+Offentlig sektor, logistik, finans

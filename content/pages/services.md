@@ -1,17 +1,22 @@
 ---
 title: "Kompetens"
-description: "Syntetiska kompetensområden för demoprofilen Alex Exempel."
+description: "Teknisk riktning, backend och integrationer samt plattform och modernisering."
 locale: "sv-SE"
 status: "published"
 type: "page"
+kicker: "Kompetens · syntetisk demo"
+panelEyebrow: "Tre delar i samma helhet"
+panelTitle: "Kompetens med sammanhang."
 ---
-# Kompetens
+# Teknik med riktning och helhet.
+
+Från teknisk riktning nära implementation till system som fungerar tillsammans och lösningar som kan utvecklas stegvis.
 
 ## Lösningsarkitektur
-Teknisk riktning nära implementation och ett helhetsperspektiv på system och leverans.
+Teknisk riktning nära implementation.
 
 ## Backend och integration
-Syntetiska exempel på backendutveckling, API:er och integrationer mellan system.
+Backendutveckling, API:er och flöden mellan system.
 
 ## Plattform och modernisering
-Arbetssätt för stabil leverans och stegvis utveckling av befintliga lösningar.
+Stabil leverans och stegvis utveckling av befintliga lösningar.

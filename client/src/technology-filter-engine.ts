@@ -1,4 +1,4 @@
-import { parseConstellationData } from './skills.js';
+import { matchesSkill, parseConstellationData } from './skills.js';
 import { createSkillPinEvent, SKILL_PIN_EVENT, type SkillPinEvent } from './events.js';
 import type { ExperienceEngine } from './experience.js';
 
@@ -32,14 +32,14 @@ export const escapePinnedSkill = (current: string | null, key: string, searchIsO
 export const countSkillAssignments = (
   skill: string,
   assignments: readonly { readonly keywords: readonly string[] }[]
-): number => assignments.filter(assignment => assignment.keywords.includes(skill)).length;
+): number => assignments.filter(assignment => assignment.keywords.some(keyword => matchesSkill(skill, keyword))).length;
 
 export const skillPinStatusText = (
   skill: string | null,
   assignments: readonly { readonly keywords: readonly string[] }[]
 ): string => skill
   ? `Markerad: ${skill} · används i ${countSkillAssignments(skill, assignments)} av ${assignments.length} uppdrag`
-  : 'Ingen teknik markerad';
+  : '';
 
 /** Enhances the service-page technology list and keeps button, status, and constellation state in sync. */
 export class TechnologyFilterEngine implements ExperienceEngine {

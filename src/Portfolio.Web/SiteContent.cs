@@ -45,7 +45,7 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
                 if (cachedCvVersion == snapshot.Version) return cachedCv;
             }
             var document = FindByPath("/cv");
-            var view = document is null ? null : CvPresenter.Build(Render(document));
+            var view = document is null ? null : CvPresenter.Build(Render(document), null, ProjectUrlFor);
             lock (CvLock)
             {
                 cachedCvVersion = snapshot.Version;
@@ -53,6 +53,17 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
             }
             return view;
         }
+    }
+
+    // A CV assignment links to the published project with the same title, or to the one that names it in its
+    // optional "assignment" front matter field (for when the project is titled differently from the CV).
+    private string? ProjectUrlFor(string assignmentTitle)
+    {
+        static bool Same(string left, string right) =>
+            left.Length > 0 && string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
+        var project = PublishedProjects.FirstOrDefault(item =>
+            Same(item.Title, assignmentTitle) || Same(ProjectMetadata.Text(item, "assignment"), assignmentTitle));
+        return project is null ? null : "/" + project.Slug;
     }
 
     public IReadOnlyList<SearchResult> Search(string? query) => PortfolioSearch.Find(

@@ -6,7 +6,7 @@ The easter egg is hidden by default. It is a harmless message (`#easter-egg` in 
 
 | Trigger | How | Implementation |
 | --- | --- | --- |
-| Logo clicks | Click the glowing dot next to the site name five times within two seconds. | `createClickCounter` in `client/src/egg-triggers.ts`; configured in `easterEggManifest`. |
+| Logo clicks | Click the small constellation icon next to "Hem" five times within two seconds. | `createClickCounter` in `client/src/egg-triggers.ts`; configured in `easterEggManifest`. |
 | Key sequence | Type `k`, `o`, `d` outside text fields, without Ctrl, Alt, or Meta. | `createSequenceMatcher` in `client/src/egg-triggers.ts`. |
 
 Both are declared in `client/src/experience-manifest.ts` (`clickCount`, `clickWindowMs`, `keySequence`) and are covered by `client/test/easter-egg.test.mjs` and the Playwright spec in `tools/a11y/tests/site.spec.mjs`.

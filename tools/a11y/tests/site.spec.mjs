@@ -222,7 +222,7 @@ test('/cv presents the CV as hero, figures, git log and cards without JavaScript
 });
 
 
-test('homepage presentation is centered from header through footer', async ({ page }) => {
+test('homepage hero is centered while the header and footer match the sub pages', async ({ page }) => {
   await page.goto('/');
   const alignment = await page.evaluate(() => {
     const header = document.querySelector('.site-header');
@@ -250,11 +250,12 @@ test('homepage presentation is centered from header through footer', async ({ pa
   });
 
   expect(alignment).toEqual({
-    header: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
-    brand: 'center',
+    // The header and footer match the sub pages; only the hero article is centered.
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' },
+    brand: 'flex-start',
     navigation: 'center',
     article: 'center',
-    footer: { justifyContent: 'center', textAlign: 'center' }
+    footer: { justifyContent: 'normal', textAlign: 'start' }
   });
 });
 

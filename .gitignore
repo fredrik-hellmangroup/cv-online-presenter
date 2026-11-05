@@ -67,6 +67,9 @@ src/Portfolio.Web/wwwroot/build-metadata.json
 src/Portfolio.Web/wwwroot/js/
 src/Portfolio.Web/wwwroot/css/utilities.css
 
+# Deployment-specific downloads (the CV PDF) - the download button appears when downloads/cv.pdf exists
+src/Portfolio.Web/wwwroot/downloads/
+
 # Private source material - lives in the private content repo, never here
 *Master CV*.md
 PRD_konsultportfolio.md

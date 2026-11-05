@@ -35,7 +35,11 @@
                     <span class="git-text">
                         <span class="git-hash">@Hash(assignment.Title, "b")</span>
                         <span class="git-year">@row.Year</span>
-                        @if (!string.IsNullOrEmpty(assignment.Id))
+                        @if (!string.IsNullOrEmpty(assignment.Url))
+                        {
+                            <a class="git-msg" href="@assignment.Url">@assignment.Title</a>
+                        }
+                        else if (!string.IsNullOrEmpty(assignment.Id))
                         {
                             <a class="git-msg" href="#@assignment.Id">@assignment.Title</a>
                         }

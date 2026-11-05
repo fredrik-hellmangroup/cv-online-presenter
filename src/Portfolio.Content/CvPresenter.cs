@@ -14,7 +14,8 @@ public sealed record CvAssignment(
     int StartYear,
     int? EndYear,
     bool Ongoing,
-    IReadOnlyList<string> Keywords);
+    IReadOnlyList<string> Keywords,
+    string? Url = null);
 
 public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills);
 
@@ -44,7 +45,8 @@ public sealed record CvHeadings(
     string Keywords = "Nyckelord",
     string Period = "Period",
     string Role = "Roll",
-    string Ongoing = "pågående");
+    string Ongoing = "pågående",
+    string Practical = "Praktiskt");
 
 /// <summary>
 /// Turns the sanitized HTML of the CV page into a structured view: hero facts, assignment cards,
@@ -60,7 +62,7 @@ public static class CvPresenter
     private static readonly Regex YearsPattern = new(
         @"över\s+(?<years>\d+)\s+års", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    public static CvView? Build(string renderedHtml, CvHeadings? headings = null)
+    public static CvView? Build(string renderedHtml, CvHeadings? headings = null, Func<string, string?>? projectUrl = null)
     {
         var names = headings ?? new CvHeadings();
         using var document = new HtmlParser().ParseDocument(renderedHtml);
@@ -77,7 +79,7 @@ public static class CvPresenter
         if (string.IsNullOrWhiteSpace(tagline)) tagline = null;
 
         var skillGroups = TransformSkillGroups(document, sections, names);
-        var (introHtml, cards, assignments) = BuildAssignments(document, history, names);
+        var (introHtml, cards, assignments) = BuildAssignments(document, history, names, projectUrl);
         if (assignments.Count == 0) return null;
 
         var roles = Find(sections, names.Roles)?.Items.FirstOrDefault(item => item.LocalName == "ul")
@@ -96,8 +98,9 @@ public static class CvPresenter
         if (technologyCount > 0) figures.Add(new(technologyCount, string.Empty, "nyckelteknologier"));
 
         var historyIndex = sections.IndexOf(history);
-        var before = string.Concat(sections.Take(historyIndex).SelectMany(section => Render(section, names.Roles, h1, taglineParagraph)));
-        var after = string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names.Roles, h1, taglineParagraph)));
+        var practicalHtml = BuildPractical(document, Find(sections, names.Practical));
+        var before = string.Concat(sections.Take(historyIndex).SelectMany(section => Render(section, names, h1, taglineParagraph, practicalHtml)));
+        var after = string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names, h1, taglineParagraph, practicalHtml)));
 
         return new CvView(
             h1.TextContent.Trim(),
@@ -138,13 +141,40 @@ public static class CvPresenter
     private static bool Matches(string text, string expected) =>
         string.Equals(text.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> Render(Section section, string rolesTitle, IElement h1, IElement? taglineParagraph)
+    private static IEnumerable<string> Render(Section section, CvHeadings names, IElement h1, IElement? taglineParagraph, string practicalHtml)
     {
         // Roles, the H1 and its tagline live in the hero, so they are left out of the article body.
-        if (section.Heading is not null && Matches(section.Heading.TextContent, rolesTitle)) yield break;
+        if (section.Heading is not null && Matches(section.Heading.TextContent, names.Roles)) yield break;
+        // The practical facts are shown as cards at the end of the overview instead of as a section of their own.
+        if (section.Heading is not null && Matches(section.Heading.TextContent, names.Practical)) yield break;
         if (section.Heading is not null) yield return section.Heading.OuterHtml;
         foreach (var item in section.Items)
             if (!ReferenceEquals(item, h1) && !ReferenceEquals(item, taglineParagraph)) yield return item.OuterHtml;
+        if (section.Heading is not null && Matches(section.Heading.TextContent, names.Overview)) yield return practicalHtml;
+    }
+
+    // "Label: value" list items become small fact cards (availability, working model, references...).
+    private static string BuildPractical(IDocument document, Section? practical)
+    {
+        var list = practical?.Items.FirstOrDefault(item => item.LocalName == "ul");
+        if (list is null) return string.Empty;
+        var facts = document.CreateElement("dl");
+        facts.ClassName = "practical";
+        facts.SetAttribute("aria-label", practical!.Heading!.TextContent.Trim());
+        foreach (var item in list.Children)
+        {
+            var text = item.TextContent.Trim();
+            var colon = text.IndexOf(':');
+            if (colon <= 0 || colon == text.Length - 1) continue;
+            var card = document.CreateElement("div");
+            var term = document.CreateElement("dt");
+            term.TextContent = text[..colon].Trim();
+            var description = document.CreateElement("dd");
+            description.TextContent = text[(colon + 1)..].Trim();
+            card.Append(term, description);
+            facts.AppendChild(card);
+        }
+        return facts.HasChildNodes ? facts.OuterHtml : string.Empty;
     }
 
     private static string? BuildKicker(Section? employment, CvHeadings names)
@@ -182,6 +212,10 @@ public static class CvPresenter
                 var title = document.CreateElement("p");
                 title.ClassName = "skill-groups-title";
                 title.TextContent = names.Skills;
+                var hint = document.CreateElement("span");
+                hint.ClassName = "tech-hint";
+                hint.TextContent = " · klicka för att markera";
+                title.AppendChild(hint);
                 container.AppendChild(title);
 
                 foreach (var item in list.Children)
@@ -198,6 +232,8 @@ public static class CvPresenter
                     group.ClassName = "skill-group";
                     group.SetAttribute("role", "group");
                     group.SetAttribute("aria-label", groupName);
+                    // Hovering the group lights up all of its technologies in the constellation, like hovering an assignment.
+                    group.SetAttribute("data-keywords", string.Join('|', skills));
                     var label = document.CreateElement("p");
                     label.ClassName = "skill-group-name";
                     label.TextContent = groupName;
@@ -206,8 +242,13 @@ public static class CvPresenter
                     foreach (var skill in skills)
                     {
                         var chip = document.CreateElement("li");
-                        chip.SetAttribute("data-skill", skill);
-                        chip.TextContent = skill;
+                        var button = document.CreateElement("button");
+                        button.ClassName = "skill-btn";
+                        button.SetAttribute("type", "button");
+                        button.SetAttribute("data-skill", skill);
+                        button.SetAttribute("aria-pressed", "false");
+                        button.TextContent = skill;
+                        chip.AppendChild(button);
                         chips.AppendChild(chip);
                     }
                     group.Append(label, chips);
@@ -225,7 +266,7 @@ public static class CvPresenter
     }
 
     private static (string IntroHtml, List<IElement> Cards, List<CvAssignment> Assignments) BuildAssignments(
-        IDocument document, Section history, CvHeadings names)
+        IDocument document, Section history, CvHeadings names, Func<string, string?>? projectUrl)
     {
         var intro = new List<IElement>();
         var cards = new List<IElement>();
@@ -251,6 +292,7 @@ public static class CvPresenter
         {
             if (heading is null) return;
             var title = heading.TextContent.Trim();
+            var url = projectUrl?.Invoke(title);
             var meta = group.FirstOrDefault(item => item.LocalName == "p" && item.TextContent.TrimStart().StartsWith(names.Period + ":", StringComparison.OrdinalIgnoreCase));
             var (period, role) = meta is null ? (string.Empty, string.Empty) : SplitMeta(meta.TextContent, names);
             var keywordsHeading = group.FirstOrDefault(item => item.LocalName == "h4" && Matches(item.TextContent, names.Keywords));
@@ -265,7 +307,7 @@ public static class CvPresenter
                 var endGroup = parsed.Groups["end"];
                 var ongoing = endGroup.Success && !char.IsDigit(endGroup.Value[0]);
                 int? end = !endGroup.Success ? start : ongoing ? null : int.Parse(endGroup.Value, CultureInfo.InvariantCulture);
-                assignment = new CvAssignment(heading.Id ?? string.Empty, title, role, start, end, ongoing, keywords);
+                assignment = new CvAssignment(heading.Id ?? string.Empty, title, role, start, end, ongoing, keywords, url);
                 assignments.Add(assignment);
             }
 
@@ -309,6 +351,16 @@ public static class CvPresenter
             {
                 if (ReferenceEquals(item, meta) || ReferenceEquals(item, keywordsHeading) || ReferenceEquals(item, keywordsParagraph)) continue;
                 card.AppendChild(item);
+            }
+            if (!string.IsNullOrEmpty(url))
+            {
+                var link = document.CreateElement("p");
+                link.ClassName = "assignment-link";
+                var anchor = document.CreateElement("a");
+                anchor.SetAttribute("href", url);
+                anchor.TextContent = "Läs om uppdraget →";
+                link.AppendChild(anchor);
+                card.AppendChild(link);
             }
             cards.Add(card);
         }

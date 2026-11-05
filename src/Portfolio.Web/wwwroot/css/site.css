@@ -118,15 +118,11 @@ button:hover { border-color: var(--accent); box-shadow: 0 0 1.5rem -.25rem var(-
 }
 .brand-wrap { display: flex; align-items: center; gap: .75rem; }
 .brand { display: inline-flex; align-items: center; min-width: 1.5rem; min-height: 1.5rem; font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; text-decoration: none; color: var(--text); }
-.brand-mark {
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff, var(--accent) 55%, transparent 75%);
-  box-shadow: 0 0 1.25rem .2rem var(--accent);
-  animation: pulse 3.2s ease-in-out infinite;
-  user-select: none;
-}
+/* The mark is a tiny constellation (three linked nodes); it is also the trigger of the hidden easter egg. */
+.brand-mark { display: inline-flex; width: 1.5rem; height: 1.5rem; user-select: none; }
+.brand-mark svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 .4rem var(--accent)); animation: brand-glow 3.2s ease-in-out infinite; }
+.brand-mark-links { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
+.brand-mark circle { fill: var(--accent); }
 nav { display: flex; flex-wrap: wrap; gap: .25rem 1.5rem; }
 nav a { color: var(--muted); font-weight: 600; text-decoration: none; padding-block: .25rem; border-bottom: 2px solid transparent; transition: color .2s, border-color .2s; }
 nav a:hover, nav a:focus-visible { color: var(--text); border-bottom-color: var(--accent); }
@@ -151,11 +147,11 @@ main.home article:not(.cv) > h1 + p {
 }
 main.home .cv-actions { margin-top: 2rem; justify-content: center; }
 main.home article { margin-inline: auto; text-align: center; }
+main.home article > p { margin-inline: auto; text-align: center; }
 main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
 :root:has(main.home) .site-header { flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 :root:has(main.home) .brand-wrap,
 :root:has(main.home) nav { justify-content: center; }
-:root:has(main.home) footer { justify-content: center; text-align: center; }
 /* Sub pages: centered column and hero (title, accent rule, lead), left-aligned body text for readability. */
 main:not(.home) article:not(.cv) { margin-inline: auto; }
 main:not(.home) article:not(.cv) > h1 { text-align: center; }
@@ -328,7 +324,8 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 /* ---------- Skill chips ---------- */
 .skill-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-block: 1.5rem; }
 .skill-groups-title { grid-column: 1 / -1; margin: 0; font-family: var(--font-mono); font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-.skill-group { position: relative; overflow: hidden; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); backdrop-filter: blur(10px); }
+.skill-group { position: relative; overflow: hidden; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); backdrop-filter: blur(10px); transition: border-color .25s; }
+.skill-group:hover, .skill-group:focus-within { border-color: rgba(var(--particle-rgb), .6); }
 .skill-group-name { margin: 0 0 .6rem; font-family: var(--font-condensed); font-size: 1.35rem; font-weight: 700; color: var(--link); }
 .chips, .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
 .chips li, .tags li { max-width: none; padding: .2rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--particle-rgb), .06); font-size: .9rem; line-height: 1.5; transition: border-color .2s, background .2s, color .2s; }
@@ -377,7 +374,7 @@ a.git-msg { text-decoration-color: rgba(var(--particle-rgb), .5); }
   .git-role { display: none; }
 }
 
-@keyframes pulse { 0%, 100% { box-shadow: 0 0 1rem .1rem var(--accent); } 50% { box-shadow: 0 0 1.75rem .45rem var(--accent); } }
+@keyframes brand-glow { 0%, 100% { filter: drop-shadow(0 0 .25rem var(--accent)); } 50% { filter: drop-shadow(0 0 .7rem var(--accent)); } }
 @keyframes rise { from { opacity: 0; transform: translateY(1.5rem); } to { opacity: 1; transform: none; } }
 @keyframes pop { from { opacity: 0; transform: translateX(-50%) scale(.85); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
 
@@ -402,82 +399,118 @@ a.git-msg { text-decoration-color: rgba(var(--particle-rgb), .5); }
 .service-cv-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1rem; margin-top: 3rem; padding: 1.5rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
 .service-cv-cta p { margin: 0; }
 
-/* V3 interaction and hierarchy */
+/* ---------- v3 design: navigation, technology buttons, projects, contact and print ---------- */
 nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+
+/* Technology chips as buttons */
 .skill-chips { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0; padding: 0; list-style: none; }
 .chips li:has(> .skill-btn),
 .project-detail > section.project-technologies li:has(> .skill-btn) { padding: 0; border: 0; background: none; }
 .skill-btn {
-  appearance: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: .9rem;
-  line-height: 1.5;
-  color: var(--text);
-  padding: .25rem .8rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  appearance: none; cursor: pointer; font: inherit; font-size: .9rem; line-height: 1.5; color: var(--text);
+  padding: .25rem .8rem; border: 1px solid var(--line); border-radius: 999px;
   background: rgba(var(--particle-rgb), .06);
   transition: border-color .2s, background .2s, color .2s, transform .2s, box-shadow .2s;
 }
 .skill-btn:hover { border-color: var(--accent); background: rgba(var(--particle-rgb), .18); transform: translateY(-1px); }
 .skill-btn[aria-pressed="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-  font-weight: 700;
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700;
   box-shadow: 0 0 1.25rem -.15rem var(--accent);
 }
-.project-detail > section.project-technologies li { padding: 0; border: 0; background: none; }
+.skill-btn[hidden], [data-tech-item][hidden] { display: none; }
+
+.tech-hint { margin: 0; font-size: .85rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.tech-status { min-height: 1.6em; margin: .25rem 0 .75rem; color: var(--link); font-family: var(--font-mono); font-size: .85rem; }
+.tech-status:empty::before { content: "Ingen teknik markerad"; color: var(--muted); }
+.tech-panel { margin-top: 1rem; }
+.tech-filter { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.tech-filter input {
+  flex: 1 1 14rem; max-width: 24rem; font: inherit; color: var(--text); background: var(--surface-solid);
+  border: 1px solid var(--line); border-radius: 999px; padding: .6rem 1rem;
+}
+.tech-count { color: var(--muted); font-size: .9rem; }
+.tech-empty { color: var(--muted); }
 .cv-hero h1 { font-size: clamp(3rem, 9vw, 7.5rem); overflow-wrap: normal; }
 .skill-group-name { margin-bottom: .6rem; }
 
-.service-technologies { margin-top: 2.5rem; }
-.tech-panel { margin-top: 1rem; }
-.tech-filter { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
-.tech-filter input {
-  flex: 1 1 14rem; max-width: 24rem; min-width: 0; padding: .6rem 1rem;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface-solid);
-  color: var(--text); font: inherit;
-}
-.tech-filter input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.tech-count { color: var(--muted); font-size: .9rem; }
-.tech-status { min-height: 1.6em; margin: .75rem 0; color: var(--link); font-family: var(--font-mono); font-size: .85rem; }
-.tech-empty { color: var(--muted); }
-[data-tech-item][hidden], .skill-group[hidden], .tech-empty[hidden] { display: none !important; }
-.service-skill-groups { margin-block: 1rem; }
-.service-skill-groups .skill-group-name { margin-top: 0; }
+/* Project list and detail */
 .project-card { display: flex; flex-direction: column; gap: .6rem; transition: border-color .2s, transform .2s; }
 .project-card:hover, .project-card:focus-within { border-color: var(--accent); transform: translateY(-2px); }
+.project-card .project-card-meta { margin: 0; font-family: var(--font-mono); font-size: .74rem; letter-spacing: .08em; line-height: 1.4; text-transform: uppercase; color: var(--link); }
 .project-card h2 { font-size: clamp(1.3rem, 2vw, 1.55rem); overflow-wrap: anywhere; }
-.project-card .project-card-description { margin-top: auto; }
+.project-card .tags { margin-top: auto; }
+.project-card-link { margin: 0; font-weight: 700; }
+.project-card-link a { color: var(--link); text-decoration: none; }
+.assignment-link { margin: 1.25rem 0 0; font-weight: 700; }
+.assignment-link a { color: var(--link); text-decoration: none; }
+.assignment-link a:hover, .project-card-link a:hover { text-decoration: underline; }
+
+/* On wider screens the assignment cards are narrower and take turns on the left and the right, so the history reads
+   as a staggered timeline instead of a column of very wide boxes. They never overlap: each one sits on its own row. */
+@media (min-width: 48rem) {
+  .assignment { width: min(100%, 36rem); }
+  .assignment:nth-of-type(odd) { margin-right: auto; }
+  .assignment:nth-of-type(even) { margin-left: auto; }
+}
+.project-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; margin: 0; }
+.project-facts > div { padding: .9rem 1.1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.project-facts dt { font-family: var(--font-mono); font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.project-facts dd { margin: .25rem 0 0; font-weight: 700; }
+.breadcrumb { margin-bottom: 1rem; font-size: .9rem; color: var(--muted); }
+.breadcrumb a { color: var(--link); }
+.project-detail section ul { padding-left: 1.2rem; }
 .project-detail h1 { font-size: clamp(2.4rem, 7vw, 4.2rem); overflow-wrap: anywhere; }
 .project-detail > section h2 { border-top: 0; padding-top: 0; font-size: clamp(1.6rem, 3.5vw, 2.2rem); }
 
-/* The home page shares the sub-page header layout. */
+/* Contact and CV extras */
+.contact-note { color: var(--muted); font-size: .9rem; }
+.contact-card .contact-actions { margin-top: 1.25rem; }
+button.button-link { font: inherit; font-weight: 700; cursor: pointer; }
+.practical { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem; margin: 1.5rem 0 0; }
+.practical > div { padding: .9rem 1.1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.practical dt { font-family: var(--font-mono); font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.practical dd { margin: .25rem 0 0; font-weight: 700; }
+
+/* Two-column page hero: headline and lead on the left, a panel with short items on the right. */
+article.wide { max-width: none; }
+.page-hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(18rem, 1fr); gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
+.page-hero-kicker { margin: 0 0 1rem; font-family: var(--font-mono); font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--link); }
+.page-hero h1 { margin-bottom: 1.25rem; font-size: clamp(2.8rem, 6.5vw, 5.5rem); line-height: .92; }
+.page-hero-lead p { max-width: 38ch; margin: 0 0 1.75rem; font-size: clamp(1.1rem, 2vw, 1.4rem); line-height: 1.5; color: var(--muted); }
+.page-hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin: 0; }
+.page-hero-actions .button-link { gap: .5rem; }
+.page-hero-panel { padding: clamp(1.5rem, 3vw, 2.25rem); border: 1px solid var(--line); border-left: .25rem solid var(--accent); border-radius: 1.25rem; background: var(--surface); backdrop-filter: blur(12px); }
+.page-hero-panel-title { margin: 0 0 1.25rem; font-family: var(--font-condensed); font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 800; line-height: 1; text-transform: uppercase; }
+.page-hero-list { margin: 0; padding: 0; list-style: none; }
+.page-hero-list li { max-width: none; padding: 1rem 0; border-top: 1px solid var(--line); }
+.page-hero-list li:last-child { padding-bottom: 0; }
+.page-hero-list strong { display: block; font-family: var(--font-condensed); font-size: 1.5rem; font-weight: 700; line-height: 1.15; color: var(--link); }
+.page-hero-item-text p { margin: .25rem 0 0; color: var(--muted); }
+@media (max-width: 63.99rem) { .page-hero { grid-template-columns: minmax(0, 1fr); } }
+
+/* The start page shares the sub-page header (logo left, navigation centred, theme toggle right). */
 :root:has(main.home) .site-header { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
 :root:has(main.home) .brand-wrap { justify-content: flex-start; }
 :root:has(main.home) nav { justify-content: center; }
-main.home { min-height: calc(100svh - 9rem); }
+main.home { min-height: calc(100svh - 12rem); }
 
 @media print {
-  :root, :root[data-theme="dark"] {
-    --page-bg: #fff; --text: #111; --muted: #444; --link: #9a3412; --line: #ccc;
-    --surface: #fff; --surface-solid: #fff; --accent: #c2410c; --on-accent: #fff;
-  }
+  :root, :root[data-theme="dark"] { --page-bg: #fff; --text: #111; --muted: #444; --link: #9a3412; --line: #ccc; --surface: #fff; --surface-solid: #fff; --accent: #c2410c; --on-accent: #fff; }
   html, body { background: #fff !important; color: #111; }
-  body::before, #constellation-field, .site-header, footer, #cv-toc, #cv-search,
-  #easter-egg, .cv-actions, .skip-link { display: none !important; }
+  body::before, #constellation-field, .site-header, footer, #cv-toc, #cv-search, #easter-egg, .cv-actions, .skip-link, .tech-hint { display: none !important; }
   main { padding: 0; max-width: none; }
   .page-layout { display: block !important; }
-  .assignment, .skill-group, .cv-figures > div { break-inside: avoid; box-shadow: none; backdrop-filter: none; background: #fff; }
-  .assignment { padding: .7rem 1rem; margin: .5rem 0; }
+  .assignment, .skill-group, .cv-figures > div, .practical > div { break-inside: avoid; box-shadow: none; backdrop-filter: none; background: #fff; }
+  .assignment { padding: .7rem 1rem; margin: .5rem 0; width: auto; }
   .assignment h3 { margin-top: 0; font-size: 1.3rem; }
   .cv-hero h1 { font-size: 2.6rem; }
   h2 { margin-top: 1.5rem; padding-top: 1rem; font-size: 1.8rem; }
   .cv-figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .cv-figures dt { font-size: .6rem; letter-spacing: .06em; overflow-wrap: anywhere; }
   .cv-figures dd { font-size: 1.8rem; }
+  .practical { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .practical dt { font-size: .6rem; letter-spacing: .06em; }
+  .practical dd { font-size: .85rem; }
   .skill-btn { color: #111; border-color: #aaa; background: #fff; }
   a { color: #111; text-decoration: none; }
   @page { size: A4; margin: 14mm; }

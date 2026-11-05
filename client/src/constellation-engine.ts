@@ -1,8 +1,28 @@
 import { EGG_REVEAL_EVENT } from './easter-egg-engine.js';
 import { CV_QUERY_EVENT, SKILL_PIN_EVENT, type SkillPinEvent } from './events.js';
 import type { ExperienceEngine } from './experience.js';
-import { LABEL_HEIGHT, WOBBLE, clampRange, placeNodes } from './constellation-layout.js';
+import {
+  LABEL_HEIGHT,
+  LABEL_PADDING,
+  PROBE_OFFSET,
+  WOBBLE,
+  clampRange,
+  effectiveObstacles,
+  exitVector,
+  scatterPoint
+} from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
+import {
+  MOTE_LINK_DISTANCE,
+  createMotes,
+  driftMotes,
+  forEachMoteLink,
+  moteBrightness,
+  moteCount,
+  moteRadius,
+  repelMotes
+} from './constellation-motes.js';
+import type { Mote } from './constellation-motes.js';
 import {
   buildEdges,
   nodesMatching,
@@ -15,6 +35,15 @@ import type { SkillEdge, SkillNode } from './skills.js';
 interface Body extends SkillNode {
   hx: number;
   hy: number;
+  /** Home position as a share (0..1) of the usable area, so it survives a resize. */
+  u: number;
+  v: number;
+  /** Where the home position is slowly moving to, and when it picks its next destination. */
+  tu: number;
+  tv: number;
+  nextMove: number;
+  /** Earliest time the technology may pick a new place because text moved over its destination. */
+  coolUntil: number;
   x: number;
   y: number;
   vx: number;
@@ -37,7 +66,14 @@ const MAX_PACKETS = 40;
 const AMBIENT_GLOW = 0.38;
 const DIM_GLOW = 0.07;
 const NARROW_VIEWPORT = 700;
+const NARROW_LABEL_ALPHA = 0.34;
 const POINTER_RADIUS = 190;
+// Ambient dust reacts to the cursor and to highlighted technologies within these distances.
+const MOTE_POINTER_RADIUS = 160;
+const MOTE_LIT_RADIUS = 170;
+// Technology nodes are always larger than the dust (MOTE_MAX_RADIUS) and grow further when highlighted.
+const NODE_BASE_RADIUS = 4;
+const NODE_GLOW_RADIUS = 3.6;
 // Start page only: the cursor wakes nearby nodes, clicks send out a shockwave and a random node pulses now and then.
 const WAKE_RADIUS = 220;
 const SHOCK_RADIUS = 300;
@@ -49,6 +85,20 @@ const TAU = Math.PI * 2;
 const SIDE_INSET = 24;
 const BOTTOM_INSET = 88;
 const TOP_GAP = 16;
+// Text blocks and cards cover the canvas, so technologies steer clear of them. A node may sit this far
+// behind an edge (partly hidden is fine), and the obstacles are re-measured as the page scrolls.
+const TEXT_SELECTOR = 'main h1, main h2, main h3, main h4, main p, main dt, main dd, footer span, footer a';
+const SURFACE_SELECTOR = '.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, '
+  + '.page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc';
+const OVERLAP_ALLOWED = 8;
+const OBSTACLE_PUSH = 0.018;
+const RETARGET_COOLDOWN_MS = 3000;
+const OBSTACLE_REFRESH_MS = 600;
+const OBSTACLE_REFRESH_WHILE_SCROLLING_MS = 60;
+// Every technology now and then picks a new place and glides there slowly.
+const RETARGET_MIN_MS = 20000;
+const RETARGET_SPREAD_MS = 40000;
+const HOME_EASE = 0.005;
 
 export const shouldAnimateConstellation = (reducedMotion: boolean, documentVisible: boolean): boolean =>
   !reducedMotion && documentVisible;
@@ -111,6 +161,13 @@ export class ConstellationEngine implements ExperienceEngine {
     // The bright centre of lit nodes and data packets: white on dark, a deep ember on light.
     let coreColour = '255, 255, 255';
     let area: Area = { left: 0, top: 0, right: 0, bottom: 0 };
+    let obstacles: Area[] = [];
+    let obstaclesDirty = true;
+    let lastObstacleRefresh = -Infinity;
+    let motes: Mote[] = [];
+    let frameTime = 0;
+    // Ambient dust is dim, so it is lifted a little on the light theme.
+    let moteBoost = 1;
 
     const refreshColour = () => {
       const style = getComputedStyle(root);
@@ -118,6 +175,7 @@ export class ConstellationEngine implements ExperienceEngine {
       labelColour = style.getPropertyValue('--particle-label-rgb').trim() || labelColour;
       labelAlpha = Number.parseFloat(style.getPropertyValue('--particle-label-alpha')) || labelAlpha;
       coreColour = style.getPropertyValue('--particle-core-rgb').trim() || coreColour;
+      moteBoost = root.dataset.theme === 'light' ? 1.7 : 1;
     };
 
     // The sticky header (desktop) or the sticky table of contents (narrow screens) covers the top of the viewport.
@@ -127,6 +185,59 @@ export class ConstellationEngine implements ExperienceEngine {
       const toc = document.querySelector<HTMLElement>('#cv-toc');
       if (toc && !toc.hidden && getComputedStyle(toc).position === 'sticky') return toc.getBoundingClientRect().height;
       return 0;
+    };
+
+    // On a narrow screen the text and cards cover nearly all of the viewport, so there is no clear space to steer
+    // the technologies towards: they simply float behind the content.
+    const isNarrow = () => width < NARROW_VIEWPORT;
+
+    // The visible text (measured tightly around the letters) and the cards that cover the background right now.
+    const refreshObstacles = (time: number) => {
+      lastObstacleRefresh = time;
+      obstaclesDirty = false;
+      if (isNarrow()) {
+        obstacles = [];
+        return;
+      }
+      const rects: Area[] = [];
+      const visible = (rect: DOMRect) =>
+        rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.top < height && rect.right > 0 && rect.left < width;
+      const toArea = (rect: DOMRect): Area => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+      document.querySelectorAll<HTMLElement>(SURFACE_SELECTOR).forEach(element => {
+        const rect = element.getBoundingClientRect();
+        if (visible(rect)) rects.push(toArea(rect));
+      });
+      const range = document.createRange();
+      document.querySelectorAll<HTMLElement>(TEXT_SELECTOR).forEach(element => {
+        if (element.closest(SURFACE_SELECTOR) || element.classList.contains('visually-hidden')) return;
+        range.selectNodeContents(element);
+        const rect = range.getBoundingClientRect();
+        if (visible(rect)) rects.push(toArea(rect));
+      });
+      obstacles = effectiveObstacles(rects, OVERLAP_ALLOWED);
+    };
+
+    const areaWidth = () => area.right - area.left;
+    const areaHeight = () => area.bottom - area.top;
+
+    const homeOf = (body: Pick<Body, 'u' | 'v' | 'half'>): { hx: number; hy: number } => ({
+      hx: clampRange(area.left + body.u * areaWidth(), area.left + body.half + WOBBLE, area.right - body.half - WOBBLE),
+      hy: clampRange(area.top + body.v * areaHeight(), area.top + LABEL_HEIGHT + WOBBLE, area.bottom - WOBBLE)
+    });
+
+    const share = (point: { x: number; y: number }) => ({
+      u: areaWidth() > 0 ? (point.x - area.left) / areaWidth() : 0.5,
+      v: areaHeight() > 0 ? (point.y - area.top) / areaHeight() : 0.5
+    });
+
+    // A new destination for one technology: random, clear of text, and away from where the others are heading.
+    const retarget = (index: number) => {
+      const body = bodies[index];
+      const others = bodies.filter((_, other) => other !== index).map(other => homeOf({ u: other.tu, v: other.tv, half: other.half }))
+        .map(home => ({ x: home.hx, y: home.hy }));
+      const { u, v } = share(scatterPoint(area, body.half, obstacles, others));
+      body.tu = u;
+      body.tv = v;
     };
 
     const layout = () => {
@@ -139,14 +250,21 @@ export class ConstellationEngine implements ExperienceEngine {
       context.font = '600 13px "Segoe UI", system-ui, sans-serif';
 
       area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
-      const placements = placeNodes(
-        nodes,
-        data.groups.map(group => group.skills.length),
-        area,
-        name => context.measureText(name).width);
+      refreshObstacles(performance.now());
+      motes = createMotes(moteCount(width, height), width, height);
+      const previous = bodies;
+      const taken: { x: number; y: number }[] = [];
       bodies = nodes.map((node, index) => {
-        const { x, y, half } = placements[index];
-        return { ...node, hx: x, hy: y, x, y, vx: 0, vy: 0, phase: Math.random() * TAU, glow: ambientGlow, boost: 0, half };
+        const half = context.measureText(node.name).width / 2 + LABEL_PADDING;
+        const earlier = previous[index];
+        // A fresh page load scatters the technologies at random; a resize keeps the places they already had.
+        const { u, v } = earlier ?? share(scatterPoint(area, half, obstacles, taken));
+        const { hx, hy } = homeOf({ u, v, half });
+        taken.push({ x: hx, y: hy });
+        return {
+          ...node, u, v, tu: earlier?.tu ?? u, tv: earlier?.tv ?? v, nextMove: earlier?.nextMove ?? 0, coolUntil: 0,
+          hx, hy, x: hx, y: hy, vx: 0, vy: 0, phase: Math.random() * TAU, glow: ambientGlow, boost: 0, half
+        };
       });
     };
 
@@ -223,6 +341,24 @@ export class ConstellationEngine implements ExperienceEngine {
 
     const update = (delta: number, time: number) => {
       if (playful) updatePlay(time);
+      driftMotes(motes, delta, width, height);
+      repelMotes(motes, pointer.x, pointer.y, MOTE_POINTER_RADIUS);
+      if (time - lastObstacleRefresh > (obstaclesDirty ? OBSTACLE_REFRESH_WHILE_SCROLLING_MS : OBSTACLE_REFRESH_MS)) refreshObstacles(time);
+      bodies.forEach((body, index) => {
+        if (time >= body.nextMove) {
+          if (body.nextMove > 0) retarget(index);
+          body.nextMove = time + RETARGET_MIN_MS + Math.random() * RETARGET_SPREAD_MS;
+        }
+        // Text scrolled over the destination: pick another place right away (but not every frame).
+        const destination = homeOf({ u: body.tu, v: body.tv, half: body.half });
+        if (time >= body.coolUntil && exitVector(destination.hx, destination.hy - PROBE_OFFSET, obstacles)) {
+          retarget(index);
+          body.coolUntil = time + RETARGET_COOLDOWN_MS;
+        }
+        body.u += (body.tu - body.u) * HOME_EASE * delta;
+        body.v += (body.tv - body.v) * HOME_EASE * delta;
+        Object.assign(body, homeOf(body));
+      });
       for (const body of bodies) {
         const targetX = body.hx
           + Math.sin(time / 1700 + body.phase) * WOBBLE * 1.8
@@ -234,6 +370,12 @@ export class ConstellationEngine implements ExperienceEngine {
           + Math.cos(time / 8300) * 12;
         let forceX = (targetX - body.x) * 0.02;
         let forceY = (targetY - body.y) * 0.02;
+        // Technologies under a text block or a card are nudged out to its nearest edge.
+        const exit = exitVector(body.x, body.y - PROBE_OFFSET, obstacles);
+        if (exit) {
+          forceX += exit.dx * OBSTACLE_PUSH;
+          forceY += exit.dy * OBSTACLE_PUSH;
+        }
         const dx = body.x - pointer.x;
         const dy = body.y - pointer.y;
         const distance = Math.hypot(dx, dy);
@@ -254,9 +396,37 @@ export class ConstellationEngine implements ExperienceEngine {
       packets = packets.filter(packet => packet.progress < 1);
     };
 
+    // Background dust: it links up faintly, twinkles, and lights up near the cursor and near highlighted technologies.
+    const drawMotes = () => {
+      const lit = bodies.filter(body => body.glow > 0.6);
+      forEachMoteLink(motes, MOTE_LINK_DISTANCE, (first, second, closeness) => {
+        context.strokeStyle = `rgba(${colour}, ${closeness * 0.17 * moteBoost})`;
+        context.lineWidth = 0.8;
+        context.beginPath();
+        context.moveTo(first.x, first.y);
+        context.lineTo(second.x, second.y);
+        context.stroke();
+      });
+      for (const mote of motes) {
+        let brightness = moteBrightness(mote, frameTime);
+        for (const body of lit) {
+          const distance = Math.hypot(mote.x - body.x, mote.y - body.y);
+          if (distance < MOTE_LIT_RADIUS) brightness += (1 - distance / MOTE_LIT_RADIUS) * 0.55;
+        }
+        const nearPointer = Math.hypot(mote.x - pointer.x, mote.y - pointer.y);
+        if (nearPointer < MOTE_POINTER_RADIUS) brightness += (1 - nearPointer / MOTE_POINTER_RADIUS) * 0.5;
+        context.fillStyle = `rgba(${colour}, ${Math.min(1, brightness * moteBoost)})`;
+        context.beginPath();
+        context.arc(mote.x, mote.y, moteRadius(mote, brightness), 0, TAU);
+        context.fill();
+      }
+    };
+
     const draw = () => {
       context.clearRect(0, 0, width, height);
-      const narrow = width < NARROW_VIEWPORT;
+      // Behind the content of a narrow screen the labels need a little more strength than on a wide one to be read.
+      const restingLabelAlpha = isNarrow() ? Math.max(labelAlpha, NARROW_LABEL_ALPHA) : labelAlpha;
+      drawMotes();
 
       for (const edge of edges) {
         const from = bodies[edge.a];
@@ -301,10 +471,9 @@ export class ConstellationEngine implements ExperienceEngine {
         }
         context.fillStyle = body.glow > 0.6 ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
         context.beginPath();
-        context.arc(body.x, body.y, 2.8 + body.glow * 3.2, 0, TAU);
+        context.arc(body.x, body.y, NODE_BASE_RADIUS + body.glow * NODE_GLOW_RADIUS, 0, TAU);
         context.fill();
-        if (narrow && !playful && body.glow < 0.6) continue;
-        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, restingLabelAlpha + body.glow * 0.8)})`;
         context.fillText(body.name, body.x, body.y - 12);
       }
     };
@@ -313,6 +482,7 @@ export class ConstellationEngine implements ExperienceEngine {
       frame = requestAnimationFrame(step);
       const delta = Math.min((time - last) / 16.67, 3);
       last = time;
+      frameTime = time;
       update(delta, time);
       draw();
     };
@@ -343,6 +513,9 @@ export class ConstellationEngine implements ExperienceEngine {
     };
 
     window.addEventListener('resize', () => { layout(); recompute(); draw(); });
+    window.addEventListener('scroll', () => { obstaclesDirty = true; }, { passive: true });
+    // Web fonts and late layout change where the text ends up, so measure again once they are in.
+    void document.fonts?.ready.then(() => { obstaclesDirty = true; });
     window.addEventListener('pointermove', event => {
       pointer.x = event.clientX;
       pointer.y = event.clientY;

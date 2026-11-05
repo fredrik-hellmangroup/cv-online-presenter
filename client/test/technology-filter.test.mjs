@@ -45,13 +45,15 @@ test('skill pin toggles on and off and Escape clears it unless CV search is open
   assert.equal(escapePinnedSkill(null, 'Escape', false), null);
 });
 
-test('assignment usage counts exact keyword occurrences per assignment', () => {
+test('assignment usage uses the same whole-word matching as the constellation', () => {
   assert.equal(countSkillAssignments('Azure', assignments), 2);
   assert.equal(countSkillAssignments('.NET', assignments), 2);
-  assert.equal(countSkillAssignments('Azure DevOps', assignments), 0);
+  assert.equal(countSkillAssignments('sql', assignments), 1);
+  assert.equal(countSkillAssignments('SQL', [{ keywords: ['SQL Server', 'SQL'] }]), 1);
+  assert.equal(countSkillAssignments('SQL', [{ keywords: ['MySQL'] }]), 0);
 });
 
 test('pin status reports technology usage and the cleared state', () => {
   assert.equal(skillPinStatusText('Azure', assignments), 'Markerad: Azure · används i 2 av 3 uppdrag');
-  assert.equal(skillPinStatusText(null, assignments), 'Ingen teknik markerad');
+  assert.equal(skillPinStatusText(null, assignments), '');
 });
