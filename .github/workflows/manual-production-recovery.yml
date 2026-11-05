@@ -1,4 +1,4 @@
-name: MSDeploy experiment
+name: Manual production recovery
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
 
-run-name: MSDeploy experiment from ${{ github.ref_name }}
+run-name: Manual production recovery from ${{ github.ref_name }}
 
 concurrency:
   group: production-deployment
@@ -43,10 +43,10 @@ jobs:
           ROLLBACK_RELEASE_TAG: ${{ inputs.rollback_release_tag }}
         run: |
           if ($env:REQUESTED_REF -ne 'refs/heads/main') {
-            throw 'MSDeploy experiments must run from the main branch.'
+            throw 'Manual production recovery must run from the main branch.'
           }
           if ($env:CONFIRM_PRODUCTION -ne 'true') {
-            throw 'confirm_production must be enabled for a production MSDeploy experiment.'
+            throw 'confirm_production must be enabled for manual production recovery.'
           }
           if (
             $env:ROLLBACK_RELEASE_TAG -and
@@ -78,10 +78,10 @@ jobs:
         run: dotnet restore CvOnlinePresenter.sln
       - if: inputs.rollback_release_tag == ''
         run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
-      - name: Create MSDeploy experiment package
+      - name: Create manual production recovery package
         if: inputs.rollback_release_tag == ''
         shell: pwsh
-        run: Compress-Archive -Path 'artifacts/publish/*' -DestinationPath 'artifacts/msdeploy-experiment.zip' -CompressionLevel Optimal
+        run: Compress-Archive -Path 'artifacts/publish/*' -DestinationPath 'artifacts/manual-production-recovery.zip' -CompressionLevel Optimal
       - name: Download immutable rollback package
         if: inputs.rollback_release_tag != ''
         shell: pwsh
@@ -138,17 +138,17 @@ jobs:
           if ($actualDigest -cne $expectedDigest) {
             throw "Release asset '$assetName' did not match its GitHub SHA-256 digest."
           }
-          Move-Item -LiteralPath $downloadedPath -Destination 'artifacts/msdeploy-experiment.zip'
+          Move-Item -LiteralPath $downloadedPath -Destination 'artifacts/manual-production-recovery.zip'
       - name: Validate deployment package
         shell: pwsh
         run: |
           Expand-Archive `
-            -LiteralPath 'artifacts/msdeploy-experiment.zip' `
+            -LiteralPath 'artifacts/manual-production-recovery.zip' `
             -DestinationPath 'artifacts/package-validation' `
             -Force
           foreach ($requiredFile in @('web.config', 'Portfolio.Web.dll', 'wwwroot/build-metadata.json')) {
             if (-not (Test-Path -LiteralPath (Join-Path 'artifacts/package-validation' $requiredFile) -PathType Leaf)) {
-              throw "MSDeploy package is missing required file '$requiredFile'."
+              throw "Manual production recovery package is missing required file '$requiredFile'."
             }
           }
           Remove-Item -LiteralPath 'artifacts/package-validation' -Recurse -Force
@@ -156,12 +156,12 @@ jobs:
         id: package-digest
         shell: pwsh
         run: |
-          $digest = (Get-FileHash -LiteralPath 'artifacts/msdeploy-experiment.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $digest = (Get-FileHash -LiteralPath 'artifacts/manual-production-recovery.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
           "sha256=$digest" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: msdeploy-experiment-${{ github.run_id }}
-          path: artifacts/msdeploy-experiment.zip
+          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/manual-production-recovery.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -174,7 +174,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: msdeploy-experiment-${{ github.run_id }}
+          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifact
       - name: Publish recovery package at the packaged source commit
         shell: pwsh
@@ -186,7 +186,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          $package = Join-Path 'artifact' 'msdeploy-experiment.zip'
+          $package = Join-Path 'artifact' 'manual-production-recovery.zip'
           $archiveAssetName = "cv-online-presenter-manual-$($env:RUN_ID)-$($env:RUN_ATTEMPT).zip"
           $archivePackage = Join-Path 'artifact' $archiveAssetName
           if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') {
@@ -254,7 +254,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: msdeploy-experiment-${{ github.run_id }}
+          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifact
       - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
@@ -271,16 +271,16 @@ jobs:
           RECONCILE_PENDING: ${{ inputs.reconcile_pending }}
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          $package = Join-Path 'artifact' 'msdeploy-experiment.zip'
-          $arguments = @(
-            '-PackagePath', $package,
-            '-StateDirectory', 'production-state',
-            '-StateRecordPath', 'state-record/lkg-v1.json',
-            '-ExpectedPackageSha256', $env:PACKAGE_SHA256,
-            '-Mode', 'manual',
-            '-SourceCommit', $env:SOURCE_COMMIT,
-            '-SourceTag', $env:SOURCE_TAG
-          )
-          if ($env:MANUAL_MAIN -eq 'true') { $arguments += '-ManualMain' }
-          if ($env:RECONCILE_PENDING -eq 'true') { $arguments += '-AllowPendingRecovery' }
+          $package = Join-Path 'artifact' 'manual-production-recovery.zip'
+          $arguments = @{
+            PackagePath = $package
+            StateDirectory = 'production-state'
+            StateRecordPath = 'state-record/lkg-v1.json'
+            ExpectedPackageSha256 = $env:PACKAGE_SHA256
+            Mode = 'manual'
+            SourceCommit = $env:SOURCE_COMMIT
+            SourceTag = $env:SOURCE_TAG
+          }
+          if ($env:MANUAL_MAIN -eq 'true') { $arguments['ManualMain'] = $true }
+          if ($env:RECONCILE_PENDING -eq 'true') { $arguments['AllowPendingRecovery'] = $true }
           .\scripts\run-production-deployment.ps1 @arguments

@@ -47,7 +47,7 @@ Before pushing a release tag, confirm:
 
 ## Deployment and manual recovery
 
-The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [MSDeploy experiment workflow](../.github/workflows/msdeploy-experiment.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment jobs have read-only repository permissions; a separate, minimal `contents: write` job commits the verified LKG record only after deployment verification succeeds.
+The tag-driven [release workflow](../.github/workflows/release.yml) remains the sole automatic deployment path for every `v*.*.*` tag, with no production reviewer gate. The [Manual production recovery workflow](../.github/workflows/manual-production-recovery.yml) remains the manual recovery/redeploy/rollback path. Both serialize through the shared workflow-level `production-deployment` concurrency group. Release publication still precedes automatic deployment. Deployment permissions and durable production-state writes are described below.
 
 Safety and verification:
 
@@ -63,7 +63,7 @@ Safety and verification:
 ## Manual rollback steps
 
 1. Confirm the protected `production-state` branch contains a valid `lkg-v1.json` and the exact immutable package asset is available.
-2. Dispatch **MSDeploy experiment** from `main`, set `confirm_production`, and enter the desired existing semantic release or `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
+2. Dispatch **Manual production recovery** from `main`, set `confirm_production`, and enter the desired existing semantic release or `recovery/manual-<run-id>-<attempt>` tag in `rollback_release_tag`.
 3. The workflow verifies tag reachability, the GitHub-published digest and downloaded package bytes, embedded metadata, and the prior LKG asset before production sync.
 4. Confirm health, exact build metadata, and the `/app_offline.htm` marker observation pass. A successful manual rollback updates LKG to that actual live artifact using a non-force state-branch push.
 
@@ -75,7 +75,7 @@ On a candidate Web Deploy sync failure, failed health/build-metadata verificatio
 
 The dedicated `production-state` branch holds versioned `lkg-v1.json`. It records the artifact actually verified live: nullable source tag, source commit, app/content/build metadata, package SHA-256, exact immutable release tag and asset name, workflow/run/attempt, verification timestamp, and verification evidence. A tag is not considered live just because it was published. Successful manual rollback updates LKG to the rollback artifact. Manual-main packages are published before sync to a unique `recovery/manual-<run-id>-<attempt>` release; the archived GitHub asset digest and exact bytes must match before deployment, and its locator is recorded only after successful live verification.
 
-After health, exact metadata, and marker verification, a separate state job performs the non-force LKG branch push with `contents: write`; the deployment runner itself does not hold write permission. IIS and the GitHub branch cannot be updated atomically. If the production site passes verification but state write fails or is ambiguous, the run fails distinctly and requires reconciliation; it does not automatically sync again. If a rollback succeeds, the candidate workflow remains failed and LKG remains the prior package.
+Both workflows' `deploy` jobs explicitly grant `contents: write` because the shared deployment runner writes the `production-state` branch directly. After validating the candidate and prior LKG packages, the runner durably commits `pending-v1.json` before the first production sync; a failed or ambiguous pending-state write prevents production mutation. After candidate health, exact metadata, and marker verification succeed, that same deploy job commits the new LKG record and clears pending. If the bounded rollback succeeds, the same job clears pending while retaining the prior LKG. The separate `publish-release` and `archive_manual_recovery` jobs also have `contents: write`, but only to publish immutable GitHub Release assets; they do not write production state. IIS and the GitHub branch cannot be updated atomically. If the production site passes verification but the final state write fails or is ambiguous, the run fails distinctly and requires reconciliation; it does not automatically sync again. If a rollback succeeds, the candidate workflow remains failed and LKG remains the prior package.
 
 **Initial state is an operator prerequisite.** Before enabling either production deployment, create the protected `production-state` branch with a valid `lkg-v1.json` describing the verified live artifact and confirm its exact GitHub Release asset/digest. Populate it from production deployment evidence, not the greatest/most recent tag. Missing branch, missing/malformed record, unavailable asset, digest mismatch, or embedded metadata mismatch fails closed before production sync.
 
