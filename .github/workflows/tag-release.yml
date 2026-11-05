@@ -1,0 +1,69 @@
+name: Tag release from VERSION
+
+# Runs after Quality gates succeed on a main push. When VERSION names a release that has no tag yet, it tags that
+# exact commit and starts the IIS release workflow on the tag. Tags and pushes made with GITHUB_TOKEN do not start
+# push-triggered workflows, so release.yml is started with workflow_dispatch instead.
+on:
+  workflow_run:
+    workflows: ["Quality gates"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag-release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Tag the commit and start the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $version = (Get-Content -LiteralPath VERSION -Raw).TrimEnd("`r", "`n")
+          $tags = @(git tag --list 'v*')
+          $tag = "v$version"
+
+          if ($tags -ccontains $tag) {
+            # Re-running after a failed dispatch must still start the release, but only once.
+            $runs = @(gh run list --repo $env:REPOSITORY --workflow release.yml --branch $tag --json databaseId | ConvertFrom-Json)
+            if ($LASTEXITCODE -ne 0) { throw 'Could not list release workflow runs.' }
+            if ($runs.Count -gt 0) {
+              Write-Output "$tag already exists and has been released; nothing to do."
+              return
+            }
+          }
+          else {
+            & ./scripts/assert-version-bump.ps1 -Version $version -ExistingTags $tags | Out-Null
+
+            # Creating the ref fails if the tag already exists, so a tag is never moved.
+            gh api --method POST "repos/$env:REPOSITORY/git/refs" `
+              -f "ref=refs/tags/$tag" `
+              -f "sha=$env:RELEASE_COMMIT" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not create tag '$tag'." }
+          }
+
+          gh workflow run release.yml --repo $env:REPOSITORY --ref $tag
+          if ($LASTEXITCODE -ne 0) {
+            throw "Tag '$tag' exists but the release workflow could not be started. Re-run this workflow or run: gh workflow run release.yml --ref $tag"
+          }
+          "Tagged $tag at $env:RELEASE_COMMIT and started the IIS release workflow." |
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY

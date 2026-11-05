@@ -51,14 +51,13 @@ The tag-driven [release workflow](../.github/workflows/release.yml) remains the 
 
 ## Creating a release
 
-The version lives only in git tags. Instead of tagging and pushing by hand, dispatch the [Create release workflow](../.github/workflows/create-release.yml) from `main`, choose `patch`, `minor` or `major`, and enable `confirm_release`. It:
+The `VERSION` file at the repository root holds the version of the next (or current) release as `MAJOR.MINOR.PATCH`. A release is made by merging a pull request that changes **only** that file; do not tag by hand.
 
-1. Refuses to run from any branch except `main`.
-2. Requires a successful `Quality gates` push run for the exact commit being released.
-3. Calculates the next tag from the highest existing `vMAJOR.MINOR.PATCH` tag (`scripts/get-next-release-tag.ps1`) and creates it at that commit through the API, which fails rather than moving an existing tag.
-4. Starts the release workflow with `workflow_dispatch` on the new tag. Tags created with `GITHUB_TOKEN` do not trigger the tag-push workflow, so this explicit dispatch replaces the push trigger; the release workflow rejects dispatches that are not on a `vMAJOR.MINOR.PATCH` tag.
+1. Open a PR that bumps `VERSION` using the release template: `https://github.com/<owner>/<repo>/compare/main...<branch>?template=release.md` (or pick `release.md` from the PR description templates). The bump must be exactly one patch, minor or major step after the highest existing `vX.Y.Z` tag.
+2. The **Version guard** check fails the PR if any other file changes with `VERSION`, if the content is not strictly `MAJOR.MINOR.PATCH`, or if it is not a valid next version (`scripts/assert-version-bump.ps1`). Make *Version guard* a required status check in the `main` ruleset so this is enforced at merge.
+3. After the merge, **Quality gates** run on the `main` commit. When they succeed, the **Tag release from VERSION** workflow creates tag `vX.Y.Z` at that exact commit through the API (it never moves an existing tag) and starts the release workflow on it. Tags created with `GITHUB_TOKEN` do not trigger the tag-push workflow, so the release workflow is started with `workflow_dispatch`; it rejects dispatches that are not on a `vMAJOR.MINOR.PATCH` tag.
 
-If the tag was created but the dispatch failed, run `gh workflow run release.yml --ref vX.Y.Z`. Pushing a `v*.*.*` tag by hand still triggers the release workflow as before.
+If the tag was created but the release did not start, re-run the *Tag release from VERSION* run, or run `gh workflow run release.yml --ref vX.Y.Z`. Pushing a `v*.*.*` tag by hand still triggers the release workflow, but bypasses the guard and should be avoided.
 
 Safety and verification:
 
