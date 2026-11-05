@@ -298,7 +298,10 @@ test('editorial home, services and project pages expose clear content and links'
 
   await page.goto('/services');
   await expect(page.locator('main h1')).toHaveCount(1);
-  await expect(page.locator('main h2').first()).toBeVisible();
+  await expect(page.getByRole('tab')).toHaveCount(4);
+  await expect(page.getByRole('tab', { selected: true })).toHaveCount(1);
+  await expect(page.getByRole('tabpanel')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Teknik i uppdragen' })).toBeVisible();
   await expect(page.locator('.service-cv-cta').getByRole('link', { name: /fullständigt cv/i })).toHaveAttribute('href', '/cv');
 
   await page.goto('/projects');
