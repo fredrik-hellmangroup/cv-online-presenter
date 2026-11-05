@@ -1,12 +1,10 @@
 param(
-    [string]$PackagePath = '',
     [Parameter(Mandatory = $true)][string]$StateDirectory,
     [Parameter(Mandatory = $true)][ValidateSet('release', 'manual')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$SourceCommit,
     [Parameter(Mandatory = $true)][string]$ExpectedPackageSha256,
     [Parameter(Mandatory = $true)][string]$StateRecordPath,
-    [string]$SourceTag = '',
-    [switch]$ManualMain,
+    [Parameter(Mandatory = $true)][string]$SourceTag,
     [switch]$AllowPendingRecovery
 )
 
@@ -192,18 +190,6 @@ $operations = @{
         }
         if ([string]$metadata.appRevision -cne [string]$artifact.commit) { throw 'Candidate appRevision does not match its source commit.' }
                 }
-    ArchiveCandidate = {
-        param($artifact)
-        $tag = "recovery/manual-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
-        $assetName = "cv-online-presenter-manual-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT).zip"
-        $originalDigest = Assert-PackageSha256 -Path $artifact.path -ExpectedSha256 $artifact.packageSha256
-        $archived = Get-ReleaseAsset -Tag $tag -AssetName $assetName -Directory (Join-Path $env:RUNNER_TEMP 'issue56-archived-candidate')
-        if ($archived.digest -cne $originalDigest) { throw 'Archived manual-main release bytes differ from the exact built package.' }
-        $artifact.releaseTag = $tag
-        $artifact.assetName = $assetName
-        $artifact.packageSha256 = $archived.digest
-        return $artifact
-    }
     SyncCandidate = { param($artifact) Invoke-DeploySync -PublishDirectory $artifact.publishPath }
     VerifyCandidate = { param($artifact) Invoke-LiveVerification -PublishDirectory $artifact.publishPath }
     SyncRollback = { param($package, $artifact) Invoke-DeploySync -PublishDirectory $package.publishPath }
@@ -227,38 +213,37 @@ $operations = @{
     }
 }
 
+if ($SourceTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+    throw 'Release tag is not an allowed immutable production artifact locator.'
+}
 $candidateReleaseTag = $SourceTag
-$candidateSourceTag = $null
-$candidateAssetName = ''
-if ($SourceTag) {
-    if ($SourceTag -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-        $candidateSourceTag = $SourceTag
-        $candidateAssetName = "cv-online-presenter-$SourceTag.zip"
-    } elseif ($Mode -eq 'manual' -and $SourceTag -match '^recovery/manual-([0-9]+-[0-9]+)$') {
-        $candidateAssetName = "cv-online-presenter-manual-$($Matches[1]).zip"
-    } else {
-        throw 'Release tag is not an allowed immutable production artifact locator.'
+$candidateSourceTag = $SourceTag
+$candidateAssetName = "cv-online-presenter-$SourceTag.zip"
+$published = Get-ReleaseAsset -Tag $SourceTag -AssetName $candidateAssetName -Directory (Join-Path $env:RUNNER_TEMP 'issue56-candidate-release')
+if ($published.digest -cne $ExpectedPackageSha256.ToLowerInvariant()) {
+    throw 'Release candidate bytes do not match the digest produced by the current package job.'
+}
+$resolvedPackagePath = $published.path
+$candidateDigest = Assert-PackageSha256 -Path $published.path -ExpectedSha256 $ExpectedPackageSha256
+try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main') | Out-Null }
+catch { throw "Could not refresh origin/main before source validation: $($_.Exception.Message)" }
+$tagRefspec = "refs/tags/${SourceTag}:refs/tags/${SourceTag}"
+try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', $tagRefspec) | Out-Null }
+catch { throw "Could not resolve source tag '$SourceTag': $($_.Exception.Message)" }
+$SourceCommit = (git rev-list -n 1 "refs/tags/$SourceTag").Trim()
+if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[a-f0-9]{40,64}$') { throw "Could not resolve source tag '$SourceTag' to a commit." }
+git merge-base --is-ancestor $SourceCommit origin/main
+if ($LASTEXITCODE -ne 0) { throw "Source tag '$SourceTag' is not reachable from main." }
+if ($Mode -eq 'manual') {
+    # A manual run may only redeploy a release that was already verified live, proven by the production-state history.
+    $historicalRecords = [System.Collections.Generic.List[string]]::new()
+    $stateCommits = @(git -C $StateDirectory log --format=%H -- lkg-v1.json)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the production-state LKG history.' }
+    foreach ($stateCommit in $stateCommits) {
+        $recordJson = (git -C $StateDirectory show "${stateCommit}:lkg-v1.json") -join [Environment]::NewLine
+        if ($LASTEXITCODE -eq 0) { $historicalRecords.Add($recordJson) }
     }
-    $published = Get-ReleaseAsset -Tag $SourceTag -AssetName $candidateAssetName -Directory (Join-Path $env:RUNNER_TEMP 'issue56-candidate-release')
-    if ($published.digest -cne $ExpectedPackageSha256.ToLowerInvariant()) {
-        throw 'Release candidate bytes do not match the digest produced by the current package job.'
-    }
-    $resolvedPackagePath = $published.path
-    $candidateDigest = Assert-PackageSha256 -Path $published.path -ExpectedSha256 $ExpectedPackageSha256
-    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main') | Out-Null }
-    catch { throw "Could not refresh origin/main before source validation: $($_.Exception.Message)" }
-    $tagRefspec = "refs/tags/${SourceTag}:refs/tags/${SourceTag}"
-    try { Invoke-GitWithScopedToken -GitArguments @('fetch', '--no-tags', 'origin', $tagRefspec) | Out-Null }
-    catch { throw "Could not resolve source tag '$SourceTag': $($_.Exception.Message)" }
-    $SourceCommit = (git rev-list -n 1 "refs/tags/$SourceTag").Trim()
-    if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[a-f0-9]{40,64}$') { throw "Could not resolve source tag '$SourceTag' to a commit." }
-    git merge-base --is-ancestor $SourceCommit origin/main
-    if ($LASTEXITCODE -ne 0) { throw "Source tag '$SourceTag' is not reachable from main." }
-} elseif ($ManualMain) {
-    $resolvedPackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
-    $candidateDigest = Assert-PackageSha256 -Path $resolvedPackagePath -ExpectedSha256 $ExpectedPackageSha256
-} else {
-    throw 'Only an explicitly approved manual-main package may lack a source release tag.'
+    Assert-TagPreviouslyDeployed -Tag $SourceTag -PackageSha256 $candidateDigest -HistoricalRecordJson $historicalRecords.ToArray()
 }
 $candidatePublish = Join-Path $env:RUNNER_TEMP 'issue56-candidate-publish'
 $metadata = Read-PackageMetadata -ZipPath $resolvedPackagePath -Destination $candidatePublish
@@ -275,13 +260,9 @@ $candidate = [PSCustomObject]@{
     releaseTag = $candidateReleaseTag
     assetName = $candidateAssetName
 }
-if ($ManualMain -and $SourceTag) { throw 'ManualMain cannot be combined with a source release tag.' }
-if ($Mode -eq 'release' -or ($SourceTag -and -not $ManualMain)) {
-    $releaseCommit = $candidate.commit
-    if ($metadata.appRevision -cne $releaseCommit) { throw 'Candidate embedded appRevision does not match workflow source commit.' }
-}
+if ($metadata.appRevision -cne $candidate.commit) { throw 'Candidate embedded appRevision does not match workflow source commit.' }
 try {
-    Invoke-LkgDeployment -Operations $operations -Candidate $candidate -ArchiveCandidateBeforeDeploy:$ManualMain -AllowPendingRecovery:$AllowPendingRecovery
+    Invoke-LkgDeployment -Operations $operations -Candidate $candidate -AllowPendingRecovery:$AllowPendingRecovery
 }
 catch {
     Write-Error -ErrorRecord $_

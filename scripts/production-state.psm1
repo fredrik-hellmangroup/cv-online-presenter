@@ -12,16 +12,12 @@ function Assert-LkgRecord {
     foreach ($name in @('sourceTag', 'commit', 'appRevision', 'contentRevision', 'buildId', 'packageSha256', 'releaseTag', 'assetName', 'workflow', 'runId', 'runAttempt')) {
         if ($null -eq $Record.artifact.PSObject.Properties[$name]) { throw "LKG artifact is missing '$name'." }
     }
-    if ($Record.artifact.sourceTag -and $Record.artifact.sourceTag -notmatch '^v\d+\.\d+\.\d+$') { throw 'LKG sourceTag is invalid.' }
+    if ($Record.artifact.sourceTag -notmatch '^v\d+\.\d+\.\d+$') { throw 'LKG sourceTag is invalid.' }
     if ($Record.artifact.commit -notmatch '^[a-f0-9]{40,64}$') { throw 'LKG commit is invalid.' }
     if ($Record.artifact.appRevision -cne $Record.artifact.commit) { throw 'LKG commit must match the embedded appRevision.' }
     if ($Record.artifact.packageSha256 -notmatch '^[a-f0-9]{64}$') { throw 'LKG packageSha256 is invalid.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.releaseTag) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.assetName)) { throw 'LKG immutable release locator is required.' }
-    if ($Record.artifact.sourceTag) {
-        if ($Record.artifact.releaseTag -cne $Record.artifact.sourceTag -or $Record.artifact.assetName -cne "cv-online-presenter-$($Record.artifact.sourceTag).zip") { throw 'LKG source release locator does not match its tag.' }
-    } elseif ($Record.artifact.releaseTag -notmatch '^recovery/manual-\d+-\d+$' -or $Record.artifact.assetName -notmatch '^cv-online-presenter-manual-\d+-\d+\.zip$') {
-        throw 'A manual-main LKG must identify its immutable recovery release asset.'
-    }
+    if ($Record.artifact.releaseTag -cne $Record.artifact.sourceTag -or $Record.artifact.assetName -cne "cv-online-presenter-$($Record.artifact.sourceTag).zip") { throw 'LKG source release locator does not match its tag.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.appRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.contentRevision) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.buildId)) { throw 'LKG build metadata must be complete.' }
     if ([string]::IsNullOrWhiteSpace([string]$Record.artifact.workflow) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runId) -or [string]::IsNullOrWhiteSpace([string]$Record.artifact.runAttempt)) { throw 'LKG workflow evidence must be complete.' }
     if ($Record.verifiedAtUtc -is [DateTime]) {
@@ -139,12 +135,35 @@ function Write-LkgStateMirror {
     }
 }
 
+function Assert-TagPreviouslyDeployed {
+    <#
+    .SYNOPSIS
+    Fails unless a historical LKG record proves the exact release tag and package bytes were verified live before.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Tag,
+        [Parameter(Mandatory = $true)][string]$PackageSha256,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$HistoricalRecordJson
+    )
+
+    $expectedDigest = ($PackageSha256 -replace '^sha256:', '').ToLowerInvariant()
+    foreach ($json in $HistoricalRecordJson) {
+        try {
+            $record = ConvertFrom-LkgJson -Json $json
+            Assert-LkgRecord -Record $record
+        }
+        catch { continue }
+        if ($record.artifact.sourceTag -ceq $Tag -and $record.artifact.packageSha256 -ceq $expectedDigest) { return }
+    }
+    throw "Release '$Tag' was never recorded as successfully deployed with these exact package bytes; manual recovery only redeploys previously verified releases."
+}
+
 function Invoke-LkgDeployment {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][hashtable]$Operations,
         [Parameter(Mandatory = $true)]$Candidate,
-        [switch]$ArchiveCandidateBeforeDeploy,
         [switch]$AllowPendingRecovery
     )
 
@@ -165,11 +184,6 @@ function Invoke-LkgDeployment {
     if ($null -eq $rollbackPackage -or [string]::IsNullOrWhiteSpace([string]$rollbackPackage.path)) { throw 'Recorded rollback package is unavailable.' }
     Assert-PackageSha256 -Path $rollbackPackage.path -ExpectedSha256 $prior.artifact.packageSha256 | Out-Null
     & $Operations.ValidateCandidate $Candidate
-    if ($ArchiveCandidateBeforeDeploy) {
-        if (-not $Operations.ContainsKey('ArchiveCandidate') -or $Operations.ArchiveCandidate -isnot [scriptblock]) { throw 'Manual-main deployment requires an immutable recovery archive operation.' }
-        $Candidate = & $Operations.ArchiveCandidate $Candidate
-        & $Operations.ValidateCandidate $Candidate
-    }
 
     # Must be durable before the first production mutation. The LKG record itself is not changed here.
     & $Operations.SetPending $Candidate $prior.artifact
@@ -213,4 +227,4 @@ function Invoke-LkgDeployment {
     }
 }
 
-Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, ConvertFrom-LkgJson, New-LkgRecord, Write-LkgStateMirror, Invoke-LkgDeployment
+Export-ModuleMember -Function Assert-LkgRecord, Assert-PackageSha256, Assert-TagPreviouslyDeployed, ConvertFrom-LkgJson, New-LkgRecord, Write-LkgStateMirror, Invoke-LkgDeployment
