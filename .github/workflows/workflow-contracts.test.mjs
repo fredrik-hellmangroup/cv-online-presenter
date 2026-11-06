@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const readWorkflow = name => readFileSync(new URL(name, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+// Publishers whose actions may be referenced by an exact version tag (vX.Y.Z). Every other action must be pinned to a full commit SHA.
+const VERSION_TAG_ACTION_OWNERS = new Set(['actions']);
 const validation = readWorkflow('validate-content.yml');
 const deployment = readWorkflow('deploy-content.yml');
 const provisioning = readWorkflow('provision-activation-token.yml');
@@ -76,19 +78,37 @@ function assertOptionalSecret(workflow, name) {
   assert.match(secret, /^        required: false$/m);
 }
 
-function assertPinnedAppShaInput(workflow) {
-  const input = getIndentedBlock(workflow, 6, 'app_sha');
-  assert.match(input, /Same immutable 40-character literal SHA as the caller's uses reference and generated content provenance/);
+function assertNoAppShaInput(workflow) {
+  assert.doesNotMatch(workflow, /app_sha/);
 }
 
 function assertWorkflowIdentityGuard(step) {
   assert.match(step, /WORKFLOW_REPOSITORY: \$\{\{ job\.workflow_repository \}\}/);
+  assert.match(step, /WORKFLOW_REF: \$\{\{ job\.workflow_ref \}\}/);
   assert.match(step, /WORKFLOW_SHA: \$\{\{ job\.workflow_sha \}\}/);
   assert.match(step, /\$env:APP_REPOSITORY -cne \$env:WORKFLOW_REPOSITORY/);
-  assert.match(step, /\$env:APP_SHA -cne \$env:WORKFLOW_SHA/);
+  assert.match(step, /\$env:WORKFLOW_SHA -cnotmatch '\^\[a-f0-9\]\{40\}\$'/);
   assert.match(step, /\[string\]::IsNullOrWhiteSpace\(\$env:WORKFLOW_REPOSITORY\)/);
-  assert.match(step, /\[string\]::IsNullOrWhiteSpace\(\$env:WORKFLOW_SHA\)/);
+  assert.match(step, /refs\/tags\/\(v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\)\$/);
+  assert.match(step, /exact release tag such as @v0\.1\.0/);
+  assert.match(step, /"APP_SHA=\$\(\$env:WORKFLOW_SHA\)" \| Out-File -FilePath \$env:GITHUB_ENV/);
+  assert.match(step, /"APP_VERSION=\$\(\$ref\.Groups\[1\]\.Value\)" \| Out-File -FilePath \$env:GITHUB_ENV/);
   assert.match(step, /GitHub\.com-only; missing values on GHES fail closed/);
+}
+
+function assertAppCheckout(step) {
+  assert.match(step, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
+  assert.match(step, /^          ref: \$\{\{ job\.workflow_sha \}\}$/m);
+  assert.match(step, /^          fetch-depth: 0$/m);
+}
+
+function assertVerifyAppRelease(steps) {
+  const verifyApp = getStep(steps, 'Verify exact application release');
+  assert.match(verifyApp, /git -C app fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main "\+refs\/tags\/\$\(\$env:APP_VERSION\):refs\/tags\/\$\(\$env:APP_VERSION\)"/);
+  assert.match(verifyApp, /git -C app merge-base --is-ancestor \$env:APP_SHA refs\/remotes\/origin\/main/);
+  assert.match(verifyApp, /git -C app rev-parse HEAD/);
+  assert.match(verifyApp, /git -C app rev-parse --verify "refs\/tags\/\$\(\$env:APP_VERSION\)\^\{commit\}"/);
+  assert.match(verifyApp, /"v\$fileVersion" -cne \$env:APP_VERSION/);
 }
 
 function assertCallWorkflow(workflow) {
@@ -98,14 +118,12 @@ function assertCallWorkflow(workflow) {
 test('reusable validation checks app identity and validates all caller content', () => {
   assertCallWorkflow(validation);
   assertRequiredInput(validation, 'app_repository');
-  assertRequiredInput(validation, 'app_sha');
   assertRepositoryBinding(validation);
-  assertPinnedAppShaInput(validation);
+  assertNoAppShaInput(validation);
 
   const steps = getSteps(getIndentedBlock(validation, 2, 'validate'));
   const validateInputs = getStep(steps, 'Validate application checkout inputs');
   assertWorkflowIdentityGuard(validateInputs);
-  assert.match(validateInputs, /APP_SHA/);
   assert.match(validateInputs, /APP_REPOSITORY -cnotmatch '\^\[A-Za-z0-9-\]\+\/\[A-Za-z0-9._-\]\+\$'/);
   const contentCheckout = steps.find(step => step.includes('path: content-repo'));
   const appCheckout = steps.find(step => step.includes('path: app'));
@@ -113,13 +131,8 @@ test('reusable validation checks app identity and validates all caller content',
   assert.match(contentCheckout, /^          ref: \$\{\{ github\.sha \}\}$/m);
   assert.ok(appCheckout);
   assert.ok(steps.indexOf(validateInputs) < steps.indexOf(appCheckout), 'workflow identity is verified before app checkout');
-  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
-  assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
-  assert.match(appCheckout, /^          fetch-depth: 0$/m);
-  const verifyApp = getStep(steps, 'Verify exact application commit');
-  assert.match(verifyApp, /git -C app fetch --no-tags origin refs\/heads\/main/);
-  assert.match(verifyApp, /git -C app merge-base --is-ancestor \$env:APP_SHA FETCH_HEAD/);
-  assert.match(verifyApp, /git -C app rev-parse HEAD/);
+  assertAppCheckout(appCheckout);
+  assertVerifyAppRelease(steps);
 
   const validationSteps = [
     'Validate source and generated content',
@@ -128,8 +141,8 @@ test('reusable validation checks app identity and validates all caller content',
   ].map(name => steps.findIndex(step => step.includes(`name: ${name}`)));
   assert.ok(validationSteps.every(index => index >= 0));
   assert.deepEqual(validationSteps, [...validationSteps].sort((a, b) => a - b));
-  assert.match(getStep(steps, 'Validate source and generated content'), /content:source:validate/);
-  assert.match(getStep(steps, 'Validate source and generated content'), /content:check/);
+  assert.match(getStep(steps, 'Validate source and generated content'), /content:source:validate.*--app-version \$env:APP_VERSION/);
+  assert.match(getStep(steps, 'Validate source and generated content'), /content:check.*--app-version \$env:APP_VERSION/);
   assert.match(getStep(steps, 'Validate content with the Node.js validator'), /content:validate/);
   assert.match(getStep(steps, 'Validate content with the .NET validator'), /dotnet run --project tools\/Portfolio\.Content\.Validator/);
   assert.match(getStep(steps, 'Audit trusted content tooling dependencies'), /npm audit --audit-level=moderate/);
@@ -139,9 +152,8 @@ test('reusable validation checks app identity and validates all caller content',
 test('deployment gates all writes on validation and retains protected deployment semantics', () => {
   assertCallWorkflow(deployment);
   assertRequiredInput(deployment, 'app_repository');
-  assertRequiredInput(deployment, 'app_sha');
   assertRepositoryBinding(deployment);
-  assertPinnedAppShaInput(deployment);
+  assertNoAppShaInput(deployment);
   assertRequiredSecret(deployment, 'DEPLOY_PASSWORD');
   assertRequiredSecret(deployment, 'CONTENT_ACTIVATION_TOKEN');
 
@@ -152,7 +164,7 @@ test('deployment gates all writes on validation and retains protected deployment
   assert.match(validationJob, /^    if: inputs\.activate_release_id == ''$/m);
   assert.match(validationJob, /^    uses: \.\/\.github\/workflows\/validate-content\.yml$/m);
   assert.match(validationJob, /app_repository: \$\{\{ inputs\.app_repository \}\}/);
-  assert.match(validationJob, /app_sha: \$\{\{ inputs\.app_sha \}\}/);
+  assert.doesNotMatch(validationJob, /app_sha/);
   const deployJobDefinition = getIndentedBlock(deployment, 2, 'deploy');
   assert.match(deployJobDefinition, /^    needs: validate$/m);
   assert.match(deployJobDefinition, /!cancelled\(\)/);
@@ -168,14 +180,9 @@ test('deployment gates all writes on validation and retains protected deployment
   assert.doesNotMatch(workflowIdentity, /secrets\./);
   const appCheckout = steps.find(step => step.includes('path: app'));
   assert.ok(appCheckout, 'application checkout is unconditional, including rollback runs');
-  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
-  assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
-  assert.match(appCheckout, /^          fetch-depth: 0$/m);
+  assertAppCheckout(appCheckout);
   assert.doesNotMatch(appCheckout, /^        if:/m);
-  const verifyApp = getStep(steps, 'Verify exact application commit');
-  assert.match(verifyApp, /git -C app fetch --no-tags origin refs\/heads\/main/);
-  assert.match(verifyApp, /git -C app merge-base --is-ancestor \$env:APP_SHA FETCH_HEAD/);
-  assert.match(verifyApp, /git -C app rev-parse HEAD/);
+  assertVerifyAppRelease(steps);
   assert.match(getStep(steps, 'Validate deployment configuration and required secrets'), /CONTENT_ACTIVATION_TOKEN is required/);
   assert.ok(steps.indexOf(workflowIdentity) < steps.indexOf(appCheckout), 'workflow identity is verified before checkouts');
   const contentCheckout = steps.find(step => step.includes('path: content-repo'));
@@ -202,9 +209,8 @@ test('deployment gates all writes on validation and retains protected deployment
 test('provisioning is main-only, serialized, and protects the selected token', () => {
   assertCallWorkflow(provisioning);
   assertRequiredInput(provisioning, 'app_repository');
-  assertRequiredInput(provisioning, 'app_sha');
   assertRepositoryBinding(provisioning);
-  assertPinnedAppShaInput(provisioning);
+  assertNoAppShaInput(provisioning);
   assertRequiredSecret(provisioning, 'DEPLOY_PASSWORD');
   assertOptionalSecret(provisioning, 'CONTENT_ACTIVATION_TOKEN_NEXT');
   assertRequiredSecret(provisioning, 'CONTENT_ACTIVATION_TOKEN');
@@ -220,13 +226,8 @@ test('provisioning is main-only, serialized, and protects the selected token', (
   const appCheckout = steps.find(step => step.includes('path: app'));
   assert.ok(appCheckout);
   assert.ok(steps.indexOf(workflowIdentity) < steps.indexOf(appCheckout), 'workflow identity is verified before app checkout');
-  assert.match(appCheckout, /^          repository: \$\{\{ inputs\.app_repository \}\}$/m);
-  assert.match(appCheckout, /^          ref: \$\{\{ inputs\.app_sha \}\}$/m);
-  assert.match(appCheckout, /^          fetch-depth: 0$/m);
-  const verifyApp = getStep(steps, 'Verify exact application commit');
-  assert.match(verifyApp, /git -C app fetch --no-tags origin refs\/heads\/main/);
-  assert.match(verifyApp, /git -C app merge-base --is-ancestor \$env:APP_SHA FETCH_HEAD/);
-  assert.match(verifyApp, /git -C app rev-parse HEAD/);
+  assertAppCheckout(appCheckout);
+  assertVerifyAppRelease(steps);
 
   const upload = getStep(steps, 'Upload activation token to releases root');
   assert.match(upload, /^        shell: powershell$/m);
@@ -239,6 +240,28 @@ test('provisioning is main-only, serialized, and protects the selected token', (
   assert.doesNotMatch(upload, /IsNullOrWhiteSpace\(\$env:CONTENT_ACTIVATION_TOKEN_NEXT\)/);
   assert.match(upload, /IsNullOrWhiteSpace\(\$token\)/);
   assert.match(upload, /WriteAllText\(\(Join-Path \$tokenDirectory 'activation-token\.txt'\), \$token/);
+});
+
+test('workflow action references are exact versions for verified publishers and SHAs otherwise', () => {
+  const workflowDirectory = new URL('.', import.meta.url);
+  const names = readdirSync(workflowDirectory).filter(name => /\.ya?ml$/u.test(name));
+  assert.ok(names.length > 0);
+  let checked = 0;
+  for (const name of names) {
+    for (const [, reference] of readWorkflow(name).matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gmu)) {
+      if (reference.startsWith('./')) continue;
+      checked += 1;
+      const [action, ref] = reference.split('@');
+      const owner = action.split('/')[0];
+      const versionTag = /^v[0-9]+\.[0-9]+\.[0-9]+$/u.test(ref ?? '');
+      if (VERSION_TAG_ACTION_OWNERS.has(owner)) {
+        assert.ok(versionTag, `${name}: ${reference} must use an exact version tag (vX.Y.Z), not a floating ref`);
+      } else {
+        assert.match(ref ?? '', /^[a-f0-9]{40}$/u, `${name}: ${reference} is not a verified publisher and must be pinned to a full commit SHA`);
+      }
+    }
+  }
+  assert.ok(checked > 0, 'workflows reference external actions');
 });
 
 test('quality required job keeps its existing name and runs content checks', () => {

@@ -12,6 +12,7 @@
 - **ADR-016 — Developer-first open source:** reproducible setup, clearly marked demo content, documentation, and independent validation are product requirements.
 - **ADR-017 — Personal open source showcase:** the product can showcase verified open source work.
 - **ADR-018 — Vertical slices:** deliver working end-to-end capabilities incrementally.
+- **ADR-019 — Version-pinned shared tooling:** the private content repository references the app's reusable workflows by exact release tag (`@vX.Y.Z`) instead of a commit SHA. `v*` tags are protected by a repository ruleset, workflows derive the commit from `job.workflow_sha` and verify tag, `VERSION` and reachability from `main`, and provenance records `appVersion` next to `appCommitSha`. GitHub-owned Actions (`actions/*`) use exact version tags; other publishers stay pinned to full SHAs. Rolling refs (`v1`, `latest`) are only resolved by tooling, never used in workflows. See [../repositories.md](../repositories.md#shared-content-workflow-pin).
 
 ## Traceability status
 

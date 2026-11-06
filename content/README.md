@@ -59,30 +59,44 @@ generation provenance are not part of the production package. See
 
 ## Validate and generate a private content tree
 
-Run these commands from the **public app repository root**, with the private
-content root kept outside the public checkout. Replace both placeholders before
-execution. `AppSha` must be the full 40-character lowercase commit SHA of the
-app checkout. In CI, the reusable workflow compares `app_repository` and
-`app_sha` with `job.workflow_repository` and `job.workflow_sha` before
-checkout; missing or mismatched contexts fail closed. Callers must pin the
-workflow reference to that same repository and commit. The content checks also
-verify that generated provenance carries the same `app_sha`. These contexts
-are GitHub.com-only, so the workflows fail closed on GHES.
+Run this from the **public app repository root**, with the private content root
+kept outside the public checkout and this checkout at the release tag the content
+is pinned to (`git checkout --detach v0.1.1`). In CI, the reusable workflow
+requires the caller to reference an exact release tag, derives the commit from
+`job.workflow_sha` and the version from `job.workflow_ref`, and verifies both
+before checkout; missing or mismatched contexts fail closed. The content checks
+also verify that generated provenance carries the same `appVersion` and
+`appCommitSha`. These contexts are GitHub.com-only, so the workflows fail
+closed on GHES.
+
+```powershell
+.\scripts\validate-content.ps1 -ContentRoot 'D:\work\private-portfolio-content'
+```
+
+`-AppVersion` defaults to the exact release tag at `HEAD`. Add `-Generate` to
+regenerate mapped pages and provenance first, and `-TestTooling` to also run
+the tooling tests. With no matching app checkout, use
+`.\scripts\Invoke-PinnedContentCheck.ps1 -ContentRoot <path>`, which clones the
+pinned release temporarily; `.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To <latest|v0.*|vX.Y.Z>`
+moves a content repository to another release and regenerates provenance.
+
+Manual equivalent, from an app checkout at the release tag (`git checkout --detach v0.1.1`):
 
 ```powershell
 $ContentRoot = 'D:\work\private-portfolio-content'
-$AppSha = '<replace-with-the-full-lowercase-40-character-app-commit-sha>'
+$AppVersion = 'v0.1.1'
 
-npm run content:source:validate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:generate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:check -- --root $ContentRoot --app-commit-sha $AppSha
+npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
+npm run content:generate -- --root $ContentRoot --app-version $AppVersion
+npm run content:check -- --root $ContentRoot --app-version $AppVersion
 npm run content:validate -- --root $ContentRoot
 dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
 ```
 
-Do not run `content:generate` until every mapped seed output exists and
+Do not use `-Generate` until every mapped seed output exists and
 `bootstrapOutputSha256` contains the matching normalized SHA-256 for each path.
-When provenance is already pinned to an app commit, pass that same SHA to later
-checks and writes. The generator and content-format references are in
+When provenance is already pinned to an app release, later checks and writes
+must use the same version (the script does this for you). The generator and
+content-format references are in
 [docs/source-map.md](../docs/source-map.md), [docs/content.md](../docs/content.md),
 and the [fork guide](../docs/fork-guide.md).

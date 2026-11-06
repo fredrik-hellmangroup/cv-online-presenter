@@ -20,12 +20,14 @@ flowchart LR
 ## Public app workflow
 
 `.github/workflows/quality.yml` runs on pull requests and pushes to `main`.
-External Actions are pinned to full commit SHAs.
+External Actions from GitHub (`actions/*`) use exact version tags (`vX.Y.Z`);
+any other publisher must be pinned to a full commit SHA. Dependabot proposes
+updates, and the workflow-contract tests enforce the rule.
 
 | Job | When | Checks |
 |---|---|---|
 | `build-and-security` | Pull request and `main` push | .NET and Node setup/restore; module-boundary check; `npm run test:content`; workflow-contract tests; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; Gitleaks; vulnerable transitive package scan. |
-| `deployment-safety-tests` | Pull request and `main` push | Windows tests for production-deployment state recovery and version-bump validation. |
+| `deployment-safety-tests` | Pull request and `main` push | Windows tests for production-deployment state recovery, version-bump validation and app-pin resolution. |
 | `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. |
 
 The content commands in this app workflow use the public synthetic tree. They
@@ -39,16 +41,18 @@ be checked there.
 The private caller validates pull requests and pushes to `main`. Its deploy
 workflow runs on `main` changes to `content/pages/**` or `content/site.json`
 and validates again before packaging. The caller pins reusable-workflow
-references and supplies `app_sha`; keep these aligned with the app commit used
-for generation and recorded in provenance. This caller configuration is not
-stored in the public repository.
+references to an exact release tag such as `@v0.1.1`; keep it aligned with the
+app release used for generation and recorded in provenance. This caller
+configuration is not stored in the public repository.
 
 The reusable `.github/workflows/validate-content.yml` requires
-`app_repository` and `app_sha`. Before checkout, it compares them with
-`job.workflow_repository` and `job.workflow_sha`; missing contexts or
+`app_repository`. Before checkout, it compares it with
+`job.workflow_repository`, and derives the commit and release tag from
+`job.workflow_sha` and `job.workflow_ref`; missing contexts, a non-tag ref, or
 mismatches fail closed. These contexts are GitHub.com-only, so the reusable
 workflow does not run successfully on GHES. It checks out that exact commit,
-verifies it is reachable from that repository's `main`, and passes the SHA to
+verifies it is reachable from that repository's `main`, that the tag resolves
+to it, and that `VERSION` matches, then passes the version to
 source validation and generated-output checking; `content:check` verifies
 generated provenance. It also runs content-tooling tests and npm audit, scans
 the caller repository with Gitleaks, then validates private content using the
@@ -70,18 +74,6 @@ eligible tag asset whose SHA-256 matches GitHub's recorded digest. Production
 state, package identity, and health/build metadata are verified by the
 deployment script before state is marked last-known-good. See
 [rollback-runbook.md](rollback-runbook.md).
-
-## Current verification status
-
-On 2026-11-06, `npm run test:content` was run in this shared-tooling worktree
-using synthetic fixtures. It exited successfully with **156 passing, 0
-failing, and 4 skipped (160 total)**. The skipped tests require POSIX FIFO
-behavior, which is unavailable on Windows. The source-map hierarchy and
-structural-heading tests, approved-route checks, and filesystem/reparse-point
-checks passed. The finalized workflow-contract suite also passed locally:
-**4 passing, 0 failing**. GitHub Actions smoke PR #26 passed both direct and
-nested reusable-workflow identity checks against the expected repository and
-SHA.
 
 Related references: [repository boundaries](repositories.md),
 [source-map behavior](source-map.md), [Markdown content format](content.md),

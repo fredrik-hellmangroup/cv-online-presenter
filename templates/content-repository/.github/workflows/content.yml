@@ -1,0 +1,15 @@
+name: Content validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-content:
+    uses: __APP_REPOSITORY__/.github/workflows/validate-content.yml@__APP_VERSION__
+    with:
+      app_repository: __APP_REPOSITORY__

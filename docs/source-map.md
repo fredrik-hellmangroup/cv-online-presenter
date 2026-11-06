@@ -382,19 +382,21 @@ fields. `--check` recomputes expected output and verifies the files, inputs,
 and provenance. Writes use a lock and transaction journal to recover an
 interrupted generation instead of silently leaving partial output.
 
-`--app-commit-sha` is optional for local generation, but required by the
-reusable content workflow. It must be a full 40-character lowercase Git commit
-SHA and must match the checked-out app repository's `HEAD`. When supplied, it
-is written as `appCommitSha` in provenance; `--check` verifies the same pin,
-and `--write` refuses to drop a pin already present in prior provenance.
-Before checkout, the reusable workflow requires `app_repository` and
-`app_sha` to match `job.workflow_repository` and `job.workflow_sha`; missing
-context values or mismatches fail closed. Those contexts are GitHub.com-only,
+`--app-version <vX.Y.Z>` is optional for local generation, but required by the
+reusable content workflow. It must be an exact release tag of the checked-out
+app repository and must resolve to that checkout's `HEAD`. It records
+`appVersion` and `appCommitSha` (the tag's commit) in provenance; `--check`
+verifies the same pin, and `--write` refuses to drop a pin already present in
+prior provenance. `--app-commit-sha <40-hex>` is the older commit-only form; when
+both are passed they must identify the same commit.
+The reusable workflow requires `app_repository` to match `job.workflow_repository`,
+and takes the commit and release tag from `job.workflow_sha` and `job.workflow_ref`;
+missing context values or mismatches fail closed. Those contexts are GitHub.com-only,
 so GHES is unsupported. The workflow then checks out that source repository at
-the SHA, verifies it is reachable from that repository's `main`, and verifies
-the exact checkout. The caller should pin its `uses` reference to the same
-full SHA; the guard compares resolved workflow identity rather than parsing
-the caller's ref text. `content:check` verifies the generated provenance pin.
+the commit, verifies it is reachable from that repository's `main`, that the
+tag resolves to it, and that `VERSION` matches the tag. The caller must
+reference the workflow with an exact release tag (`@vX.Y.Z`). `content:check`
+verifies the generated provenance pin.
 See [repositories.md](repositories.md#shared-content-workflow-pin).
 
 ## Adding a project
@@ -432,36 +434,43 @@ See [repositories.md](repositories.md#shared-content-workflow-pin).
    existing generated pages by hand.
 6. From the app repository root, run source validation, generation, generation
    check, and both content validators. If provenance is pinned, pass the same
-   `AppSha` to each generator command.
+   `--app-version` to each generator command (the script below does this).
 
 ## Commands, `--root`, and errors
 
-From the app repository root:
+From the app repository root, with the checkout at the pinned release tag:
+
+```powershell
+.\scripts\validate-content.ps1 -ContentRoot 'D:\work\private-portfolio-content' -Generate
+```
+
+Manual equivalent:
 
 ```powershell
 $ContentRoot = 'D:\work\private-portfolio-content'
-$AppSha = '<replace-with-the-full-lowercase-40-character-app-commit-sha>'
+$AppVersion = 'v0.1.1'
 
-npm run content:source:validate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:generate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:check -- --root $ContentRoot --app-commit-sha $AppSha
+npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
+npm run content:generate -- --root $ContentRoot --app-version $AppVersion
+npm run content:check -- --root $ContentRoot --app-version $AppVersion
 npm run content:validate -- --root $ContentRoot
 dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
 ```
 
-Replace the path and SHA placeholders before execution. The SHA must match the
-app repository checkout. Without `--root`, the generator uses the current
+The script runs source validation, optional generation (`-Generate`), the
+generated-output check and both content validators with `--app-version` set to
+the exact tag at `HEAD` (or `-AppVersion`). Replace the path before execution. Without `--root`, the generator uses the current
 working directory as the content root. With `--root <dir>`, it resolves that
 existing directory to a canonical path and uses it for `content/...`, output,
 lock, and transaction paths. The app repository path used to verify
-`--app-commit-sha` is derived from the generator file, not from `--root`.
+`--app-version` is derived from the generator file, not from `--root`.
 
 Direct invocation is also supported:
 
 ```powershell
 node scripts/content/generate-content.mjs --validate-source
-node scripts/content/generate-content.mjs --write --root D:\work\private-portfolio-content
-node scripts/content/generate-content.mjs --check --root D:\work\private-portfolio-content --app-commit-sha $AppSha
+node scripts/content/generate-content.mjs --write --root D:\work\private-portfolio-content --app-version v0.1.1
+node scripts/content/generate-content.mjs --check --root D:\work\private-portfolio-content --app-version v0.1.1
 ```
 
 | Mode | Behavior |
