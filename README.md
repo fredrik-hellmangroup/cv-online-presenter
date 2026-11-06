@@ -30,6 +30,7 @@ and [content release contract](docs/content-releases.md).
 
 ```powershell
 git clone https://github.com/fredrik-hellmangroup/cv-online-presenter.git
+Set-Location cv-online-presenter
 dotnet restore CvOnlinePresenter.sln
 npm ci --prefix client
 npm run build
