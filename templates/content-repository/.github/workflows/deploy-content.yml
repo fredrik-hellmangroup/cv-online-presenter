@@ -1,0 +1,31 @@
+name: Deploy content
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - content/pages/**
+      - content/site.json
+  workflow_dispatch:
+    inputs:
+      activate_release_id:
+        description: Rollback - activate an existing release id on the server without uploading
+        required: false
+        type: string
+        default: ''
+
+run-name: Deploy content from ${{ github.ref_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    uses: __APP_REPOSITORY__/.github/workflows/deploy-content.yml@__APP_VERSION__
+    with:
+      app_repository: __APP_REPOSITORY__
+      activate_release_id: ${{ inputs.activate_release_id }}
+    secrets:
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+      CONTENT_ACTIVATION_TOKEN: ${{ secrets.CONTENT_ACTIVATION_TOKEN }}

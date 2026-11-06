@@ -2278,3 +2278,41 @@ test('records and checks the verified app commit SHA', t => withFixture(t, root 
   assert.notEqual(mismatch.status, 0);
   assert.match(mismatch.stderr, /provenance.*app commit SHA.*match/i);
 }));
+
+test('records and checks the verified app release version', t => withFixture(t, root => {
+  const generatorPath = path.join(repositoryRoot, 'scripts', 'content', 'generate-content.mjs');
+  const run = (...args) => spawnSync(process.execPath, [generatorPath, ...args, '--root', root], {
+    cwd: repositoryRoot, encoding: 'utf8'
+  });
+  const head = spawnSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  const tag = `v999.0.${process.pid}`;
+  const created = spawnSync('git', ['-C', repositoryRoot, 'tag', tag, head], { encoding: 'utf8' });
+  assert.equal(created.status, 0, created.stderr || created.stdout);
+  t.after(() => spawnSync('git', ['-C', repositoryRoot, 'tag', '-d', tag], { encoding: 'utf8' }));
+
+  const malformed = run('--validate-source', '--app-version', 'latest');
+  assert.notEqual(malformed.status, 0);
+  assert.match(malformed.stderr, /exact release tag/i);
+
+  const unknown = run('--validate-source', '--app-version', 'v999.999.999');
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /no release tag/i);
+
+  const write = run('--write', '--app-version', tag);
+  assert.equal(write.status, 0, write.stderr || write.stdout);
+  const provenancePath = target(root, 'content/generated-provenance.json');
+  const provenance = JSON.parse(fs.readFileSync(provenancePath, 'utf8'));
+  assert.equal(provenance.appVersion, tag);
+  assert.equal(provenance.appCommitSha, head);
+
+  assert.equal(run('--check', '--app-version', tag).status, 0);
+  assert.equal(run('--check', '--app-version', tag, '--app-commit-sha', head).status, 0);
+
+  const sha = run('--check', '--app-commit-sha', head);
+  assert.notEqual(sha.status, 0);
+  assert.match(sha.stderr, /app version/i);
+
+  const drop = run('--write', '--app-commit-sha', head);
+  assert.notEqual(drop.status, 0);
+  assert.match(drop.stderr, /app version/i);
+}));

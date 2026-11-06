@@ -6,8 +6,8 @@ Last updated: 2026-11-06
 
 | Repository | Visibility | Owns |
 |---|---|---|
-| App (this repository) | Public | .NET app, TypeScript client, generator/validators, reusable workflows, synthetic content and examples |
-| Content | Private | Master CV, real source map and CV section rules, site settings, generated pages/provenance, and caller workflows |
+| App (this repository) | Public | .NET app, TypeScript client, generator/validators, reusable workflows, all scripts and the content-repository template, synthetic content and examples |
+| Content | Private | Master CV, real source map and CV section rules, site settings, generated pages/provenance, caller workflows and a README; no scripts |
 
 Keep all real names, contact data, CV facts, employer/client details, source
 documents, and private provenance in the private repository. Public fixtures
@@ -47,8 +47,8 @@ flowchart LR
 | Private content deployment | `main` changes to `content/pages/**` or `content/site.json` | Publish an additive content release, preview, then activate |
 | App release | `vMAJOR.MINOR.PATCH` tag on `main` | Build and deploy the app separately from content |
 
-The current private caller pins its reusable-workflow references and supplies
-`app_sha`. Keep both aligned with the public app commit used by generation and
+The current private caller pins its reusable-workflow references to an exact
+release tag. Keep it aligned with the public app release used by generation and
 recorded in generated provenance. That pin/provenance agreement is the
 caller's responsibility; public docs describe the contract, not private CV
 content or private workflow source. See [quality gates](quality-gates.md) and
@@ -63,29 +63,43 @@ The reusable workflows in `.github/workflows/validate-content.yml`,
 | Input | Requirement |
 |---|---|
 | `app_repository` | `owner/repository` matching `^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`; must identify the repository that supplied the reusable workflow |
-| `app_sha` | Full 40-character lowercase commit SHA for the workflow source and, during validation, generated `appCommitSha` provenance |
+| `app_repository` | `owner/repository` matching `^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`; must identify the repository that supplied the reusable workflow |
 
-Before any app checkout, each workflow compares both inputs with
-`job.workflow_repository` and `job.workflow_sha`; missing values or mismatches
+The release is selected by the caller's `uses` reference, which must be an exact
+release tag (`@vMAJOR.MINOR.PATCH`). Tags matching `v*` are protected by a
+repository ruleset that forbids updating and deleting them, so a version is an
+immutable pin. There is no SHA input: the workflows derive the commit from
+`job.workflow_sha` and the version from `job.workflow_ref`.
+
+Before any app checkout, each workflow compares `app_repository` with
+`job.workflow_repository` and requires `job.workflow_ref` to be a release tag;
+missing values or mismatches
 fail closed. A fork works when the caller loads the workflow from that fork
-and supplies the same repository and source commit. An unrelated repository
+at one of its release tags. An unrelated repository
 does not pass the identity check. These contexts are available on GitHub.com,
 not GHES, so the workflows require GitHub.com and fail closed on GHES.
 
-The workflows check out the supplied repository at the supplied SHA, verify
-that commit is reachable from its `main`, and verify checkout `HEAD`. The
-caller must also pin its `uses` reference to that same full SHA: the identity
-guard checks the resolved workflow source, not the caller-ref text. Validation
-passes the SHA to `content:source:validate` and `content:check` to verify
+The workflows check out the repository at the resolved commit, verify
+that commit is reachable from its `main`, verify checkout `HEAD`, require the
+tag to resolve to that commit, and require `VERSION` to equal the tag. Validation
+passes the version to `content:source:validate` and `content:check` to verify
 provenance. `deploy-content.yml` invokes validation through its local nested
-workflow, so both jobs use the same source commit. Checked-in external Actions
-are pinned to full SHAs, with `contents: read` permissions and checkout
+workflow, so both jobs use the same source commit. External Actions from
+`actions/*` use exact version tags; other publishers must be pinned to full
+SHAs. Workflows use `contents: read` permissions and checkout
 credentials disabled where configured.
+
+The private content repository holds only content, its caller workflows and a
+README; every script lives in the app repository. `scripts/Invoke-PinnedContentCheck.ps1`
+validates a content repository with its pinned release, `scripts/Update-AppPin.ps1`
+moves it to another release (`latest`, `v0.*` or an exact tag), and
+`scripts/New-ContentRepository.ps1` bootstraps a new private content repository
+for a fork from `templates/content-repository/`.
 
 ## Content validation, delivery, and rollback
 
 Validation checks out the caller's content commit and the app at the requested
-SHA. It installs and audits app content tooling, runs synthetic tooling tests,
+release. It installs and audits app content tooling, runs synthetic tooling tests,
 scans the caller repository with Gitleaks, validates source and generated
 provenance, then runs the Node.js and .NET content validators. App CI's
 separate synthetic-only checks are listed in [quality-gates.md](quality-gates.md).

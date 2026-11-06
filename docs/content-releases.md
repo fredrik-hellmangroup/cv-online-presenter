@@ -77,27 +77,30 @@ validation and deployment workflows require:
 
 - `app_repository`, an `owner/repository` value matching
   `^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$` and identifying the repository that
-  supplied the reusable workflow;
-- `app_sha`, a full 40-character lowercase commit SHA identifying the
-  reusable-workflow source commit and, for content validation, the private
-  tree's generated `appCommitSha` provenance.
+  supplied the reusable workflow.
 
-Before any app checkout, each workflow compares the inputs with
-`job.workflow_repository` and `job.workflow_sha`; missing values or mismatches
-fail closed. This supports a fork when its caller uses workflows from that
-fork and supplies the same repository and commit. The contexts are
-GitHub.com-only, so GHES is unsupported and fails closed. The caller should
-still pin its `uses` reference to the same full SHA; the guard compares the
-resolved workflow source identity, not the caller's ref text. The workflows
-then check out the source repository at that SHA, verify it is reachable from
-that repository's `main`, and verify checkout `HEAD`. Content validation
-passes the SHA to source validation and generated-output checking, where
-provenance is verified. The deployment workflow invokes validation as a local
-nested reusable workflow from the same source commit.
+The release is selected by the caller's `uses` reference, which must be an
+exact release tag such as `@v0.1.1`. There is no separate SHA input; the
+workflow derives the commit from `job.workflow_sha` and the tag from
+`job.workflow_ref`.
+
+Before any app checkout, each workflow compares `app_repository` with
+`job.workflow_repository`, requires `job.workflow_sha` to be a full commit SHA
+and `job.workflow_ref` to end in `refs/tags/vMAJOR.MINOR.PATCH`; missing values
+or mismatches fail closed. This supports a fork when its caller uses workflows
+from that fork at one of its release tags. The contexts are GitHub.com-only, so
+GHES is unsupported and fails closed. The workflows then check out the source
+repository at the resolved commit and verify that the commit is reachable from
+that repository's `main`, that checkout `HEAD` matches, that the release tag
+resolves to the same commit, and that `VERSION` equals the tag without `v`.
+Content validation passes the version to source validation and generated-output
+checking, where `appVersion` and `appCommitSha` provenance are verified. The
+deployment workflow invokes validation as a local nested reusable workflow from
+the same source commit.
 
 Content validation installs and audits the app's tooling, runs synthetic
 tooling tests, scans the caller repository with Gitleaks, validates source and
-provenance with the pinned SHA, then runs the Node.js and .NET validators.
+provenance with the release version, then runs the Node.js and .NET validators.
 The source map, generator, and first-write rules are described in
 [source-map.md](source-map.md).
 
@@ -125,7 +128,7 @@ After upload, the workflow:
 
 For rollback, the caller may pass `activate_release_id`. The workflow skips
 content validation and upload, but the deploy job still compares the app
-repository/SHA with its workflow-source contexts before checkout and checks
+repository with its workflow-source contexts before checkout and checks
 required secrets, the activation URL, and release ID. It previews the existing
 release, activates it only after a valid preview, and runs the same
 active-release and health checks. The workflow input permits only 1–100 ASCII
@@ -135,8 +138,10 @@ fails or its diff is unexpected.
 
 The current private caller validates pull requests and pushes to `main`, and
 deploys on `main` changes to `content/pages/**` or `content/site.json`. The
-caller must keep its reusable-workflow references, `app_sha`, generation
-commit, and generated `appCommitSha` provenance aligned. The public workflow
+caller must keep its reusable-workflow release tag, generation
+commit, and generated `appVersion`/`appCommitSha` provenance aligned; the
+`Update-AppPin.ps1` script in the content repository changes all of them
+together. The public workflow
 identity checks enforce the supplied contract; they do not replace the
 caller's pin/provenance responsibility. See
 [repositories.md](repositories.md#shared-content-workflow-pin).
