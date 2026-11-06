@@ -8,6 +8,27 @@ contact details, canonical source material, and source maps in a separate
 **private** content repository; never put them in this public app repository,
 its issues, or its pull requests.
 
+## From source to release
+
+```mermaid
+flowchart LR
+    S["Private Master CV"] --> M["Private source map"]
+    C["Private CV section rules"] --> G["Generator in public app"]
+    M --> G
+    S --> G
+    G --> P["Generated pages + provenance"]
+    P --> V["Validation / CI"]
+    V --> R["Release: site.json + pages/"]
+```
+
+| Public app repository | Private content repository |
+|---|---|
+| App, generator, schemas, validators, reusable workflows, synthetic fixtures | Master CV, real source map, section rules, generated pages, provenance, caller workflows |
+
+The public template documents the structure; it is not the starting place for
+real CV facts. See the [fork guide](../docs/fork-guide.md) for private setup,
+and [source-map.md](../docs/source-map.md) for how source sections map to pages.
+
 ```text
 content/
   cv-sections.json                 CV section publication rules

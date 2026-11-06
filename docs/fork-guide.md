@@ -81,12 +81,12 @@ deployment code, protect its `main`, and verify its GitHub environment
 settings and secrets before production use; the identity and reachability
 checks do not establish that the fork's code or settings are trustworthy.
 
-**Caller integration note (last inspected 2026-11-05):** the private-content
-caller inspected during this migration used the legacy `APP_REPO_REF=main`
-deploy contract and was not connected to the public reusable SHA contract.
-This is a dated observation, not confirmation of the current private caller
-state. See
-[repositories.md](repositories.md#shared-content-workflow-pin).
+The current private caller validates pull requests and pushes to `main`, and
+deploys qualifying content changes on `main`. For your own fork, configure
+your caller separately: pin each reusable-workflow reference and keep its
+`app_sha`, generator commit, and generated provenance aligned. See the
+[shared workflow contract](repositories.md#shared-content-workflow-pin);
+public workflow definitions do not provide or publish private content.
 
 ## 4. Validate and publish
 
