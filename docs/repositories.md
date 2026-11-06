@@ -6,8 +6,8 @@ Last updated: 2026-11-06
 
 | Repository | Visibility | Owns |
 |---|---|---|
-| App (this repository) | Public | .NET app, TypeScript client, generator/validators, reusable workflows, synthetic content and examples |
-| Content | Private | Master CV, real source map and CV section rules, site settings, generated pages/provenance, and caller workflows |
+| App (this repository) | Public | .NET app, TypeScript client, generator/validators, reusable workflows, all scripts and the content-repository template, synthetic content and examples |
+| Content | Private | Master CV, real source map and CV section rules, site settings, generated pages/provenance, caller workflows and a README; no scripts |
 
 Keep all real names, contact data, CV facts, employer/client details, source
 documents, and private provenance in the private repository. Public fixtures
