@@ -1,0 +1,27 @@
+name: Provision activation token
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_primary_secret:
+        description: Use the existing primary token for recovery after a failed staged provisioning run
+        required: true
+        type: boolean
+        default: false
+
+run-name: Provision activation token on ${{ github.ref_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    if: github.ref == 'refs/heads/main'
+    uses: __APP_REPOSITORY__/.github/workflows/provision-activation-token.yml@__APP_VERSION__
+    with:
+      app_repository: __APP_REPOSITORY__
+      use_primary_secret: ${{ inputs.use_primary_secret }}
+    secrets:
+      DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+      CONTENT_ACTIVATION_TOKEN_NEXT: ${{ secrets.CONTENT_ACTIVATION_TOKEN_NEXT }}
+      CONTENT_ACTIVATION_TOKEN: ${{ secrets.CONTENT_ACTIVATION_TOKEN }}
