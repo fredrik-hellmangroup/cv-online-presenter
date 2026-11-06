@@ -5,16 +5,17 @@ locale: "sv-SE"
 status: "published"
 type: "project"
 summary: "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system."
+order: 6
+period: "2013 – 2015"
+role: "Integrationsutvecklare (syntetiskt exempel)"
+industry: "Kommunal verksamhet"
 technologies: [".NET","REST","Docker","Bicep"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Demokommunen"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Demokommunen
-
-**Period:** 2013 – 2015
-**Roll:** Integrationsutvecklare (syntetiskt exempel)
 
 ## Sammanfattning
 

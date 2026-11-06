@@ -486,6 +486,29 @@ article.wide { max-width: none; }
 .page-hero-list li:last-child { padding-bottom: 0; }
 .page-hero-list strong { display: block; font-family: var(--font-condensed); font-size: 1.5rem; font-weight: 700; line-height: 1.15; color: var(--link); }
 .page-hero-item-text p { margin: .25rem 0 0; color: var(--muted); }
+
+/* Panel with tabs. Without scripts every group is shown in turn under its own heading. */
+.hero-tabs .hero-tab-panel + .hero-tab-panel { margin-top: 1.5rem; }
+.hero-tabs .hero-tab-heading { margin: 0 0 .5rem; padding: 0; border: 0; font-size: 1.75rem; line-height: 1; }
+.hero-tab-lead p { margin: 0 0 .25rem; color: var(--muted); font-size: .95rem; }
+.hero-tabs .page-hero-list li { padding: .7rem 0; }
+.hero-tabs .page-hero-list li:first-child { border-top: 0; }
+.hero-tabs .page-hero-list li:last-child { padding-bottom: 0; }
+.hero-tabs .page-hero-list strong { font-size: 1.35rem; }
+.hero-chip-group + .hero-chip-group { margin-top: .85rem; }
+.hero-chip-group-name { margin: 0 0 .35rem; font-size: .85rem; font-weight: 700; }
+.hero-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.hero-chips li { max-width: none; padding: .15rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--particle-rgb), .06); font-size: .85rem; line-height: 1.5; }
+.hero-tab-more { margin: 1rem 0 0; font-size: .9rem; }
+.hero-tablist { display: flex; gap: .25rem; margin-bottom: 1rem; padding: .25rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-solid); }
+.hero-tab { flex: 1 1 auto; min-width: 0; padding: .5rem; font-size: .9rem; font-weight: 700; color: var(--muted); background: none; border-color: transparent; transition: background .2s, color .2s; }
+.hero-tab:hover:not([aria-selected="true"]) { color: var(--text); border-color: transparent; box-shadow: none; transform: none; }
+.hero-tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.hero-tab[aria-selected="true"]:hover { box-shadow: none; transform: none; }
+.hero-tabs[data-enhanced] .hero-tab-heading { display: none; }
+.hero-tabs[data-enhanced] .hero-tab-panel + .hero-tab-panel { margin-top: 0; }
+.hero-tabs[data-enhanced] .hero-tab-panel[hidden] { display: none; }
+.hero-tab-panel:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: .5rem; }
 @media (max-width: 63.99rem) { .page-hero { grid-template-columns: minmax(0, 1fr); } }
 
 /* The start page shares the sub-page header (logo left, navigation centred, theme toggle right). */
@@ -512,6 +535,9 @@ main.home { min-height: calc(100svh - 12rem); }
   .practical dt { font-size: .6rem; letter-spacing: .06em; }
   .practical dd { font-size: .85rem; }
   .skill-btn { color: #111; border-color: #aaa; background: #fff; }
+  .hero-tablist { display: none !important; }
+  .hero-tabs[data-enhanced] .hero-tab-heading { display: block; }
+  .hero-tabs[data-enhanced] .hero-tab-panel[hidden] { display: block; }
   a { color: #111; text-decoration: none; }
   @page { size: A4; margin: 14mm; }
 }

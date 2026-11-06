@@ -24,24 +24,63 @@
       "path": "content/pages/services.md",
       "type": "page",
       "title": "Kompetens",
-      "description": "Systemdesign och tydlig teknisk riktning med praktiskt fokus",
+      "description": "Systemdesign och teknisk riktning med praktiskt fokus",
       "locale": "sv-SE",
       "status": "draft",
       "sourceSection": "Kompetensområden",
-      "competenceBlocks": [
+      "competenceGroups": [
         {
-          "title": "Systemdesign",
+          "title": "Bygga",
           "sourceLines": [
-            "- Systemdesign och tydlig teknisk riktning med praktiskt fokus"
+            "Arkitektur, backend och integration."
+          ],
+          "items": [
+            {
+              "title": "Lösningsarkitektur",
+              "sourceLines": [
+                "Teknisk riktning nära implementation."
+              ]
+            },
+            {
+              "title": "Backend och integration",
+              "sourceLines": [
+                "Backendutveckling, API:er och flöden mellan system."
+              ]
+            }
           ]
         },
         {
-          "title": "API-design",
+          "title": "Leverera",
           "sourceLines": [
-            "- API-design som förenklar samarbete mellan team"
+            "Plattform, drift och modernisering."
+          ],
+          "items": [
+            {
+              "title": "Plattform och modernisering",
+              "sourceLines": [
+                "Stabil leverans och stegvis utveckling av befintliga lösningar."
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Domän",
+          "sourceLines": [
+            "Miljöer där kraven är höga."
+          ],
+          "items": [
+            {
+              "title": "Offentlig sektor och reglerade miljöer",
+              "sourceLines": [
+                "Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning."
+              ]
+            }
           ]
         }
-      ]
+      ],
+      "kicker": "Kompetens · syntetisk demo",
+      "panelEyebrow": "Fyra delar i samma helhet",
+      "panelTitle": "Kompetens med sammanhang."
     },
     {
       "path": "content/pages/projects.md",
@@ -69,7 +108,15 @@
       "summary": "Planeringen blev tydligare och återkommande uppgifter enklare att följa.",
       "links": "Inga externa länkar publicerade",
       "sourceSection": "Uppdragshistorik / Projekt Nordstjärna",
-      "sourceHeading": "Projekt Nordstjärna"
+      "sourceHeading": "Projekt Nordstjärna",
+      "presentation": {
+        "order": 1,
+        "facts": [
+          "period",
+          "role",
+          "industry"
+        ]
+      }
     }
   ],
   "bootstrapOutputSha256": {

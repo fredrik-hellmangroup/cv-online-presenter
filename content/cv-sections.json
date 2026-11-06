@@ -3,10 +3,10 @@
   "sections": [
     { "heading": "Roller", "required": true, "publish": true },
     { "heading": "Översikt", "required": true, "publish": true },
+    { "heading": "Uppdragshistorik", "required": true, "publish": true },
     { "heading": "Kompetensområden", "required": true, "publish": true },
     { "heading": "Nyckelteknik", "required": true, "publish": true },
     { "heading": "Branscherfarenhet", "required": true, "publish": true },
-    { "heading": "Uppdragshistorik", "required": true, "publish": true },
     { "heading": "Anställningar", "required": true, "publish": true },
     { "heading": "Språk", "required": false, "publish": true },
     { "heading": "Interna mallnoteringar", "required": false, "publish": false }

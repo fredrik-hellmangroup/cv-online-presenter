@@ -65,7 +65,7 @@ optional:
 | `period`, `role`, `industry` | Optional fact cards on the project detail page. |
 | `category` | Card label after the period; falls back to `industry`. |
 | `assignment` | Alternate title used when linking a CV assignment to a project whose title differs. |
-| `order` | Ascending project-list order; missing or invalid values sort last, then by title. |
+| `order` | Ascending project-list order. Valid source-map values range from `0` through `2147483646`; the app reserves `Int32.MaxValue` (`2147483647`) as its unordered sentinel, which missing or unparseable values resolve to before sorting last, then by title. |
 | `links` | Optional non-empty string accepted as metadata; the current project renderer does not treat it as a URL list. |
 
 Project detail H2 headings are classified for presentation: headings containing
@@ -84,10 +84,14 @@ front-matter route is derived from its path under `content/pages/projects/`.
 ## Page hero and editorial ownership
 
 On `/services`, a Markdown `#` heading and the paragraphs before the first
-`##` form the lead; each `##` section becomes an item in the hero panel. The
-optional `kicker`, `panelEyebrow`, and `panelTitle` front-matter fields supply
-the hero's small labels and panel title. Without a suitable H1 and at least one
-H2 section, the page renders as ordinary Markdown.
+`##` form the lead. If any H2 section contains H3 headings, each H2 becomes a
+tab and its H3 sections become items; text before the first H3 is the tab
+introduction. A final "Teknik" tab lists the CV's skill groups. Without
+JavaScript, the groups remain visible under their headings. If there are no
+H3 headings, each H2 becomes a flat panel item instead. The optional `kicker`,
+`panelEyebrow`, and `panelTitle` front-matter fields supply the hero's labels.
+Without a suitable H1 and at least one H2 section, the page renders as ordinary
+Markdown.
 
 The generator owns the single H1 for published non-CV pages and emits it from
 the mapped metadata. The CV is the exception: `CvPresenter`/`CvHero` owns its

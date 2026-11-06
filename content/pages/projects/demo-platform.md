@@ -5,16 +5,17 @@ locale: "sv-SE"
 status: "published"
 type: "project"
 summary: "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund."
+order: 1
+period: "2023 – 2025"
+role: "Lösningsarkitekt (syntetiskt exempel)"
+industry: "Digitala tjänster"
 technologies: ["ASP.NET Core","SQL Server","REST","Docker"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Exempelplattformen"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Exempelplattformen
-
-**Period:** 2023 – 2025
-**Roll:** Lösningsarkitekt (syntetiskt exempel)
 
 ## Sammanfattning
 

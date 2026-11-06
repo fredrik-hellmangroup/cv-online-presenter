@@ -13,4 +13,10 @@
     <ProjectReference Include="../../src/Portfolio.Content/Portfolio.Content.csproj" />
     <ProjectReference Include="../../src/Portfolio.Web/Portfolio.Web.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../scripts/content/fixtures/synthetic-presentation/content/**/*">
+      <Link>synthetic-presentation/content/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

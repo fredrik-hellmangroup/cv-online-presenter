@@ -171,10 +171,6 @@ foreach ($requiredWorkflowFragment in @(
         throw "The manual production recovery workflow is missing '$requiredWorkflowFragment'."
     }
 }
-$manualArtifactName = 'manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}'
-if ([regex]::Matches($workflow, [regex]::Escape($manualArtifactName)).Count -ne 3) {
-    throw 'The manual production recovery package upload and both downloads must use the same run-attempt-specific artifact name.'
-}
 if ($workflow.Contains('choco install')) {
     throw 'The production deploy job must not execute an unverified Chocolatey package.'
 }
@@ -189,22 +185,17 @@ if (-not $argumentTableMatch.Success) {
     throw 'The manual workflow must initialize production-runner arguments with a hashtable.'
 }
 $argumentTable = $argumentTableMatch.Groups['body'].Value
-if ($argumentTable -notmatch '(?m)^\s*PackagePath\s*=\s*\$package\s*$') {
-    throw 'PackagePath must be passed unconditionally in the production-runner argument hashtable.'
-}
-if ($argumentTable -match '(?m)^\s*(ManualMain|AllowPendingRecovery)\s*=') {
-    throw 'Manual recovery switches must not be enabled unconditionally in the production-runner argument hashtable.'
+if ($argumentTable -match '(?m)^\s*(ManualMain|AllowPendingRecovery|PackagePath)\s*=') {
+    throw 'Manual recovery switches must not be enabled unconditionally, and no package path may be passed.'
 }
 foreach ($requiredArgumentFragment in @(
         '$arguments = @{'
-        'PackagePath = $package'
         "StateDirectory = 'production-state'"
         "StateRecordPath = 'state-record/lkg-v1.json'"
         'ExpectedPackageSha256 = $env:PACKAGE_SHA256'
         "Mode = 'manual'"
         'SourceCommit = $env:SOURCE_COMMIT'
         'SourceTag = $env:SOURCE_TAG'
-        '$arguments[''ManualMain''] = $true'
         '$arguments[''AllowPendingRecovery''] = $true'
         '.\scripts\run-production-deployment.ps1 @arguments'
     )) {
@@ -212,11 +203,8 @@ foreach ($requiredArgumentFragment in @(
         throw "The manual workflow does not use a named hashtable argument for '$requiredArgumentFragment'."
     }
 }
-if (
-    -not $workflow.Contains('if ($env:MANUAL_MAIN -eq ''true'') { $arguments[''ManualMain''] = $true }') -or
-    -not $workflow.Contains('if ($env:RECONCILE_PENDING -eq ''true'') { $arguments[''AllowPendingRecovery''] = $true }')
-) {
-    throw 'Manual recovery switches must only be added when their corresponding inputs are enabled.'
+if (-not $workflow.Contains('if ($env:RECONCILE_PENDING -eq ''true'') { $arguments[''AllowPendingRecovery''] = $true }')) {
+    throw 'The pending-recovery switch must only be added when reconcile_pending is enabled.'
 }
 
 $productionRunnerPath = Join-Path $PSScriptRoot 'run-production-deployment.ps1'

@@ -18,7 +18,9 @@ test('validates the app template and synthetic fixture against draft 2020-12 sch
     ['app template source map', 'content/source-map.json', validateSourceMap],
     ['app template CV sections', 'content/cv-sections.json', validateCvSections],
     ['synthetic fixture source map', 'scripts/content/fixtures/synthetic/content/source-map.json', validateSourceMap],
-    ['synthetic fixture CV sections', 'scripts/content/fixtures/synthetic/content/cv-sections.json', validateCvSections]
+    ['synthetic fixture CV sections', 'scripts/content/fixtures/synthetic/content/cv-sections.json', validateCvSections],
+    ['synthetic presentation source map', 'scripts/content/fixtures/synthetic-presentation/content/source-map.json', validateSourceMap],
+    ['synthetic presentation CV sections', 'scripts/content/fixtures/synthetic-presentation/content/cv-sections.json', validateCvSections]
   ];
   for (const [label, relativePath, validate] of cases) {
     const value = readJson(relativePath);
@@ -53,5 +55,100 @@ test('rejects noncanonical bootstrap hash paths in schemas', () => {
     const mapping = structuredClone(base);
     mapping.bootstrapOutputSha256[invalidPath] = '0'.repeat(64);
     assert.equal(validateSourceMap(mapping), false, 'accepted bootstrap path ' + JSON.stringify(invalidPath));
+  }
+});
+
+test('validates opt-in project presentation order and factual fields', () => {
+  const base = readJson('scripts/content/fixtures/synthetic/content/source-map.json');
+  const projectFor = mapping => mapping.generatedPages.find(page => page.path === 'content/pages/projects/kompass.md');
+  const valid = structuredClone(base);
+  projectFor(valid).presentation = { order: 2147483646, facts: ['period', 'role', 'industry'] };
+  assert.equal(validateSourceMap(valid), true, ajv.errorsText(validateSourceMap.errors));
+
+  const invalidCases = [
+    ['non-integer order', mapping => { projectFor(mapping).presentation = { order: 'first' }; }],
+    ['reserved unordered sentinel', mapping => { projectFor(mapping).presentation = { order: 2147483647 }; }],
+    ['order beyond the app metadata range', mapping => { projectFor(mapping).presentation = { order: 2147483648 }; }],
+    ['duplicate facts', mapping => { projectFor(mapping).presentation = { facts: ['period', 'period'] }; }],
+    ['unknown fact', mapping => { projectFor(mapping).presentation = { facts: ['customer'] }; }],
+    ['empty facts', mapping => { projectFor(mapping).presentation = { facts: [] }; }],
+    ['presentation on a non-project page', mapping => {
+      mapping.generatedPages.find(page => page.path === 'content/pages/services.md').presentation = { order: 1 };
+    }]
+  ];
+
+  for (const [label, makeInvalid] of invalidCases) {
+    const invalid = structuredClone(base);
+    makeInvalid(invalid);
+    assert.equal(validateSourceMap(invalid), false, `accepted ${label}`);
+  }
+});
+
+
+test('validates grouped service mappings and optional hero metadata in the source-map schema', () => {
+  const grouped = structuredClone(readJson('scripts/content/fixtures/synthetic/content/source-map.json'));
+  const services = grouped.generatedPages.find(page => page.path === 'content/pages/services.md');
+  delete services.competenceBlocks;
+  services.competenceGroups = [{
+    title: 'Bygga',
+    sourceLines: ['Arkitektur, backend och integration.'],
+    items: [{
+      title: 'Lösningsarkitektur',
+      sourceLines: ['Teknisk riktning nära implementation.']
+    }]
+  }];
+  services.kicker = 'Kompetens · syntetisk demo';
+  services.panelEyebrow = 'Fyra delar i samma helhet';
+  services.panelTitle = 'Kompetens med sammanhang.';
+  assert.equal(validateSourceMap(grouped), true, ajv.errorsText(validateSourceMap.errors));
+
+  const missingItemEvidence = structuredClone(grouped);
+  delete missingItemEvidence.generatedPages.find(page => page.path === 'content/pages/services.md')
+    .competenceGroups[0].items[0].sourceLines;
+  assert.equal(validateSourceMap(missingItemEvidence), false, 'accepted an item without source lines');
+
+  const multilineHero = structuredClone(grouped);
+  multilineHero.generatedPages.find(page => page.path === 'content/pages/services.md')
+    .panelTitle = 'Two\nlines';
+  assert.equal(validateSourceMap(multilineHero), false, 'accepted multiline service hero metadata');
+
+  const mixedServiceMappings = structuredClone(grouped);
+  mixedServiceMappings.generatedPages.find(page => page.path === 'content/pages/services.md')
+    .competenceBlocks = [{ title: 'Legacy', sourceLines: ['- legacy'] }];
+  assert.equal(validateSourceMap(mixedServiceMappings), false, 'accepted flat and grouped mappings together');
+});
+
+test('rejects whitespace-only grouped evidence and optional service hero metadata', () => {
+  const grouped = structuredClone(readJson('scripts/content/fixtures/synthetic/content/source-map.json'));
+  const services = grouped.generatedPages.find(page => page.path === 'content/pages/services.md');
+  delete services.competenceBlocks;
+  services.competenceGroups = [{
+    title: 'Bygga',
+    sourceLines: ['Arkitektur, backend och integration.'],
+    items: [{
+      title: 'Lösningsarkitektur',
+      sourceLines: ['Teknisk riktning nära implementation.']
+    }]
+  }];
+  services.kicker = 'Kompetens · syntetisk demo';
+  services.panelEyebrow = 'Fyra delar i samma helhet';
+  services.panelTitle = 'Kompetens med sammanhang.';
+  assert.equal(validateSourceMap(grouped), true, ajv.errorsText(validateSourceMap.errors));
+
+  const servicesFor = mapping => mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
+  const cases = [
+    ['group title', mapping => { servicesFor(mapping).competenceGroups[0].title = '   '; }],
+    ['group source line', mapping => { servicesFor(mapping).competenceGroups[0].sourceLines[0] = '\t'; }],
+    ['item title', mapping => { servicesFor(mapping).competenceGroups[0].items[0].title = ' \t '; }],
+    ['item source line', mapping => { servicesFor(mapping).competenceGroups[0].items[0].sourceLines[0] = '  '; }],
+    ['service kicker', mapping => { servicesFor(mapping).kicker = ' \t '; }],
+    ['service panel eyebrow', mapping => { servicesFor(mapping).panelEyebrow = '   '; }],
+    ['service panel title', mapping => { servicesFor(mapping).panelTitle = '\t'; }]
+  ];
+
+  for (const [label, makeInvalid] of cases) {
+    const invalid = structuredClone(grouped);
+    makeInvalid(invalid);
+    assert.equal(validateSourceMap(invalid), false, `accepted whitespace-only ${label}`);
   }
 });

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const syntheticFixturePath = path.join(repositoryRoot, 'scripts', 'content', 'fixtures', 'synthetic');
+const syntheticPresentationFixturePath = path.join(repositoryRoot, 'scripts', 'content', 'fixtures', 'synthetic-presentation');
 const generatedPages = [
   'content/pages/cv.md',
   'content/pages/home.md',
@@ -29,14 +30,103 @@ const generationLockPath = '.cv-generation.lock';
 const normalize = text => text.replace(/\r\n?/g, '\n');
 const hash = data => createHash('sha256').update(data).digest('hex');
 const target = (root, relativePath) => path.join(root, ...relativePath.split('/'));
+const groupedCompetenceGroups = [
+  {
+    title: 'Bygga',
+    sourceLines: ['Arkitektur, backend och integration.'],
+    items: [
+      { title: 'Lösningsarkitektur', sourceLines: ['Teknisk riktning nära implementation.'] },
+      {
+        title: 'Backend och integration',
+        sourceLines: ['Backendutveckling, API:er och flöden mellan system.']
+      }
+    ]
+  },
+  {
+    title: 'Leverera',
+    sourceLines: ['Plattform, drift och modernisering.'],
+    items: [{
+      title: 'Plattform och modernisering',
+      sourceLines: ['Stabil leverans och stegvis utveckling av befintliga lösningar.']
+    }]
+  },
+  {
+    title: 'Domän',
+    sourceLines: ['Miljöer där kraven är höga.'],
+    items: [{
+      title: 'Offentlig sektor och reglerade miljöer',
+      sourceLines: ['Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning.']
+    }]
+  }
+];
+const groupedCompetenceSection = [
+  '## Kompetensområden',
+  '',
+  'Systemdesign och teknisk riktning med praktiskt fokus.',
+  '',
+  '### Bygga',
+  'Arkitektur, backend och integration.',
+  '',
+  '#### Lösningsarkitektur',
+  'Teknisk riktning nära implementation.',
+  '',
+  '#### Backend och integration',
+  'Backendutveckling, API:er och flöden mellan system.',
+  '',
+  '### Leverera',
+  'Plattform, drift och modernisering.',
+  '',
+  '#### Plattform och modernisering',
+  'Stabil leverans och stegvis utveckling av befintliga lösningar.',
+  '',
+  '### Domän',
+  'Miljöer där kraven är höga.',
+  '',
+  '#### Offentlig sektor och reglerade miljöer',
+  'Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning.'
+].join('\n');
 
 function removeFixture(root) {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-function createFixture() {
+function configureGroupedServices(root) {
+  const sourcePath = target(root, 'content/sources/master-cv.md');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const start = source.indexOf('## Kompetensområden\n');
+  const end = source.indexOf('\n## ', start + 1);
+  assert.ok(start >= 0 && end > start, 'competence source section should be present');
+  fs.writeFileSync(
+    sourcePath,
+    `${source.slice(0, start)}${groupedCompetenceSection}${source.slice(end)}`
+  );
+  fs.appendFileSync(sourcePath, [
+    '',
+    '',
+    '## Service hero evidence',
+    '- Kompetens · syntetisk demo',
+    '- Fyra delar i samma helhet',
+    '- Kompetens med sammanhang.'
+  ].join('\n'));
+  const cvSectionsPath = target(root, 'content/cv-sections.json');
+  const cvSections = JSON.parse(fs.readFileSync(cvSectionsPath, 'utf8'));
+  cvSections.sections.push({ heading: 'Service hero evidence', required: false, publish: false });
+  fs.writeFileSync(cvSectionsPath, `${JSON.stringify(cvSections, null, 2)}\n`);
+
+  const mappingPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+  const services = mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
+  delete services.competenceBlocks;
+  services.competenceGroups = structuredClone(groupedCompetenceGroups);
+  services.kicker = 'Kompetens · syntetisk demo';
+  services.panelEyebrow = 'Fyra delar i samma helhet';
+  services.panelTitle = 'Kompetens med sammanhang.';
+  fs.writeFileSync(mappingPath, `${JSON.stringify(mapping, null, 2)}\n`);
+}
+
+function createFixture(fixturePath = syntheticFixturePath) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cv-content-generator-'));
-  fs.cpSync(path.join(syntheticFixturePath, 'content'), target(root, 'content'), { recursive: true });
+  fs.cpSync(path.join(fixturePath, 'content'), target(root, 'content'), { recursive: true });
   fs.rmSync(target(root, 'content/generated-provenance.json'), { force: true });
   fs.mkdirSync(path.join(root, 'scripts', 'content'), { recursive: true });
   fs.symlinkSync(path.join(repositoryRoot, 'node_modules'), target(root, 'node_modules'), 'junction');
@@ -269,8 +359,8 @@ function stopLockHolder(child) {
   });
 }
 
-async function withFixture(t, callback) {
-  const root = createFixture();
+async function withFixture(t, callback, fixturePath = syntheticFixturePath) {
+  const root = createFixture(fixturePath);
   try {
     return await callback(root);
   } finally {
@@ -713,6 +803,102 @@ test('generates editorial pages with exactly one real H1 and complete sections',
   assert.match(overview, /Planering blev tydligare/);
 }));
 
+test('keeps flat service mappings byte-identical when grouped metadata is absent', t => withFixture(t, root => {
+  const expected = fs.readFileSync(target(syntheticFixturePath, 'content/pages/services.md'));
+  const result = run(root, '--write');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(fs.readFileSync(target(root, 'content/pages/services.md')), expected);
+}));
+
+test('generates grouped service sections and optional hero metadata from source mappings', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const result = run(root, '--write');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const services = fs.readFileSync(target(root, 'content/pages/services.md'), 'utf8');
+  for (const [field, value] of [
+    ['kicker', 'Kompetens · syntetisk demo'],
+    ['panelEyebrow', 'Fyra delar i samma helhet'],
+    ['panelTitle', 'Kompetens med sammanhang.']
+  ]) {
+    assert.match(services, new RegExp(`^${field}:`, 'm'));
+    assert.ok(services.includes(value), `${field} should be rendered from the mapping`);
+  }
+  assert.match(services, /^## Bygga\n\nArkitektur, backend och integration\.$/m);
+  assert.match(services, /^### Lösningsarkitektur\n\nTeknisk riktning nära implementation\.$/m);
+  assert.match(services, /^### Backend och integration\n\nBackendutveckling, API:er och flöden mellan system\.$/m);
+  assert.match(services, /^## Leverera\n\nPlattform, drift och modernisering\.$/m);
+  assert.match(services, /^### Plattform och modernisering\n\nStabil leverans och stegvis utveckling av befintliga lösningar\.$/m);
+  assert.match(services, /^## Domän\n\nMiljöer där kraven är höga\.$/m);
+  assert.match(services, /^### Offentlig sektor och reglerade miljöer\n\nInformationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning\.$/m);
+  assert.doesNotMatch(services, /^## Systemdesign$/m);
+  const cv = fs.readFileSync(target(root, 'content/pages/cv.md'), 'utf8');
+  assert.doesNotMatch(cv, /Service hero evidence/);
+}));
+
+test('rejects nested service list evidence when mapped as a standalone source line', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const sourcePath = target(root, 'content/sources/master-cv.md');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const originalItem = '#### Lösningsarkitektur\nTeknisk riktning nära implementation.';
+  assert.ok(source.includes(originalItem), 'mapped source item should be present');
+  fs.writeFileSync(sourcePath, source.replace(
+    originalItem,
+    '#### Lösningsarkitektur\n- Arkitekturen formas av användningsfallet.\n  - Teknisk riktning nära implementation.'
+  ));
+
+  const mappingPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+  mapping.generatedPages.find(page => page.path === 'content/pages/services.md')
+    .competenceGroups[0].items[0].sourceLines = ['- Teknisk riktning nära implementation.'];
+  fs.writeFileSync(mappingPath, `${JSON.stringify(mapping, null, 2)}\n`);
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /nested list item cannot be mapped independently/i);
+}));
+
+test('requires source evidence for configured service hero metadata', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const mappingPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+  mapping.generatedPages.find(page => page.path === 'content/pages/services.md')
+    .panelTitle = 'Unsupported service promise.';
+  fs.writeFileSync(mappingPath, `${JSON.stringify(mapping, null, 2)}\n`);
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Services hero metadata lacks source evidence: panelTitle/);
+}));
+
+test('rejects grouped service evidence outside its mapped group and item', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const mappingPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+  const services = mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
+  services.competenceGroups[0].items[0].sourceLines = ['Plattform, drift och modernisering.'];
+  fs.writeFileSync(mappingPath, `${JSON.stringify(mapping, null, 2)}\n`);
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Services competence item lacks source evidence: Bygga \/ Lösningsarkitektur/);
+}));
+
+test('rejects grouped service headings outside the configured competence section', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const sourcePath = target(root, 'content/sources/master-cv.md');
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const movedGroups = groupedCompetenceSection.replace('## Kompetensområden\n\n', '');
+  fs.writeFileSync(sourcePath, source.replace(
+    groupedCompetenceSection,
+    `## Kompetensområden\n\nÖversikt över syntetiska kompetenser.\n\n## Extra material\n\n${movedGroups}`
+  ));
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Required source heading not found: ### Bygga/);
+}));
+
 test('generates project details with source-backed structure and reflowed prose', t => withFixture(t, root => {
   const sourcePath = target(root, 'content/sources/master-cv.md');
   const source = fs.readFileSync(sourcePath, 'utf8').replace('Kompass är ett planeringsverktyg', 'Kompass är ett `planeringsverktyg`');
@@ -739,6 +925,95 @@ test('generates project details with source-backed structure and reflowed prose'
       assert.ok(body.includes(heading), `${page} should contain ${heading}`);
     }
   }
+}));
+
+test('keeps legacy generated page bytes unchanged without project presentation opt-in', t => withFixture(t, root => {
+  const result = run(root, '--write');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  for (const page of generatedPages) {
+    assert.deepEqual(
+      fs.readFileSync(target(root, page)),
+      fs.readFileSync(target(syntheticFixturePath, page)),
+      `legacy output changed without presentation metadata: ${page}`
+    );
+  }
+}));
+
+test('generates and checks the checked-in synthetic project presentation fixture', t => withFixture(t, root => {
+  const generated = run(root, '--write');
+  assert.equal(generated.status, 0, generated.stderr || generated.stdout);
+
+  const checked = run(root, '--check');
+  assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  const output = fs.readFileSync(target(root, 'content/pages/projects/kompass.md'), 'utf8');
+  assert.match(output, /^order: 1$/m);
+  assert.match(output, /^period: "2026 - pågående"$/m);
+  assert.match(output, /^role: "Lead utvecklare för digitala tjänster"$/m);
+  assert.match(output, /^industry: "Föreningsliv"$/m);
+}, syntheticPresentationFixturePath));
+
+test('generates opt-in project facts from exact source evidence and applies editorial order', t => withFixture(t, root => {
+  const mapPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+  const project = mapping.generatedPages.find(page => page.path === 'content/pages/projects/kompass.md');
+  project.presentation = { order: 4, facts: ['period', 'role', 'industry'] };
+  fs.writeFileSync(mapPath, JSON.stringify(mapping, null, 2) + '\n');
+
+  const sourcePath = target(root, 'content/sources/master-cv.md');
+  let source = fs.readFileSync(sourcePath, 'utf8');
+  source = source.replace(
+    '**Roll:** Lead utvecklare för digitala tjänster',
+    '**Roll:** Lead utvecklare för digitala tjänster\n**Bransch:** Föreningsliv'
+  );
+  fs.writeFileSync(sourcePath, source);
+
+  const result = run(root, '--write');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = fs.readFileSync(target(root, project.path), 'utf8');
+  assert.match(output, /^order: 4$/m);
+  assert.match(output, /^period: "2026 - pågående"$/m);
+  assert.match(output, /^role: "Lead utvecklare för digitala tjänster"$/m);
+  assert.match(output, /^industry: "Föreningsliv"$/m);
+  assert.doesNotMatch(output, /^\*\*Period:\*\* 2026 - pågående$/m);
+  assert.doesNotMatch(output, /^\*\*Roll:\*\* Lead utvecklare för digitala tjänster$/m);
+}));
+
+test('rejects opt-in project facts without matching source evidence', t => withFixture(t, root => {
+  const mapPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+  mapping.generatedPages.find(page => page.path === 'content/pages/projects/kompass.md')
+    .presentation = { facts: ['industry'] };
+  fs.writeFileSync(mapPath, JSON.stringify(mapping, null, 2) + '\n');
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Project industry presentation lacks source evidence: Projekt Kompass/);
+}));
+
+test('accepts the greatest project presentation order below the unordered sentinel', t => withFixture(t, root => {
+  const mapPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+  mapping.generatedPages.find(page => page.path === 'content/pages/projects/kompass.md')
+    .presentation = { order: 2147483646 };
+  fs.writeFileSync(mapPath, JSON.stringify(mapping, null, 2) + '\n');
+
+  const result = run(root, '--write');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = fs.readFileSync(target(root, 'content/pages/projects/kompass.md'), 'utf8');
+  assert.match(output, /^order: 2147483646$/m);
+}));
+
+test('rejects the reserved unordered sentinel as a project presentation order', t => withFixture(t, root => {
+  const mapPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+  mapping.generatedPages.find(page => page.path === 'content/pages/projects/kompass.md')
+    .presentation = { order: 2147483647 };
+  fs.writeFileSync(mapPath, JSON.stringify(mapping, null, 2) + '\n');
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Project presentation order must be a non-negative integer below Int32\.MaxValue/);
 }));
 
 test('fails closed when a mapped project summary is missing from source evidence', t => withFixture(t, root => {
@@ -785,6 +1060,7 @@ test('fails closed when raw HTML could add another rendered H1', t => withFixtur
 
 test('rejects non-string scalar metadata values', t => withFixture(t, root => {
   const mapPath = target(root, 'content/source-map.json');
+  const baseline = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
   const cases = [
     ['content/pages/home.md', 'title', ['Array title']],
     ['content/pages/home.md', 'description', ['Array description']],
@@ -797,6 +1073,8 @@ test('rejects non-string scalar metadata values', t => withFixture(t, root => {
     ['content/pages/home.md', 'type', ['page']],
     ['content/pages/home.md', 'locale', ['sv-SE']],
     ['content/pages/home.md', 'status', ['published']],
+    ['content/pages/services.md', 'kicker', ['Array kicker']],
+    ['content/pages/services.md', 'panelTitle', 'Multiple\nlines'],
     ['content/pages/services.md', 'competenceBlocks', [
       { title: ['Array title'], sourceLines: ['- source'] }
     ]],
@@ -805,13 +1083,14 @@ test('rejects non-string scalar metadata values', t => withFixture(t, root => {
     ]]
   ];
   for (const [pagePath, field, invalidValue] of cases) {
-    const mapping = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+    const mapping = structuredClone(baseline);
     mapping.generatedPages.find(page => page.path === pagePath)[field] = invalidValue;
     fs.writeFileSync(mapPath, `${JSON.stringify(mapping, null, 2)}\n`);
     const result = run(root, '--validate-source');
     assert.notEqual(result.status, 0, `${pagePath}.${field} should reject ${JSON.stringify(invalidValue)}`);
+    assert.ok(result.stderr.includes(field), `failure should identify ${pagePath}.${field}: ${result.stderr}`);
     assert.match(result.stderr,
-      /must be a non-empty string|must be a string|links must be a non-empty string|must contain titled blocks|must contain string section/i);
+      /must be a non-empty string|must be a string|must be a non-empty single-line string|links must be a non-empty string|must contain titled blocks|must contain string section/i);
   }
 }));
 

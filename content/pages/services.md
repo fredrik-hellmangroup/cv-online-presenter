@@ -4,19 +4,42 @@ description: "Systemdesign och teknisk riktning med praktiskt fokus"
 locale: "sv-SE"
 status: "published"
 type: "page"
+kicker: "Kompetens · syntetisk demo"
+panelEyebrow: "Fyra delar i samma helhet"
+panelTitle: "Kompetens med sammanhang."
 source: "sources/master-cv.md"
 sourceSection: "Kompetensområden"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Kompetens
 
-## Systemdesign
+## Bygga
 
-- Systemdesign och teknisk riktning med praktiskt fokus
+Arkitektur, backend och integration.
 
-## API:er
+### Lösningsarkitektur
 
-- API:er och integrationsflöden med tydliga gränser
+Teknisk riktning nära implementation.
+
+### Backend och integration
+
+Backendutveckling, API:er och flöden mellan system.
+
+## Leverera
+
+Plattform, drift och modernisering.
+
+### Plattform och modernisering
+
+Stabil leverans och stegvis utveckling av befintliga lösningar.
+
+## Domän
+
+Miljöer där kraven är höga.
+
+### Offentlig sektor och reglerade miljöer
+
+Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning.
 
 [Läs hela CV:t](/cv)

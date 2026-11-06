@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Portfolio.Contracts;
+using Portfolio.Web;
 
 namespace Portfolio.Tests;
 
@@ -58,10 +59,11 @@ public sealed class ContactFormRouteTests
         using var client = factory.CreateClient();
         var response = await client.GetAsync("/contact");
         var html = await response.Content.ReadAsStringAsync();
+        var email = factory.Services.GetRequiredService<SiteContent>().Settings.ContactEmail!;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("class=\"contact-card\"", html);
-        Assert.Contains("href=\"mailto:demo@example.com?subject=Kaffe%20och%20en%20.NET-fr%C3%A5ga%3F&amp;body=", html);
+        Assert.Contains($"href=\"mailto:{email}?subject=Kaffe%20och%20en%20.NET-fr%C3%A5ga%3F&amp;body=", html);
         Assert.DoesNotContain("<form", html);
         Assert.DoesNotContain("challenges.cloudflare.com", html);
         var csp = response.Headers.GetValues("Content-Security-Policy").Single();
@@ -103,7 +105,7 @@ public sealed class ContactFormRouteTests
         Assert.True(response.StatusCode is HttpStatusCode.Found or HttpStatusCode.SeeOther, response.StatusCode.ToString());
         Assert.Contains("sent=1", response.Headers.Location?.OriginalString);
         var message = Assert.Single(sender.Sent);
-        Assert.Equal("demo@example.com", message.Recipient);
+        Assert.Equal(factory.Services.GetRequiredService<SiteContent>().Settings.ContactEmail, message.Recipient);
         Assert.Equal("anna@example.com", message.Email);
 
         var confirmation = await (await client.GetAsync("/contact?sent=1")).Content.ReadAsStringAsync();

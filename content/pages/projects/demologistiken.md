@@ -5,16 +5,17 @@ locale: "sv-SE"
 status: "published"
 type: "project"
 summary: "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått."
+order: 4
+period: "2017 – 2019"
+role: "Lösningsarkitekt (syntetiskt exempel)"
+industry: "Logistik"
 technologies: [".NET","Azure","RabbitMQ","SQL Server"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Demologistiken"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Demologistiken
-
-**Period:** 2017 – 2019
-**Roll:** Lösningsarkitekt (syntetiskt exempel)
 
 ## Sammanfattning
 

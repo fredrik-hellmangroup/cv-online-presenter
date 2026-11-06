@@ -1,5 +1,6 @@
 name: Manual production recovery
 
+# Redeploys a release tag that was already deployed successfully. It never builds from a branch.
 on:
   workflow_dispatch:
     inputs:
@@ -9,17 +10,16 @@ on:
         type: boolean
         default: false
       rollback_release_tag:
-        description: Optional existing vMAJOR.MINOR.PATCH or recovery/manual release tag to redeploy
-        required: false
+        description: Existing vMAJOR.MINOR.PATCH release tag to redeploy; it must have been deployed successfully before
+        required: true
         type: string
-        default: ''
       reconcile_pending:
         description: Explicitly confirm manual recovery of a previously pending production deployment
         required: false
         type: boolean
         default: false
 
-run-name: Manual production recovery from ${{ github.ref_name }}
+run-name: Manual production recovery to ${{ inputs.rollback_release_tag }}
 
 concurrency:
   group: production-deployment
@@ -48,42 +48,14 @@ jobs:
           if ($env:CONFIRM_PRODUCTION -ne 'true') {
             throw 'confirm_production must be enabled for manual production recovery.'
           }
-          if (
-            $env:ROLLBACK_RELEASE_TAG -and
-            $env:ROLLBACK_RELEASE_TAG -notmatch '^(?:v[0-9]+\.[0-9]+\.[0-9]+|recovery/manual-[0-9]+-[0-9]+)$'
-          ) {
-            throw 'rollback_release_tag must be empty or use a semantic release or recovery/manual tag.'
+          if ($env:ROLLBACK_RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw 'rollback_release_tag must be an existing vMAJOR.MINOR.PATCH release tag.'
           }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: inputs.rollback_release_tag == ''
-        with:
-          global-json-file: global.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: inputs.rollback_release_tag == ''
-        with:
-          node-version: 24
-      - if: inputs.rollback_release_tag == ''
-        run: npm ci --prefix client
-      - if: inputs.rollback_release_tag == ''
-        run: npm run build
-      - if: inputs.rollback_release_tag == ''
-        run: npm run build:metadata
-      - if: inputs.rollback_release_tag == ''
-        run: npm run validate:content
-      - if: inputs.rollback_release_tag == ''
-        run: dotnet restore CvOnlinePresenter.sln
-      - if: inputs.rollback_release_tag == ''
-        run: dotnet publish src/Portfolio.Web/Portfolio.Web.csproj --configuration Release --no-restore --output artifacts/publish
-      - name: Create manual production recovery package
-        if: inputs.rollback_release_tag == ''
-        shell: pwsh
-        run: Compress-Archive -Path 'artifacts/publish/*' -DestinationPath 'artifacts/manual-production-recovery.zip' -CompressionLevel Optimal
       - name: Download immutable rollback package
-        if: inputs.rollback_release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,11 +80,7 @@ jobs:
             throw "Rollback tag '$env:ROLLBACK_RELEASE_TAG' must point to a commit reachable from main."
           }
 
-          if ($env:ROLLBACK_RELEASE_TAG -match '^recovery/manual-([0-9]+-[0-9]+)$') {
-            $assetName = "cv-online-presenter-manual-$($Matches[1]).zip"
-          } else {
-            $assetName = "cv-online-presenter-$env:ROLLBACK_RELEASE_TAG.zip"
-          }
+          $assetName = "cv-online-presenter-$env:ROLLBACK_RELEASE_TAG.zip"
           $release = gh release view $env:ROLLBACK_RELEASE_TAG `
             --repo $env:GITHUB_REPOSITORY `
             --json assets | ConvertFrom-Json
@@ -158,75 +126,9 @@ jobs:
         run: |
           $digest = (Get-FileHash -LiteralPath 'artifacts/manual-production-recovery.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
           "sha256=$digest" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/manual-production-recovery.zip
-          if-no-files-found: error
-          retention-days: 14
-
-  archive_manual_recovery:
-    needs: package
-    if: inputs.rollback_release_tag == ''
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifact
-      - name: Publish recovery package at the packaged source commit
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          SOURCE_COMMIT: ${{ github.sha }}
-          PACKAGE_SHA256: ${{ needs.package.outputs.package_sha256 }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          $package = Join-Path 'artifact' 'manual-production-recovery.zip'
-          $archiveAssetName = "cv-online-presenter-manual-$($env:RUN_ID)-$($env:RUN_ATTEMPT).zip"
-          $archivePackage = Join-Path 'artifact' $archiveAssetName
-          if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') {
-            throw 'The packaged source commit is invalid.'
-          }
-          $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($digest -cne $env:PACKAGE_SHA256) {
-            throw 'Manual recovery source bytes do not match the package job SHA-256.'
-          }
-          $tag = "recovery/manual-$env:RUN_ID-$env:RUN_ATTEMPT"
-          $assetName = "cv-online-presenter-manual-$env:RUN_ID-$env:RUN_ATTEMPT.zip"
-          Copy-Item -LiteralPath $package -Destination $archivePackage
-          $sourceDigest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          $archivedBytesDigest = (Get-FileHash -LiteralPath $archivePackage -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($sourceDigest -cne $env:PACKAGE_SHA256 -or $archivedBytesDigest -cne $sourceDigest) {
-            throw 'Recovery archive bytes must exactly match the package job bytes and digest.'
-          }
-          gh release create $tag $archivePackage `
-            --repo $env:REPOSITORY `
-            --title $tag `
-            --notes 'Immutable production recovery package archived before manual-main deployment.' `
-            --target $env:SOURCE_COMMIT
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not publish immutable manual recovery release '$tag'."
-          }
-          $published = gh release view $tag --repo $env:REPOSITORY --json assets | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0) { throw "Could not verify manual recovery release '$tag'." }
-          $assets = @($published.assets | Where-Object { $_.name -ceq $assetName })
-          if ($assets.Count -ne 1 -or $assets[0].digest -cne "sha256:$sourceDigest") {
-            throw "Published recovery asset '$assetName' name/digest does not match the archived package."
-          }
 
   deploy:
-    needs: [package, archive_manual_recovery]
-    if: >-
-      ${{
-        always() &&
-        needs.package.result == 'success' &&
-        (needs.archive_manual_recovery.result == 'success' || needs.archive_manual_recovery.result == 'skipped')
-      }}
+    needs: package
     runs-on: windows-latest
     timeout-minutes: 20
     environment:
@@ -252,14 +154,11 @@ jobs:
           path: production-state
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: manual-production-recovery-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifact
       - name: Ensure verified Microsoft Web Deploy is available
         shell: pwsh
         run: .\scripts\ensure-webdeploy.ps1 -InstallerPath (Join-Path $env:RUNNER_TEMP 'WebDeploy_amd64_en-US.msi')
-      # The runner durably commits pending-v1.json before its first sync, then updates LKG/clears pending only after verification.
+      # The runner proves the tag was verified live before (production-state history), downloads and digest-checks the
+      # immutable release asset, commits pending-v1.json before its first sync, and updates LKG/clears pending only after verification.
       - name: Deploy, verify, and reconcile pending/LKG state
         shell: pwsh
         env:
@@ -267,13 +166,10 @@ jobs:
           SOURCE_TAG: ${{ inputs.rollback_release_tag }}
           SOURCE_COMMIT: ${{ github.sha }}
           PACKAGE_SHA256: ${{ needs.package.outputs.package_sha256 }}
-          MANUAL_MAIN: ${{ inputs.rollback_release_tag == '' }}
           RECONCILE_PENDING: ${{ inputs.reconcile_pending }}
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          $package = Join-Path 'artifact' 'manual-production-recovery.zip'
           $arguments = @{
-            PackagePath = $package
             StateDirectory = 'production-state'
             StateRecordPath = 'state-record/lkg-v1.json'
             ExpectedPackageSha256 = $env:PACKAGE_SHA256
@@ -281,6 +177,5 @@ jobs:
             SourceCommit = $env:SOURCE_COMMIT
             SourceTag = $env:SOURCE_TAG
           }
-          if ($env:MANUAL_MAIN -eq 'true') { $arguments['ManualMain'] = $true }
           if ($env:RECONCILE_PENDING -eq 'true') { $arguments['AllowPendingRecovery'] = $true }
           .\scripts\run-production-deployment.ps1 @arguments

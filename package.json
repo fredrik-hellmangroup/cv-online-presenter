@@ -2,9 +2,9 @@
   "name": "cv-online-presenter",
   "private": true,
   "devDependencies": {
-    "ajv": "8.17.1",
+    "ajv": "8.20.0",
     "gray-matter": "4.0.3",
-    "markdown-it": "14.1.0"
+    "markdown-it": "14.3.3"
   },
   "scripts": {
     "check:architecture": "node scripts/check-module-boundaries.mjs",

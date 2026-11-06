@@ -5,16 +5,17 @@ locale: "sv-SE"
 status: "published"
 type: "project"
 summary: "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall."
+order: 2
+period: "2021 – 2023"
+role: "Backendutvecklare (syntetiskt exempel)"
+industry: "Offentlig sektor"
 technologies: [".NET","SQL Server","RabbitMQ","GitHub Actions"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Demoportalen"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Demoportalen
-
-**Period:** 2021 – 2023
-**Roll:** Backendutvecklare (syntetiskt exempel)
 
 ## Sammanfattning
 

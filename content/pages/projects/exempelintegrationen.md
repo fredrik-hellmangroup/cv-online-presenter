@@ -5,16 +5,17 @@ locale: "sv-SE"
 status: "published"
 type: "project"
 summary: "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
+order: 3
+period: "2019 – 2021"
+role: "Integrationsutvecklare (syntetiskt exempel)"
+industry: "Systemintegration"
 technologies: ["REST","gRPC","Docker","Bicep"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Exempelintegrationen"
-sourceSha256: "1e3456c958924a18a69e57c39db95ceef5fb1b3ad9997fc7b97c5df48ecffacc"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
 
 # Exempelintegrationen
-
-**Period:** 2019 – 2021
-**Roll:** Integrationsutvecklare (syntetiskt exempel)
 
 ## Sammanfattning
 

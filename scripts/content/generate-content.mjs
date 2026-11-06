@@ -14,6 +14,9 @@ const TRANSACTION_TEMP_PATH = `${TRANSACTION_PATH}.tmp`;
 const GENERATION_LOCK_PATH = '.cv-generation.lock';
 const SOURCE_PATH = 'content/sources/master-cv.md';
 const PROJECT_PAGE_PATH_PATTERN = /^content\/pages\/projects\/[a-z0-9]+(?:-[a-z0-9]+)*\.md$/u;
+const SERVICE_HERO_FIELDS = Object.freeze(['kicker', 'panelEyebrow', 'panelTitle']);
+const PROJECT_FACT_FIELDS = Object.freeze(['period', 'role', 'industry']);
+const MAX_PROJECT_ORDER = 2147483646;
 const WINDOWS_RESERVED_PROJECT_SLUGS = new Set([
   'con', 'prn', 'aux', 'nul',
   ...Array.from({ length: 9 }, (_, index) => `com${index + 1}`),
@@ -46,6 +49,16 @@ const EXCLUDED_PATHS = new Set([
 const normalizeText = value => value.replace(/\r\n?/g, '\n');
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const readText = relativePath => normalizeText(readRepositoryFile(relativePath).toString('utf8'));
+const isNonEmptySingleLine = value => typeof value === 'string' && value.trim().length > 0 &&
+  !/[\r\n\v\f\u0085\u2028\u2029]/u.test(value);
+const hasNonEmptySingleLineItems = value => Array.isArray(value) && value.length > 0 &&
+  value.every(isNonEmptySingleLine);
+const isCompetenceGroup = group => Boolean(group) && typeof group === 'object' &&
+  !Array.isArray(group) && isNonEmptySingleLine(group.title) &&
+  hasNonEmptySingleLineItems(group.sourceLines) &&
+  Array.isArray(group.items) && group.items.length > 0 &&
+  group.items.every(item => Boolean(item) && typeof item === 'object' && !Array.isArray(item) &&
+    isNonEmptySingleLine(item.title) && hasNonEmptySingleLineItems(item.sourceLines));
 const fail = message => {
   throw new Error(message);
 };
@@ -263,6 +276,36 @@ function extractSection(source, title, level) {
   return lines.slice(start, end).join('\n').trim();
 }
 
+function extractDirectHeadingBody(source, title, level) {
+  const lines = source.split('\n');
+  const tokens = markdownParser.parse(source, {});
+  const matches = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type === 'heading_open' && token.level === 0 &&
+        Number(token.tag.slice(1)) === level && tokens[index + 1]?.content === title) {
+      matches.push(index);
+    }
+  }
+  if (matches.length === 0) fail(`Required source heading not found: ${'#'.repeat(level)} ${title}`);
+  if (matches.length > 1) {
+    fail(`Ambiguous source section heading appears more than once: ${'#'.repeat(level)} ${title}`);
+  }
+
+  const heading = tokens[matches[0]];
+  if (!heading.map) fail(`Cannot locate source body for heading: ${'#'.repeat(level)} ${title}`);
+  const start = heading.map[1];
+  let end = lines.length;
+  for (let index = matches[0] + 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type === 'heading_open' && token.level === 0 && token.map?.[0] > heading.map[0]) {
+      end = token.map[0];
+      break;
+    }
+  }
+  return lines.slice(start, end).join('\n');
+}
+
 function projectSourceHeading(page, headings) {
   const sourceParts = page.sourceSection.split('/').map(part => part.trim());
   if (sourceParts.length !== 2 || sourceParts[0] !== headings.projectHistory) {
@@ -450,7 +493,10 @@ function projectEvidence(page, source, headings) {
   const preResult = sectionLines.slice(1, resultIndex);
   const period = preResult.map(visibleMarkdownText).find(line => /^Period:\s*\S/u.test(line));
   const role = preResult.map(visibleMarkdownText).find(line => /^Roll:\s*\S/u.test(line));
-  const contentLines = preResult.filter(line => !/^\*\*(Period|Roll):\*/u.test(line));
+  const industry = preResult.map(visibleMarkdownText).find(line => /^Bransch:\s*\S/u.test(line));
+  const publishesIndustry = page.presentation?.facts?.includes('industry') === true;
+  const contentLines = preResult.filter(line => !/^\*\*(Period|Roll):\*/u.test(line) &&
+    !(publishesIndustry && /^\*\*Bransch:\*/u.test(line)));
   const firstResponsibility = contentLines.findIndex(line => /^\s*[-*+]\s+/u.test(line));
   const summaryLines = firstResponsibility < 0 ? [] : contentLines.slice(0, firstResponsibility);
   const responsibilityLines = firstResponsibility < 0 ? [] : contentLines.slice(firstResponsibility);
@@ -464,6 +510,7 @@ function projectEvidence(page, source, headings) {
     section,
     period: period?.match(/^Period:\s*(.+)$/u)?.[1]?.trim(),
     role: role?.match(/^Roll:\s*(.+)$/u)?.[1]?.trim(),
+    industry: industry?.match(/^Bransch:\s*(.+)$/u)?.[1]?.trim(),
     summary: visibleMarkdownOutput(summary),
     summaryEvidence: visibleMarkdownOutput(summary),
     responsibilities: visibleMarkdownOutput(responsibilities),
@@ -524,19 +571,27 @@ function validateSource(source, mapping, cvSections, headings) {
   }
   const services = mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
   const competence = extractSection(source, headings.competenceAreas, 2);
-  const competenceLines = new Set(linesOutsideCodeBlocks(competence)
-    .map(line => visibleMarkdownOutput(line).trim()).filter(Boolean));
-  if (!Array.isArray(services.competenceBlocks) || services.competenceBlocks.length === 0) {
-    fail('Services must define source-backed competence blocks.');
-  }
-  for (const block of services.competenceBlocks) {
-    const visibleSourceLines = block.sourceLines.map(line => visibleMarkdownOutput(line).trim());
-    if (!block.title || !Array.isArray(block.sourceLines) || block.sourceLines.length === 0 ||
-        visibleSourceLines.some(line => !line || !competenceLines.has(line))) {
-      fail(`Services competence block lacks source evidence: ${block.title ?? '(untitled)'}.`);
+  if (services.competenceGroups !== undefined) {
+    mapServiceCompetenceGroups(services, source, headings);
+  } else {
+    const competenceLines = new Set(linesOutsideCodeBlocks(competence)
+      .map(line => visibleMarkdownOutput(line).trim()).filter(Boolean));
+    for (const block of services.competenceBlocks) {
+      const visibleSourceLines = block.sourceLines.map(line => visibleMarkdownOutput(line).trim());
+      if (!block.title || !Array.isArray(block.sourceLines) || block.sourceLines.length === 0 ||
+          visibleSourceLines.some(line => !line || !competenceLines.has(line))) {
+        fail(`Services competence block lacks source evidence: ${block.title ?? '(untitled)'}.`);
+      }
+      if (!visibleMarkdownText(competence).toLowerCase().includes(normalizeEvidence(block.title).toLowerCase())) {
+        fail(`Services competence block title lacks source evidence: ${block.title}.`);
+      }
     }
-    if (!visibleMarkdownText(competence).toLowerCase().includes(normalizeEvidence(block.title).toLowerCase())) {
-      fail(`Services competence block title lacks source evidence: ${block.title}.`);
+  }
+  const visibleSource = visibleMarkdownText(source).toLowerCase();
+  for (const field of SERVICE_HERO_FIELDS) {
+    if (services[field] !== undefined &&
+        !visibleSource.includes(normalizeEvidence(services[field]).toLowerCase())) {
+      fail(`Services hero metadata lacks source evidence: ${field}.`);
     }
   }
   const projects = mapping.generatedPages.find(page => page.path === 'content/pages/projects.md');
@@ -552,6 +607,9 @@ function validateSource(source, mapping, cvSections, headings) {
     const heading = projectSourceHeading(page, headings);
     if (page.title !== heading) fail(`Project title must exactly match its canonical source heading: ${page.path}.`);
     const evidence = projectEvidence(page, source, headings);
+    for (const field of page.presentation?.facts ?? []) {
+      if (!evidence[field]) fail(`Project ${field} presentation lacks source evidence: ${heading}.`);
+    }
     if (!evidence.period || !evidence.role || !evidence.summaryEvidence || !evidence.responsibilitiesEvidence ||
         !evidence.resultEvidence || evidence.technologies.length === 0) {
       fail(`Project source is missing period, role, summary, responsibilities, result or technologies: ${heading}.`);
@@ -597,6 +655,63 @@ function linesOutsideCodeBlocks(markdown) {
   return lines.filter((_, index) => !codeLines.has(index));
 }
 
+function mappedServiceSourceLines(sourceLines, sourceBody, message) {
+  const evidence = new Set(linesOutsideCodeBlocks(sourceBody)
+    .map(line => visibleMarkdownOutput(line).trim()).filter(Boolean));
+  const nestedListEvidence = new Set();
+  let listDepth = 0;
+  for (const token of markdownParser.parse(sourceBody, {})) {
+    if (token.type === 'bullet_list_open' || token.type === 'ordered_list_open') {
+      listDepth += 1;
+    } else if (token.type === 'bullet_list_close' || token.type === 'ordered_list_close') {
+      listDepth -= 1;
+    } else if (token.type === 'inline' && listDepth > 1) {
+      const text = inlineVisibleText(token.children ?? []);
+      if (text) nestedListEvidence.add(text);
+    }
+  }
+  const rendered = sourceLines.map(line => visibleMarkdownOutput(line).trim());
+  if (sourceLines.some(line => nestedListEvidence.has(visibleMarkdownText(line)))) {
+    fail(`${message} A nested list item cannot be mapped independently.`);
+  }
+  if (rendered.some(line => !line || !evidence.has(line))) fail(message);
+  return rendered;
+}
+
+function mapServiceCompetenceGroups(page, source, headings) {
+  const competence = extractSection(source, headings.competenceAreas, 2);
+  const seenGroups = new Set();
+  return page.competenceGroups.map(group => {
+    const normalizedGroupTitle = group.title.normalize('NFC').trim().toLowerCase();
+    if (seenGroups.has(normalizedGroupTitle)) fail(`Duplicate services competence group: ${group.title}.`);
+    seenGroups.add(normalizedGroupTitle);
+
+    const groupSection = extractSection(competence, group.title, 3);
+    const groupLines = mappedServiceSourceLines(
+      group.sourceLines,
+      extractDirectHeadingBody(groupSection, group.title, 3),
+      `Services competence group lacks source evidence: ${group.title}.`
+    );
+    const seenItems = new Set();
+    const items = group.items.map(item => {
+      const normalizedItemTitle = item.title.normalize('NFC').trim().toLowerCase();
+      if (seenItems.has(normalizedItemTitle)) {
+        fail(`Duplicate services competence item in '${group.title}': ${item.title}.`);
+      }
+      seenItems.add(normalizedItemTitle);
+
+      const itemSection = extractSection(groupSection, item.title, 4);
+      const sourceLines = mappedServiceSourceLines(
+        item.sourceLines,
+        extractDirectHeadingBody(itemSection, item.title, 4),
+        `Services competence item lacks source evidence: ${group.title} / ${item.title}.`
+      );
+      return { title: item.title, sourceLines };
+    });
+    return { title: group.title, sourceLines: groupLines, items };
+  });
+}
+
 function validateMapping(mapping, supportedLocales) {
   if (mapping.version !== 1 || mapping.source !== SOURCE_PATH) fail('Unsupported source-map version or source path.');
   if (!Array.isArray(mapping.generatedPages) || mapping.generatedPages.length === 0) {
@@ -632,8 +747,34 @@ function validateMapping(mapping, supportedLocales) {
     for (const field of ['path', 'type', 'title', 'description', 'locale', 'status']) {
       if (typeof page[field] !== 'string' || !page[field].trim()) fail(`Mapping metadata ${field} must be a non-empty string.`);
     }
-    for (const field of ['sourceSection', 'heroTagline', 'summary', 'links', 'sourceHeading']) {
+    for (const field of [
+      'sourceSection', 'heroTagline', 'summary', 'links', 'sourceHeading',
+      ...SERVICE_HERO_FIELDS
+    ]) {
       if (page[field] !== undefined && typeof page[field] !== 'string') fail(`Mapping metadata ${field} must be a string.`);
+    }
+    if (page.path !== 'content/pages/services.md' &&
+        ['competenceBlocks', 'competenceGroups', ...SERVICE_HERO_FIELDS]
+          .some(field => Object.hasOwn(page, field))) {
+      fail(`Service competence and hero metadata are only allowed for content/pages/services.md: ${page.path}.`);
+    }
+    if (page.presentation !== undefined) {
+      const presentation = page.presentation;
+      if (page.type !== 'project' || !presentation || typeof presentation !== 'object' ||
+          Array.isArray(presentation) || Object.keys(presentation).length === 0 ||
+          Object.keys(presentation).some(field => !['order', 'facts'].includes(field))) {
+        fail(`Project presentation metadata is only allowed as a non-empty object on project pages: ${page.path}.`);
+      }
+      if (presentation.order !== undefined &&
+          (!Number.isSafeInteger(presentation.order) || presentation.order < 0 || presentation.order > MAX_PROJECT_ORDER)) {
+        fail(`Project presentation order must be a non-negative integer below Int32.MaxValue: ${page.path}.`);
+      }
+      if (presentation.facts !== undefined &&
+          (!Array.isArray(presentation.facts) || presentation.facts.length === 0 ||
+            presentation.facts.some(field => !PROJECT_FACT_FIELDS.includes(field)) ||
+            new Set(presentation.facts).size !== presentation.facts.length)) {
+        fail(`Project presentation facts must be a non-empty unique list of supported facts: ${page.path}.`);
+      }
     }
     if ((editorialPagePaths.has(page.path) && page.type !== 'page') ||
         (!editorialPagePaths.has(page.path) && page.type !== 'project')) {
@@ -649,6 +790,16 @@ function validateMapping(mapping, supportedLocales) {
           typeof block.title !== 'string' || !block.title.trim() ||
           !Array.isArray(block.sourceLines) || block.sourceLines.some(line => typeof line !== 'string')))) {
       fail('Mapping metadata competenceBlocks must contain titled blocks with string sourceLines.');
+    }
+    if (page.competenceGroups !== undefined &&
+        (!Array.isArray(page.competenceGroups) ||
+          page.competenceGroups.some(group => !isCompetenceGroup(group)))) {
+      fail('Mapping metadata competenceGroups must contain titled groups and items with non-empty single-line sourceLines.');
+    }
+    for (const field of SERVICE_HERO_FIELDS) {
+      if (page[field] !== undefined && !isNonEmptySingleLine(page[field])) {
+        fail(`Mapping metadata ${field} must be a non-empty single-line string.`);
+      }
     }
     if (page.selectedProjects !== undefined &&
         (!Array.isArray(page.selectedProjects) || page.selectedProjects.some(project =>
@@ -696,8 +847,16 @@ function validateMapping(mapping, supportedLocales) {
   const home = mapping.generatedPages.find(page => page.path === 'content/pages/home.md');
   if (typeof home.heroTagline !== 'string' || !home.heroTagline.trim()) fail('Home hero metadata must include a source-backed tagline.');
   const services = mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
-  if (!Array.isArray(services.competenceBlocks) || services.competenceBlocks.length === 0) {
+  const hasFlatCompetencies = services.competenceBlocks !== undefined;
+  const hasGroupedCompetencies = services.competenceGroups !== undefined;
+  if (hasFlatCompetencies === hasGroupedCompetencies) {
+    fail('Services must define exactly one of competenceBlocks or competenceGroups.');
+  }
+  if (hasFlatCompetencies && services.competenceBlocks.length === 0) {
     fail('Services must define competence blocks.');
+  }
+  if (hasGroupedCompetencies && services.competenceGroups.length === 0) {
+    fail('Services must define competence groups.');
   }
   const projects = mapping.generatedPages.find(page => page.path === 'content/pages/projects.md');
   if (!Array.isArray(projects.selectedProjects) || projects.selectedProjects.length === 0 ||
@@ -719,6 +878,7 @@ function validateMapping(mapping, supportedLocales) {
 function yamlValue(value) {
   if (typeof value === 'string') return JSON.stringify(value);
   if (Array.isArray(value) && value.every(item => typeof item === 'string')) return JSON.stringify(value);
+  if (Number.isSafeInteger(value)) return String(value);
   fail('Mapping metadata values must be strings or arrays of strings.');
 }
 
@@ -730,10 +890,18 @@ function frontMatter(page, sourceHash, source, headings) {
     status: page.status,
     type: page.type
   };
+  for (const field of SERVICE_HERO_FIELDS) {
+    if (page[field] !== undefined) fields[field] = page[field];
+  }
   for (const field of ['summary', 'links']) {
     if (page[field] !== undefined) fields[field] = page[field];
   }
-  if (page.type === 'project') fields.technologies = projectEvidence(page, source, headings).technologies;
+  if (page.type === 'project') {
+    const evidence = projectEvidence(page, source, headings);
+    if (page.presentation?.order !== undefined) fields.order = page.presentation.order;
+    for (const fact of page.presentation?.facts ?? []) fields[fact] = evidence[fact];
+    fields.technologies = evidence.technologies;
+  }
   fields.source = 'sources/master-cv.md';
   if (page.sourceSection) fields.sourceSection = page.sourceSection;
   fields.sourceSha256 = sourceHash;
@@ -801,6 +969,18 @@ function pageBody(page, source, cvSections, headings) {
     return `# ${name}\n\n${role}\n\n${page.heroTagline}`;
   }
   if (page.path === 'content/pages/services.md') {
+    if (page.competenceGroups !== undefined) {
+      const groups = mapServiceCompetenceGroups(page, source, headings).map(group => {
+        const items = group.items.map(item => `### ${item.title}\n\n${item.sourceLines.join('\n')}`);
+        return [
+          `## ${group.title}`,
+          '',
+          group.sourceLines.join('\n'),
+          ...items.flatMap(item => ['', item])
+        ].join('\n');
+      });
+      return `# ${page.title}\n\n${groups.join('\n\n')}\n\n[Läs hela CV:t](/cv)`;
+    }
     const sourceLines = new Set(linesOutsideCodeBlocks(extractSection(source, headings.competenceAreas, 2))
       .map(line => visibleMarkdownOutput(line).trim()).filter(Boolean));
     const blocks = page.competenceBlocks.map(block => {
@@ -820,12 +1000,16 @@ function pageBody(page, source, cvSections, headings) {
     return `# ${page.title}\n\n## ${headings.selectedProjects}\n\n${selected.join('\n')}`;
   }
   const project = projectEvidence(page, source, headings);
-  return [
+  const presentationFacts = new Set(page.presentation?.facts ?? []);
+  const bodyFacts = [
+    ...(!presentationFacts.has('period') ? [`**Period:** ${project.period}`] : []),
+    ...(!presentationFacts.has('role') ? [`**Roll:** ${project.role}`] : [])
+  ];
+  const output = [
     `# ${page.title}`,
     '',
-    `**Period:** ${project.period}`,
-    `**Roll:** ${project.role}`,
-    '',
+    ...bodyFacts,
+    ...(bodyFacts.length > 0 ? [''] : []),
     `## ${headings.projectSummary}`,
     '',
     project.summary,
@@ -843,7 +1027,8 @@ function pageBody(page, source, cvSections, headings) {
     project.technologies.map(technology => `- ${technology}`).join('\n'),
     '',
     '[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)'
-  ].join('\n');
+  ];
+  return output.join('\n');
 }
 
 function countMarkdownH1s(markdown) {

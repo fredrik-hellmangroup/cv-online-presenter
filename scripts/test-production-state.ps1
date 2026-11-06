@@ -94,20 +94,6 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
             }
             $callLog.Add('validate')
         }.GetNewClosure()
-        ArchiveCandidate = {
-            param($candidate)
-            $callLog.Add('archive')
-            return [PSCustomObject]@{
-                sourceTag = $null
-                commit = $candidate.commit
-                appRevision = $candidate.appRevision
-                contentRevision = $candidate.contentRevision
-                buildId = $candidate.buildId
-                packageSha256 = $candidate.packageSha256
-                releaseTag = 'recovery/manual-2-1'
-                assetName = 'cv-online-presenter-manual-2-1.zip'
-            }
-        }.GetNewClosure()
         SyncCandidate = {
             param($candidate)
             $callLog.Add('syncCandidate')
@@ -164,6 +150,7 @@ function New-Ops($State, $RollbackPath, [hashtable]$Flags = @{}) {
                 throw 'push rejected'
             }
             $pendingBox.value = $null
+            if ($Flags.noisyWriteState) { '[production-state abc123] production-state: record verified live artifact' }
             return New-LkgRecord `
                 -Artifact $candidate `
                 -VerifiedAtUtc '2026-01-02T00:00:00Z' `
@@ -320,44 +307,21 @@ try {
         $result = Invoke-LkgDeployment $ops $state.artifact
         Assert-True ($result.Record.artifact.releaseTag -eq $state.artifact.releaseTag) 'rollback artifact was not candidate LKG'
     }
-    Test-Case 'manual-main LKG has nullable source tag and recovery locator' {
-        $manual = [PSCustomObject]@{
-            sourceTag = $null
-            commit = 'c' * 40
-            appRevision = 'c' * 40
-            contentRevision = 'd' * 40
-            buildId = '88'
-            packageSha256 = $candidate.packageSha256
-            releaseTag = 'recovery/manual-88-1'
-            assetName = 'cv-online-presenter-manual-88-1.zip'
-        }
-        $record = New-LkgRecord `
-            -Artifact $manual `
-            -VerifiedAtUtc '2026-01-03T00:00:00Z' `
-            -Workflow 'Manual production recovery' `
-            -RunId '88' `
-            -RunAttempt '1'
-        Assert-True ($null -eq $record.artifact.sourceTag) 'manual-main source tag must be null'
-        Assert-True ($record.artifact.releaseTag -eq $manual.releaseTag) 'recovery locator missing'
+    Test-Case 'a source-tagless LKG is rejected' {
+        $tagless = New-Artifact $candidatePath 'v1.0.2'
+        $tagless.sourceTag = $null
+        Assert-Throws {
+            New-LkgRecord -Artifact $tagless -VerifiedAtUtc '2026-01-03T00:00:00Z' -Workflow 'release.yml' -RunId '88' -RunAttempt '1'
+        } 'sourceTag is invalid'
     }
-    Test-Case 'manual-main archive precedes deployment and record update' {
-        $ops = New-Ops $state $rollbackPath
-        $result = Invoke-LkgDeployment $ops $candidate -ArchiveCandidateBeforeDeploy
-        Assert-True ($script:calls.IndexOf('archive') -lt $script:calls.IndexOf('setPending')) 'archive was not validated before pending write'
-        Assert-True ($script:calls.IndexOf('setPending') -lt $script:calls.IndexOf('syncCandidate')) 'pending was not committed before deploy'
-        Assert-True ($script:calls[-1] -eq 'writeState') 'record not updated'
-        Assert-True ($null -eq $result.Record.artifact.sourceTag) 'manual-main source tag is not null'
-        Assert-True ($result.Record.artifact.releaseTag -eq 'recovery/manual-2-1') 'manual archive locator was not recorded'
-    }
-    Test-Case 'manual-main deployment failure does not update LKG' {
-        $ops = New-Ops $state $rollbackPath @{ syncFail = $true }
-        Assert-Throws { Invoke-LkgDeployment $ops $candidate -ArchiveCandidateBeforeDeploy } 'sync failed'
-        Assert-True (-not ($script:calls -contains 'writeState')) 'LKG updated after failed manual-main deploy'
-    }
-    Test-Case 'archive callback required for manual-main' {
-        $ops = New-Ops $state $rollbackPath
-        $ops.Remove('ArchiveCandidate')
-        Assert-Throws { Invoke-LkgDeployment $ops $candidate -ArchiveCandidateBeforeDeploy } 'archive operation'
+    Test-Case 'manual recovery only accepts a tag and package bytes recorded as verified live' {
+        $deployedRecord = New-LkgRecord -Artifact $candidate -VerifiedAtUtc '2026-01-03T00:00:00Z' -Workflow 'release.yml' -RunId '9' -RunAttempt '1'
+        $history = @(($state | ConvertTo-Json -Depth 8), ($deployedRecord | ConvertTo-Json -Depth 8), 'not json')
+        Assert-TagPreviouslyDeployed -Tag 'v1.0.2' -PackageSha256 $candidate.packageSha256 -HistoricalRecordJson $history
+        Assert-TagPreviouslyDeployed -Tag 'v1.0.1' -PackageSha256 "sha256:$($state.artifact.packageSha256)" -HistoricalRecordJson $history
+        Assert-Throws { Assert-TagPreviouslyDeployed -Tag 'v1.0.9' -PackageSha256 $candidate.packageSha256 -HistoricalRecordJson $history } 'never recorded as successfully deployed'
+        Assert-Throws { Assert-TagPreviouslyDeployed -Tag 'v1.0.2' -PackageSha256 ('f' * 64) -HistoricalRecordJson $history } 'never recorded as successfully deployed'
+        Assert-Throws { Assert-TagPreviouslyDeployed -Tag 'v1.0.2' -PackageSha256 $candidate.packageSha256 -HistoricalRecordJson @() } 'never recorded as successfully deployed'
     }
     Test-Case 'persistent 503 is surfaced for provider escalation without app-pool operation' {
         $ops = New-Ops $state $rollbackPath @{ http503 = $true }
@@ -372,6 +336,12 @@ try {
         Assert-True ($state.artifact.packageSha256 -eq $script:testPendingBox.value.prior) 'failed state write advanced the old LKG pointer'
         Assert-True ($script:calls.IndexOf('verifyCandidate') -lt $script:calls.IndexOf('writeState')) 'state write preceded verification'
         Assert-True (-not ($script:calls -contains 'syncRollback')) 'state failure triggered rollback'
+    }
+    Test-Case 'stray pipeline output from the state write does not hide the LKG record' {
+        $ops = New-Ops $state $rollbackPath @{ noisyWriteState = $true }
+        $result = Invoke-LkgDeployment $ops $candidate
+        Assert-True ($result.Status -eq 'DeployedAndRecorded') 'noisy state write was not recorded as deployed'
+        Assert-True ($result.Record.artifact.packageSha256 -ceq $candidate.packageSha256) 'LKG record was not the candidate artifact'
     }
     Test-Case 'ambiguous state write fails distinctly and asks reconciliation' {
         $ops = New-Ops $state $rollbackPath @{ stateFail = $true }
@@ -481,16 +451,18 @@ try {
         Assert-True ($release.Contains('contents: read') -and $release.Contains('contents: write')) 'release write scope is not isolated'
 
         $manual = Get-Content -LiteralPath (Join-Path $repoRoot '.github/workflows/manual-production-recovery.yml') -Raw
-        Assert-True ($manual.Contains('archive_manual_recovery:')) 'manual-main recovery publication is not isolated'
-        Assert-True ($manual.Contains('--target $env:SOURCE_COMMIT')) 'manual recovery tag does not point to the packaged source commit'
-        Assert-True ($manual.Contains('recovery/manual-')) 'manual recovery prefix is missing'
-        Assert-True (-not $manual.Contains('tags: ["recovery/**"]')) 'recovery tags must not trigger automatic deployment'
+        Assert-True ($manual.Contains('rollback_release_tag:') -and $manual.Contains('required: true')) 'manual recovery must require a release tag'
+        Assert-True ($manual.Contains("'^v[0-9]+\.[0-9]+\.[0-9]+$'")) 'manual recovery must only accept vMAJOR.MINOR.PATCH tags'
+        Assert-True (-not ($manual -match 'recovery/manual|archive_manual_recovery|MANUAL_MAIN|ManualMain|npm run build|dotnet publish')) 'manual recovery must not build or archive anything from main'
+        Assert-True ($manual.Contains("Mode = 'manual'")) 'manual recovery must run the runner in manual mode'
 
         $runner = Get-Content -LiteralPath (Join-Path $repoRoot 'scripts/run-production-deployment.ps1') -Raw
+        Assert-True (-not ($runner -match 'ManualMain|recovery/manual|ArchiveCandidate|\$PackagePath\b')) 'the runner must only deploy immutable release tags'
+        Assert-True ($runner.Contains('Assert-TagPreviouslyDeployed')) 'manual recovery must prove the tag was deployed before'
         Assert-True ($runner.Contains('"refs/tags/${SourceTag}:refs/tags/${SourceTag}"')) 'source-tag fetch refspec must use unambiguous PowerShell interpolation'
         Assert-True ($runner.Contains('ExpectedPackageSha256')) 'deployment runner does not accept a package-job digest'
         Assert-True ($runner.Contains('$published.digest -cne $ExpectedPackageSha256.ToLowerInvariant()')) 'release package digest is not compared with the package-job digest'
-        Assert-True ($runner.Contains('Assert-PackageSha256 -Path $resolvedPackagePath -ExpectedSha256 $ExpectedPackageSha256')) 'manual package bytes are not bound to the package-job digest'
+        Assert-True ($runner.Contains('Assert-PackageSha256 -Path $published.path -ExpectedSha256 $ExpectedPackageSha256')) 'release package bytes are not bound to the package-job digest'
         Assert-True ($runner.Contains('ReadPending')) 'deployment runner does not check durable pending state.'
         Assert-True ($runner.Contains('Invoke-StateBranchCommit')) 'state writes are not durable non-force pushes.'
         Assert-True ($runner.Contains('HEAD:production-state')) 'state writes do not use compare-and-swap branch updates.'

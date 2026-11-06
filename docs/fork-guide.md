@@ -15,8 +15,11 @@ Keep the real content in a separate private repository with its own
 `content/` tree. Use the public template and
 [`source-map.example.json`](source-map.example.json) only as format references.
 The example's zero bootstrap hashes and fictional text must be replaced before
-execution. Keep the source map and `master-cv.md` private along with the
-generated provenance.
+execution; service group/item lines and optional hero labels must be adapted
+to visible evidence in the private canonical source or omitted. Project
+`presentation` facts are also optional and must match labeled source evidence.
+Keep the source map and `master-cv.md` private along with the generated
+provenance.
 
 Before the first write:
 
@@ -27,12 +30,30 @@ Before the first write:
    `bootstrapOutputSha256` path set.
 4. Put each project under the configured project-history H2, with a unique
    project H3 and the configured result/keyword H4s. Ensure source-map
-   `sourceSection` names both parent and child headings.
-5. Run the pinned generator and both content validators; review the private
+   `sourceSection` names both parent and child headings. Include visible
+   `Period:` and `Roll:` lines before the result H4; add `Bransch:` if you
+   select the `industry` fact.
+5. For services, choose exactly one mapping: backward-compatible flat
+   `competenceBlocks` or nested `competenceGroups`. In the grouped form, source
+   H3s under the configured competence-area H2 are groups; H4s beneath each
+   group are items. Map each group's and item's direct visible source lines.
+   `kicker`, `panelEyebrow`, and `panelTitle` are optional services
+   front-matter fields; each supplied value must be a non-empty single line
+   evidenced in visible text somewhere in the canonical source. The home
+   `heroTagline` remains required and must be evidenced under the overview H2.
+6. Optionally add project `presentation` with `order`, `facts`, or both (not
+   an empty object). `order` is an integer from `0` through `2147483646`;
+   `2147483647` (`Int32.MaxValue`) is reserved by the app as the unordered
+   sentinel and must not be assigned. `facts` is a non-empty unique selection
+   of `period`, `role`, and/or `industry`. Each selected fact is extracted from
+   the visible `Period:`, `Roll:`, or `Bransch:` line before the result H4 and
+   emitted as top-level front matter. Selected fact lines are omitted from the
+   body; omitting `presentation` preserves legacy generated output.
+7. Run the pinned generator and both content validators; review the private
    workflow checks before merging or deploying.
 
-The complete field rules, evidence checks, project-heading collision rules,
-and safe command examples are in [source-map.md](source-map.md).
+The complete field rules, service/project heading hierarchies, evidence
+checks, and safe command examples are in [source-map.md](source-map.md).
 
 ## 3. Pin the shared content tooling
 
