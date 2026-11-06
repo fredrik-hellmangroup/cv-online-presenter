@@ -89,6 +89,13 @@ workflow, so both jobs use the same source commit. External Actions from
 SHAs. Workflows use `contents: read` permissions and checkout
 credentials disabled where configured.
 
+The private content repository holds only content, its caller workflows and a
+README; every script lives in the app repository. `scripts/Invoke-PinnedContentCheck.ps1`
+validates a content repository with its pinned release, `scripts/Update-AppPin.ps1`
+moves it to another release (`latest`, `v1.*` or an exact tag), and
+`scripts/New-ContentRepository.ps1` bootstraps a new private content repository
+for a fork from `templates/content-repository/`.
+
 ## Content validation, delivery, and rollback
 
 Validation checks out the caller's content commit and the app at the requested

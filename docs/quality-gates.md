@@ -27,7 +27,7 @@ updates, and the workflow-contract tests enforce the rule.
 | Job | When | Checks |
 |---|---|---|
 | `build-and-security` | Pull request and `main` push | .NET and Node setup/restore; module-boundary check; `npm run test:content`; workflow-contract tests; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; Gitleaks; vulnerable transitive package scan. |
-| `deployment-safety-tests` | Pull request and `main` push | Windows tests for production-deployment state recovery and version-bump validation. |
+| `deployment-safety-tests` | Pull request and `main` push | Windows tests for production-deployment state recovery, version-bump validation and app-pin resolution. |
 | `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. |
 
 The content commands in this app workflow use the public synthetic tree. They

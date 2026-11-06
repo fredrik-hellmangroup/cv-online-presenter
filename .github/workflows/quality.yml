@@ -67,6 +67,9 @@ jobs:
       - name: Run VERSION bump validation tests
         shell: pwsh
         run: ./scripts/test-assert-version-bump.ps1
+      - name: Run app pin tests
+        shell: pwsh
+        run: ./scripts/test-app-pin.ps1
 
   browser-quality:
     # The three-browser matrix already ran on the PR. After merge, main only re-runs the fast build/security gate.

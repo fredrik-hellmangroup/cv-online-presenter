@@ -11,6 +11,21 @@ generated provenance in the fork, a public issue, or a public pull request.
 
 ## 2. Create a separate private content repository
 
+**Automated:** from a checkout of your fork, run
+
+```powershell
+.\scripts\New-ContentRepository.ps1 -Path D:\work\my-portfolio-content -CreateGitHubRepository -ProtectAppTags
+```
+
+It resolves your fork's latest release tag (`-AppVersion` takes `latest`, `v1.*` or
+an exact tag; your fork needs at least one release), copies the synthetic content
+template, writes caller workflows pinned to that tag, generates provenance with it,
+makes the first commit, and optionally creates the private GitHub repository
+(`-CreateGitHubRepository`, needs `gh`) and protects the fork's `v*` tags
+(`-ProtectAppTags`). Add `-WhatIf` to preview. You still replace the synthetic
+content with your own and configure the environment secrets. The manual steps
+below describe the same setup and remain valid.
+
 Keep the real content in a separate private repository with its own
 `content/` tree. Use the public template and
 [`source-map.example.json`](source-map.example.json) only as format references.
@@ -99,7 +114,12 @@ is pinned to, run:
 ```
 
 `-AppVersion` defaults to the exact release tag at `HEAD`. Replace the path
-first. Never run this against
+first. To validate without an app checkout at the right tag, run
+`.\scripts\Invoke-PinnedContentCheck.ps1 -ContentRoot <path> [-Generate]`: it
+clones the release the callers are pinned to into a temporary folder. To move
+the content repository to another release, run
+`.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To latest` (or `v1.*`, or an
+exact tag; `-WhatIf` previews). Never run this against
 private files from a public CI job unless that job is explicitly designed to
 protect and scan the private data. The content deploy workflow packages only
 `site.json` and generated `pages/`, uploads to a new release folder, previews

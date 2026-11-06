@@ -75,7 +75,10 @@ closed on GHES.
 
 `-AppVersion` defaults to the exact release tag at `HEAD`. Add `-Generate` to
 regenerate mapped pages and provenance first, and `-TestTooling` to also run
-the tooling tests.
+the tooling tests. With no matching app checkout, use
+`.\scripts\Invoke-PinnedContentCheck.ps1 -ContentRoot <path>`, which clones the
+pinned release temporarily; `.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To <latest|v1.*|vX.Y.Z>`
+moves a content repository to another release and regenerates provenance.
 
 Do not use `-Generate` until every mapped seed output exists and
 `bootstrapOutputSha256` contains the matching normalized SHA-256 for each path.

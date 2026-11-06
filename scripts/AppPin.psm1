@@ -100,4 +100,4 @@ function New-TemporaryCheckoutPath {
     Join-Path ([IO.Path]::GetTempPath()) ('cv-online-presenter-app-{0}-{1}' -f $Version, [guid]::NewGuid().ToString('N').Substring(0, 8))
 }
 
-Export-ModuleMember -Function Get-AppRepositoryUrl, Get-AppPinReference, Resolve-AppVersion, Install-AppCheckout, New-TemporaryCheckoutPath
+Export-ModuleMember -Function Invoke-Native, Get-AppRepositoryUrl, Get-AppPinReference, Resolve-AppVersion, Install-AppCheckout, New-TemporaryCheckoutPath
