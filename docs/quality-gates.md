@@ -20,7 +20,9 @@ flowchart LR
 ## Public app workflow
 
 `.github/workflows/quality.yml` runs on pull requests and pushes to `main`.
-External Actions are pinned to full commit SHAs.
+External Actions from GitHub (`actions/*`) use exact version tags (`vX.Y.Z`);
+any other publisher must be pinned to a full commit SHA. Dependabot proposes
+updates, and the workflow-contract tests enforce the rule.
 
 | Job | When | Checks |
 |---|---|---|
@@ -39,16 +41,18 @@ be checked there.
 The private caller validates pull requests and pushes to `main`. Its deploy
 workflow runs on `main` changes to `content/pages/**` or `content/site.json`
 and validates again before packaging. The caller pins reusable-workflow
-references and supplies `app_sha`; keep these aligned with the app commit used
-for generation and recorded in provenance. This caller configuration is not
-stored in the public repository.
+references to an exact release tag such as `@v1.0.15`; keep it aligned with the
+app release used for generation and recorded in provenance. This caller
+configuration is not stored in the public repository.
 
 The reusable `.github/workflows/validate-content.yml` requires
-`app_repository` and `app_sha`. Before checkout, it compares them with
-`job.workflow_repository` and `job.workflow_sha`; missing contexts or
+`app_repository`. Before checkout, it compares it with
+`job.workflow_repository`, and derives the commit and release tag from
+`job.workflow_sha` and `job.workflow_ref`; missing contexts, a non-tag ref, or
 mismatches fail closed. These contexts are GitHub.com-only, so the reusable
 workflow does not run successfully on GHES. It checks out that exact commit,
-verifies it is reachable from that repository's `main`, and passes the SHA to
+verifies it is reachable from that repository's `main`, that the tag resolves
+to it, and that `VERSION` matches, then passes the version to
 source validation and generated-output checking; `content:check` verifies
 generated provenance. It also runs content-tooling tests and npm audit, scans
 the caller repository with Gitleaks, then validates private content using the

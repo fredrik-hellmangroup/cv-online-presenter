@@ -38,6 +38,8 @@ const DEFAULT_HEADINGS = Object.freeze({
 let PAGE_ALLOWLIST = [];
 let root;
 let appCommitSha;
+let appVersion;
+const APP_VERSION_PATTERN = /^v\d+\.\d+\.\d+$/u;
 const generatorFilePath = fileURLToPath(import.meta.url);
 const appRepositoryRoot = path.resolve(path.dirname(generatorFilePath), '..', '..');
 const EXCLUDED_PATHS = new Set([
@@ -158,6 +160,24 @@ function verifyAppCommitSha(value) {
     fail('--app-commit-sha does not match the checked-out app HEAD.');
   }
   return value;
+}
+
+function verifyAppVersion(value) {
+  if (!APP_VERSION_PATTERN.test(value ?? '')) {
+    fail('--app-version must be an exact release tag such as v1.0.14.');
+  }
+  let tagSha;
+  try {
+    tagSha = execFileSync('git', [
+      '-C', appRepositoryRoot, 'rev-parse', '--verify', `refs/tags/${value}^{commit}`
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  } catch {
+    fail(`The checked-out app repository has no release tag ${value}.`);
+  }
+  if (tagSha !== readAppCommitSha()) {
+    fail('--app-version does not match the checked-out app HEAD.');
+  }
+  return { version: value, sha: tagSha };
 }
 
 function lockCleanupError(originalError, cleanupErrors) {
@@ -1116,6 +1136,7 @@ function load() {
     outputSha256: outputHashes
   };
   if (appCommitSha !== undefined) provenance.appCommitSha = appCommitSha;
+  if (appVersion !== undefined) provenance.appVersion = appVersion;
   provenance.provenanceSha256 = sha256(JSON.stringify(provenance));
   return { mapping, outputs, provenance, source };
 }
@@ -1133,6 +1154,10 @@ function readProvenance() {
     if (Object.hasOwn(provenance, 'appCommitSha') &&
         !/^[a-f0-9]{40}$/u.test(provenance.appCommitSha ?? '')) {
       fail('Generated provenance has an invalid app commit SHA.');
+    }
+    if (Object.hasOwn(provenance, 'appVersion') &&
+        !APP_VERSION_PATTERN.test(provenance.appVersion ?? '')) {
+      fail('Generated provenance has an invalid app version.');
     }
     return provenance;
   } catch (error) {
@@ -1191,6 +1216,9 @@ function checkOutputs(outputs, provenance, expectedProvenance) {
   if (provenance.appCommitSha !== expectedProvenance.appCommitSha) {
     fail('Generated provenance app commit SHA does not match the requested app commit SHA; pass --app-commit-sha for the verified checkout.');
   }
+      if (provenance.appVersion !== expectedProvenance.appVersion) {
+        fail('Generated provenance app version does not match the requested app version; pass --app-version for the verified release tag.');
+      }
   if (JSON.stringify(provenance.generatedPages) !== JSON.stringify(PAGE_ALLOWLIST) ||
       JSON.stringify(Object.keys(provenance.outputSha256 ?? {})) !== JSON.stringify(PAGE_ALLOWLIST)) {
     fail('Generated provenance does not cover the exact output allowlist.');
@@ -1685,12 +1713,13 @@ function assertInputsUnchanged(provenance) {
 
 async function main() {
   const [mode, ...options] = process.argv.slice(2);
-  const usage = 'Usage: node scripts/content/generate-content.mjs --validate-source|--check|--write [--root <dir>] [--app-commit-sha <40-hex>]';
+  const usage = 'Usage: node scripts/content/generate-content.mjs --validate-source|--check|--write [--root <dir>] [--app-version <vX.Y.Z>] [--app-commit-sha <40-hex>]';
   if (!['--validate-source', '--check', '--write'].includes(mode)) {
     fail(usage);
   }
   let rootPath = process.cwd();
   let requestedAppCommitSha;
+  let requestedAppVersion;
   const seenOptions = new Set();
   for (let index = 0; index < options.length;) {
     const option = options[index];
@@ -1703,10 +1732,19 @@ async function main() {
       rootPath = value;
     } else if (option === '--app-commit-sha') {
       requestedAppCommitSha = verifyAppCommitSha(value);
+    } else if (option === '--app-version') {
+      requestedAppVersion = verifyAppVersion(value);
     } else {
       fail(usage);
     }
     index += 2;
+  }
+  if (requestedAppVersion !== undefined) {
+    if (requestedAppCommitSha !== undefined && requestedAppCommitSha !== requestedAppVersion.sha) {
+      fail('--app-commit-sha and --app-version identify different commits.');
+    }
+    requestedAppCommitSha = requestedAppVersion.sha;
+    appVersion = requestedAppVersion.version;
   }
   root = fs.realpathSync(path.resolve(rootPath));
   appCommitSha = requestedAppCommitSha;
@@ -1730,7 +1768,10 @@ async function main() {
     const previous = readProvenance();
     if (mode === '--check') return checkOutputs(outputs, previous, provenance);
     if (previous?.appCommitSha !== undefined && appCommitSha === undefined) {
-      fail('Existing generated provenance is pinned to an app commit SHA; pass --app-commit-sha to preserve the pin.');
+      fail('Existing generated provenance is pinned to an app commit SHA;       pass --app-version to preserve the pin.');
+          }
+          if (previous?.appVersion !== undefined && appVersion === undefined) {
+            fail('Existing generated provenance records an app version; pass --app-version to preserve it.');
     }
     writeOutputs(mapping, outputs, provenance, previous);
   });

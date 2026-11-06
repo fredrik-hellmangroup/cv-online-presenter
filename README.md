@@ -47,10 +47,10 @@ checks: `npm ci --prefix tools/a11y`, then `npm run test:a11y`. See
 
 The current private caller validates on pull requests and pushes to `main`;
 it deploys on `main` changes to `content/pages/**` or `content/site.json`.
-Its reusable-workflow references and `app_sha` must stay pinned to the same
-public app commit used for generation and recorded in provenance. The public
+Its reusable-workflow references must stay pinned to an exact release tag of the
+public app, the same release used for generation and recorded in provenance. The public
 workflows verify source identity before checkout and fail closed if the
-repository/SHA inputs do not match. This responsibility belongs to the caller;
+repository or release tag does not match. This responsibility belongs to the caller;
 the public repository contains no real content or private caller files.
 
 Content-only changes do not require an app deployment. Validated content

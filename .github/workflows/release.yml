@@ -21,7 +21,7 @@ jobs:
     outputs:
       package_sha256: ${{ steps.package-digest.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -52,10 +52,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Release tags must point to a commit reachable from main.'
           }
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@v6.0.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
       - run: npm ci --prefix client
@@ -84,13 +84,13 @@ jobs:
           $package = "artifacts/cv-online-presenter-$env:RELEASE_TAG.zip"
           $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
           "sha256=$digest" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifacts/cv-online-presenter-${{ github.ref_name }}.zip
           if-no-files-found: error
           retention-days: 90
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: release-notes-${{ github.ref_name }}
           path: artifacts/release-notes.md
@@ -103,11 +103,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: cv-online-presenter-${{ github.ref_name }}
           path: artifact
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: release-notes-${{ github.ref_name }}
           path: release-notes
@@ -141,10 +141,10 @@ jobs:
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: production-state
           path: production-state

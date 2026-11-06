@@ -57,54 +57,49 @@ checks, and safe command examples are in [source-map.md](source-map.md).
 
 ## 3. Pin the shared content tooling
 
-The reusable workflows require `app_repository` and `app_sha`.
-`app_repository` must be a valid `owner/repository` value identifying the
-repository that supplied the reusable workflow. `app_sha` must be a full
-40-character lowercase commit SHA identifying that workflow's source commit.
-Before checkout, each workflow compares these inputs with
-`job.workflow_repository` and `job.workflow_sha`; missing context values or
-mismatches fail closed. Content validation also requires the same SHA in
-`--app-commit-sha` and generated `appCommitSha` provenance.
+The reusable workflows require `app_repository`, which must be a valid
+`owner/repository` value identifying the repository that supplied the reusable
+workflow. The release is chosen by the caller's `uses` reference, which must be
+an exact release tag such as `@v1.0.15`; there is no SHA input. Before checkout,
+each workflow compares `app_repository` with `job.workflow_repository`, takes
+the commit from `job.workflow_sha` and the version from `job.workflow_ref`;
+missing context values or mismatches fail closed. Content validation also
+requires the same version in `--app-version` and generated `appVersion` and
+`appCommitSha` provenance.
 
-The workflow then checks out the source repository at that SHA, verifies the
-commit is reachable from that repository's `main`, and verifies checkout
-`HEAD`. Callers should pin the reusable workflow `uses` reference to the same
-full commit SHA; the guard compares the resolved workflow identity, not the
-literal text of the caller's ref. These `job.workflow_*` contexts are
-GitHub.com-only, so GHES is unsupported and fails closed.
+The workflow then checks out the source repository at that commit, verifies the
+commit is reachable from that repository's `main`, verifies checkout `HEAD`,
+that the tag resolves to the commit, and that `VERSION` matches the tag. Tags
+matching `v*` should be protected by a repository ruleset that forbids updates
+and deletion, so a version is an immutable pin. These `job.workflow_*` contexts
+are GitHub.com-only, so GHES is unsupported and fails closed.
 
 **For a fork:** forks are supported when the caller uses the reusable workflow
-from the fork itself and passes that fork's owner/repository and exact source
-SHA. Passing an unrelated repository to a workflow loaded from another
+from the fork itself at one of its release tags and passes that fork's
+owner/repository. Passing an unrelated repository to a workflow loaded from another
 repository will fail the identity check. Review the fork's workflow and
-deployment code, protect its `main`, and verify its GitHub environment
+deployment code, protect its `main` and its `v*` tags, and verify its GitHub environment
 settings and secrets before production use; the identity and reachability
 checks do not establish that the fork's code or settings are trustworthy.
 
 The current private caller validates pull requests and pushes to `main`, and
 deploys qualifying content changes on `main`. For your own fork, configure
-your caller separately: pin each reusable-workflow reference and keep its
-`app_sha`, generator commit, and generated provenance aligned. See the
+your caller separately: pin each reusable-workflow reference to a release tag
+and keep the generator release and generated provenance aligned. See the
 [shared workflow contract](repositories.md#shared-content-workflow-pin);
 public workflow definitions do not provide or publish private content.
 
 ## 4. Validate and publish
 
-From the app repository root, set `ContentRoot` to the private repository and
-`AppSha` to the exact checked-out app commit before running:
+From the app repository root, with the checkout at the release tag your content
+is pinned to, run:
 
 ```powershell
-$ContentRoot = 'D:\work\private-portfolio-content'
-$AppSha = '<replace-with-the-full-lowercase-40-character-app-commit-sha>'
-
-npm run content:source:validate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:generate -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:check -- --root $ContentRoot --app-commit-sha $AppSha
-npm run content:validate -- --root $ContentRoot
-dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
+.\scripts\validate-content.ps1 -ContentRoot 'D:\work\private-portfolio-content' -Generate
 ```
 
-Replace the path and SHA placeholders first. Never run these commands against
+`-AppVersion` defaults to the exact release tag at `HEAD`. Replace the path
+first. Never run this against
 private files from a public CI job unless that job is explicitly designed to
 protect and scan the private data. The content deploy workflow packages only
 `site.json` and generated `pages/`, uploads to a new release folder, previews

@@ -4,11 +4,7 @@ on:
   workflow_call:
     inputs:
       app_repository:
-        description: Exact owner/repository from the caller's uses reference; it must contain the pinned app SHA and trusted tooling
-        required: true
-        type: string
-      app_sha:
-        description: Same immutable 40-character literal SHA as the caller's uses reference and generated content provenance
+        description: Exact owner/repository from the caller's uses reference; it must contain the release tag and trusted tooling
         required: true
         type: string
       activate_release_id:
@@ -35,7 +31,6 @@ jobs:
     uses: ./.github/workflows/validate-content.yml
     with:
       app_repository: ${{ inputs.app_repository }}
-      app_sha: ${{ inputs.app_sha }}
 
   deploy:
     needs: validate
@@ -58,15 +53,14 @@ jobs:
       DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
       CONTENT_ACTIVATION_URL: ${{ vars.CONTENT_ACTIVATION_URL }}
       APP_REPOSITORY: ${{ inputs.app_repository }}
-      APP_SHA: ${{ inputs.app_sha }}
       ROLLBACK_RELEASE_ID: ${{ inputs.activate_release_id }}
     steps:
       - name: Verify reusable workflow identity
         shell: pwsh
         env:
           APP_REPOSITORY: ${{ inputs.app_repository }}
-          APP_SHA: ${{ inputs.app_sha }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
           WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
           # job.workflow_* identifies this workflow's source.
@@ -74,15 +68,18 @@ jobs:
           if ($env:APP_REPOSITORY -cnotmatch '^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$') {
             throw 'app_repository must use owner/repository form.'
           }
-          if ($env:APP_SHA -cnotmatch '^[a-f0-9]{40}$') {
-            throw 'app_sha must be a full 40-character lowercase Git commit SHA.'
-          }
           if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_REPOSITORY) -or $env:APP_REPOSITORY -cne $env:WORKFLOW_REPOSITORY) {
             throw 'app_repository must match the repository that supplied this reusable workflow.'
           }
-          if ([string]::IsNullOrWhiteSpace($env:WORKFLOW_SHA) -or $env:APP_SHA -cne $env:WORKFLOW_SHA) {
-            throw 'app_sha must match the commit that supplied this reusable workflow.'
+          if ($env:WORKFLOW_SHA -cnotmatch '^[a-f0-9]{40}$') {
+            throw 'job.workflow_sha must be a full 40-character lowercase Git commit SHA.'
           }
+          $ref = [regex]::Match($env:WORKFLOW_REF, '(?:^|@)refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$')
+          if (-not $ref.Success) {
+            throw "The reusable workflow must be called by an exact release tag such as @v1.0.14 (got '$($env:WORKFLOW_REF)')."
+          }
+          "APP_SHA=$($env:WORKFLOW_SHA)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "APP_VERSION=$($ref.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Validate deployment configuration and required secrets
         shell: pwsh
         env:
@@ -123,38 +120,44 @@ jobs:
               throw 'MSDEPLOY_CONTENT_RELEASES_PATH must match the configured site root content-releases path.'
             }
           }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         if: env.ROLLBACK_RELEASE_ID == ''
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.sha }}
           path: content-repo
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           repository: ${{ inputs.app_repository }}
-          ref: ${{ inputs.app_sha }}
+          ref: ${{ job.workflow_sha }}
           fetch-depth: 0
           path: app
           persist-credentials: false
-      - name: Verify exact application commit
+      - name: Verify exact application release
         shell: pwsh
-        env:
-          APP_SHA: ${{ inputs.app_sha }}
         run: |
-          git -C app fetch --no-tags origin refs/heads/main
+          git -C app fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+refs/tags/$($env:APP_VERSION):refs/tags/$($env:APP_VERSION)"
           if ($LASTEXITCODE -ne 0) {
-            throw 'Could not fetch the trusted application main branch.'
+            throw 'Could not fetch the trusted application main branch and release tag.'
           }
-          git -C app merge-base --is-ancestor $env:APP_SHA FETCH_HEAD
+          git -C app merge-base --is-ancestor $env:APP_SHA refs/remotes/origin/main
           if ($LASTEXITCODE -ne 0) {
-            throw 'app_sha must be reachable from the trusted application main branch.'
+            throw 'The release tag must be reachable from the trusted application main branch.'
           }
           $actual = (git -C app rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $actual -cne $env:APP_SHA) {
-            throw 'The application checkout does not match app_sha.'
+            throw 'The application checkout does not match the commit that supplied this reusable workflow.'
           }
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+          $tagCommit = (git -C app rev-parse --verify "refs/tags/$($env:APP_VERSION)^{commit}").Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -cne $env:APP_SHA) {
+            throw "Release tag $($env:APP_VERSION) does not resolve to the commit that supplied this reusable workflow."
+          }
+          $fileVersion = (Get-Content -LiteralPath app/VERSION -Raw).Trim()
+          if ("v$fileVersion" -cne $env:APP_VERSION) {
+            throw "VERSION ($fileVersion) does not match release tag $($env:APP_VERSION)."
+          }
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
       - name: Package release
