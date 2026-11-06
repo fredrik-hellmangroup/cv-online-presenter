@@ -13,6 +13,44 @@ The runtime input is `content/source-map.json`. The separate
 runtime input. JSON does not support comments; an annotated excerpt appears
 below in Markdown.
 
+## Quick start: source to pages
+
+```mermaid
+flowchart LR
+    S["sources/master-cv.md"] --> G["Generator"]
+    M["source-map.json<br/>evidence + output allowlist"] --> G
+    C["cv-sections.json<br/>publish rules"] --> G
+    T["site.json<br/>supported locales"] --> G
+    G --> P["pages/cv.md"]
+    G --> H["pages/home.md"]
+    G --> V["pages/services.md"]
+    G --> I["pages/projects.md"]
+    G --> D["pages/projects/&lt;slug&gt;.md"]
+    G --> Q["generated-provenance.json"]
+    T --> R["Runtime release uses site.json + pages/ only"]
+    P --> R
+    H --> R
+    V --> R
+    I --> R
+    D --> R
+```
+
+| Input / output | Purpose |
+|---|---|
+| `sources/master-cv.md` | Canonical evidence source; real version stays private |
+| `source-map.json` | Selects mapped source facts and defines the complete output allowlist |
+| `cv-sections.json` | Controls which source sections appear in the generated CV |
+| `site.json` | Supplies locales that mapped pages must use |
+| `pages/` | Generated CV, home, services, projects index, and selected project details |
+| `generated-provenance.json` | Records input, generator, and generated-page hashes, including the app pin when supplied |
+
+The map is hand-maintained; generated pages and provenance are derived.
+Create each seed page and its normalized bootstrap hash before the first
+managed write. The runtime package omits the source, map, section rules, and
+provenance. See [bootstrap and provenance](#bootstrap-and-provenance) for the
+first-write contract and [adding a project](#adding-a-project) for the
+project workflow.
+
 ## Files and responsibilities
 
 | Path | Role |

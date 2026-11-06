@@ -5,6 +5,18 @@ Last updated: 2026-11-06
 The checked-in workflows define the gates below; a workflow file alone does
 not prove that a particular run or external repository ruleset is green.
 
+```mermaid
+flowchart LR
+    PR["App pull request"] --> AQ["Public quality.yml"]
+    MAIN["App push to main"] --> AQ
+    AQ --> C["Build, tests, security, synthetic content"]
+    PR --> B["Browser matrix"]
+    CP["Private content PR or push to main"] --> V["content.yml: validate"]
+    CM["Main push: pages/** or site.json"] --> D["Deploy workflow"]
+    D --> DV["Validate, upload, preview, activate"]
+    DV --> R["Content runtime"]
+```
+
 ## Public app workflow
 
 `.github/workflows/quality.yml` runs on pull requests and pushes to `main`.
@@ -24,19 +36,25 @@ be checked there.
 
 ## Private content validation workflow
 
+The private caller validates pull requests and pushes to `main`. Its deploy
+workflow runs on `main` changes to `content/pages/**` or `content/site.json`
+and validates again before packaging. The caller pins reusable-workflow
+references and supplies `app_sha`; keep these aligned with the app commit used
+for generation and recorded in provenance. This caller configuration is not
+stored in the public repository.
+
 The reusable `.github/workflows/validate-content.yml` requires
 `app_repository` and `app_sha`. Before checkout, it compares them with
 `job.workflow_repository` and `job.workflow_sha`; missing contexts or
 mismatches fail closed. These contexts are GitHub.com-only, so the reusable
-workflow does not run successfully on GHES. The caller must pin the workflow
-reference to the same repository and full commit SHA. The workflow then checks
-out that exact commit, verifies it is reachable from that repository's
-`main`, and passes the SHA to source validation and generated-output checking;
-`content:check` verifies the generated provenance pin. It also runs
-content-tooling tests and an npm audit, scans the caller's repository with
-Gitleaks, then validates the private content using both the Node.js and .NET
-validators. Deployment behavior and the dated caller-migration observation
-are in [repositories.md](repositories.md#shared-content-workflow-pin).
+workflow does not run successfully on GHES. It checks out that exact commit,
+verifies it is reachable from that repository's `main`, and passes the SHA to
+source validation and generated-output checking; `content:check` verifies
+generated provenance. It also runs content-tooling tests and npm audit, scans
+the caller repository with Gitleaks, then validates private content using the
+Node.js and .NET validators. The deploy workflow's exact behavior is in
+[content-releases.md](content-releases.md); the shared identity contract is in
+[repositories.md](repositories.md#shared-content-workflow-pin).
 
 ## App release and manual recovery
 

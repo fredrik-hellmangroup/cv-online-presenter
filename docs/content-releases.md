@@ -133,13 +133,13 @@ letters, digits, `_`, or `-`; the runtime still validates the selected release
 when previewing it. Use only a known existing release and stop if preview
 fails or its diff is unexpected.
 
-**Caller migration note (last inspected 2026-11-05):** the private-content
-caller inspected for this documentation used the legacy `APP_REPO_REF=main`
-deploy contract and did not invoke these reusable workflows with one SHA
-shared across the caller reference, generator, and provenance. This is a
-dated observation, not confirmation of the current private caller state. The
-public reusable contract alone does not establish end-to-end caller pinning.
-See [repositories.md](repositories.md#shared-content-workflow-pin).
+The current private caller validates pull requests and pushes to `main`, and
+deploys on `main` changes to `content/pages/**` or `content/site.json`. The
+caller must keep its reusable-workflow references, `app_sha`, generation
+commit, and generated `appCommitSha` provenance aligned. The public workflow
+identity checks enforce the supplied contract; they do not replace the
+caller's pin/provenance responsibility. See
+[repositories.md](repositories.md#shared-content-workflow-pin).
 
 ## Token provisioning
 

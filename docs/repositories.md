@@ -4,120 +4,133 @@ Last updated: 2026-11-06
 
 ## What belongs where
 
-| Repository | Visibility | Responsibility |
+| Repository | Visibility | Owns |
 |---|---|---|
-| Public app repository (this repo) | Public | .NET app, TypeScript client, content generator/validators, reusable workflows, and a synthetic `content/` template. |
-| Private content repository | Private | Canonical CV source, real source map and CV section rules, site settings, generated pages, provenance, and the caller workflows that validate and release private content. |
+| App (this repository) | Public | .NET app, TypeScript client, generator/validators, reusable workflows, synthetic content and examples |
+| Content | Private | Master CV, real source map and CV section rules, site settings, generated pages/provenance, and caller workflows |
 
 Keep all real names, contact data, CV facts, employer/client details, source
-documents, and private provenance in the private repository. Public
-`content/` files and the documented examples are synthetic. The app builds and
-tests against that template; normal app CI does not check out private content.
+documents, and private provenance in the private repository. Public fixtures
+and examples are synthetic. App CI uses those fixtures and never checks out
+private CV material. The repositories are not joined by a submodule or content
+pointer; content-only updates do not require app source changes.
 
-The repositories are not joined by a Git submodule or content-pointer PR.
-A content-only update does not require an app source change. The runtime
-content package contains `site.json` and `pages/` only; source documents,
-source map, CV section rules, and generator provenance are not uploaded.
+The source map maps selected source evidence and page metadata to an output
+allowlist. Generation and provenance stay in the private tree; the runtime
+package contains only `site.json` and generated `pages/`.
+
+```mermaid
+flowchart LR
+    subgraph Public["Public app repository"]
+        Q["quality.yml: synthetic fixtures only"]
+        W["Pinned reusable workflows"]
+        A["Tagged app release"]
+    end
+    subgraph Private["Private content repository"]
+        M["Master CV + source map"]
+        G["Generated pages + provenance"]
+        C["Caller: validate PR/push to main"]
+        D["Caller: deploy main content changes"]
+    end
+    M --> G --> C --> W
+    C --> D --> W
+    W --> R["Content runtime snapshot"]
+    A --> R
+```
+
+## CI and release lanes
+
+| Lane | Trigger | Scope |
+|---|---|---|
+| Public app CI | Pull request and push to `main` | Build, tests, security checks, and synthetic content validation; browser matrix on pull requests |
+| Private content validation | Pull request and push to `main` | Validate private content with the pinned app tooling |
+| Private content deployment | `main` changes to `content/pages/**` or `content/site.json` | Publish an additive content release, preview, then activate |
+| App release | `vMAJOR.MINOR.PATCH` tag on `main` | Build and deploy the app separately from content |
+
+The current private caller pins its reusable-workflow references and supplies
+`app_sha`. Keep both aligned with the public app commit used by generation and
+recorded in generated provenance. That pin/provenance agreement is the
+caller's responsibility; public docs describe the contract, not private CV
+content or private workflow source. See [quality gates](quality-gates.md) and
+[content releases](content-releases.md) for lane and operational detail.
 
 ## Shared content workflow pin
 
 The reusable workflows in `.github/workflows/validate-content.yml`,
 `deploy-content.yml`, and `provision-activation-token.yml` are
-`workflow_call` definitions. A caller must provide:
+`workflow_call` definitions. They require:
 
-- `app_repository`, a string matching
-  `^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`. It must identify the repository that
-  supplied the reusable workflow.
-- `app_sha`, a full 40-character lowercase commit SHA. It must identify the
-  commit that supplied the reusable workflow and, for content validation, the
-  app commit recorded in generated `appCommitSha` provenance.
+| Input | Requirement |
+|---|---|
+| `app_repository` | `owner/repository` matching `^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`; must identify the repository that supplied the reusable workflow |
+| `app_sha` | Full 40-character lowercase commit SHA for the workflow source and, during validation, generated `appCommitSha` provenance |
 
-Before any app checkout, each workflow compares `app_repository` and `app_sha`
-with `job.workflow_repository` and `job.workflow_sha`. Missing context values
-or either mismatch fail closed. This permits a fork when the caller uses the
-workflow from that fork and supplies the same fork repository and source
-commit; it does not permit passing an unrelated repository to a workflow
-loaded from elsewhere. The job contexts are available on GitHub.com but not
-GHES, so these workflows require GitHub.com and fail closed on GHES.
+Before any app checkout, each workflow compares both inputs with
+`job.workflow_repository` and `job.workflow_sha`; missing values or mismatches
+fail closed. A fork works when the caller loads the workflow from that fork
+and supplies the same repository and source commit. An unrelated repository
+does not pass the identity check. These contexts are available on GitHub.com,
+not GHES, so the workflows require GitHub.com and fail closed on GHES.
 
-The workflows then check out that repository at the supplied SHA, verify it
-is reachable from that repository's `main`, and verify checkout `HEAD`. The
-caller should still pin its `uses` reference to the same full commit SHA; the
-guard compares the resolved workflow source identity, not the text of the
-caller's ref. Content validation passes the SHA to
-`content:source:validate` and `content:check`, which verifies generated
-provenance. `deploy-content.yml` calls validation through its local nested
-workflow, so both jobs use the same workflow source commit. External Actions
-are pinned to full commit SHAs, with `contents: read` permissions and checkout
-credentials disabled where checked in.
+The workflows check out the supplied repository at the supplied SHA, verify
+that commit is reachable from its `main`, and verify checkout `HEAD`. The
+caller must also pin its `uses` reference to that same full SHA: the identity
+guard checks the resolved workflow source, not the caller-ref text. Validation
+passes the SHA to `content:source:validate` and `content:check` to verify
+provenance. `deploy-content.yml` invokes validation through its local nested
+workflow, so both jobs use the same source commit. Checked-in external Actions
+are pinned to full SHAs, with `contents: read` permissions and checkout
+credentials disabled where configured.
 
-**Caller migration note (last inspected 2026-11-05):** the private-content
-caller inspected for this migration used the legacy `APP_REPO_REF=main` deploy
-contract and did not invoke these reusable workflows or pass one `app_sha`
-through generation and deployment. Its validation workflow checked out a
-separate pinned app revision. This is a dated observation, not confirmation of
-the current private caller state. The public reusable contract alone does not
-establish that a private production caller is end-to-end SHA-pinned.
+## Content validation, delivery, and rollback
 
-## Private content validation and release
+Validation checks out the caller's content commit and the app at the requested
+SHA. It installs and audits app content tooling, runs synthetic tooling tests,
+scans the caller repository with Gitleaks, validates source and generated
+provenance, then runs the Node.js and .NET content validators. App CI's
+separate synthetic-only checks are listed in [quality-gates.md](quality-gates.md).
 
-The validation workflow checks out the caller's content commit and the app at
-the requested SHA. It installs and audits the app's content tooling, runs
-synthetic content-tooling tests, scans the caller repository with Gitleaks,
-validates source and generated provenance, then runs the Node.js and .NET
-content validators. The app SHA is checked both as a workflow checkout and as
-generator provenance. See [quality-gates.md](quality-gates.md) for the public
-app's separate synthetic-only gates.
-
-After validation, the caller can invoke the reusable deploy workflow from
-`main`. That workflow packages only `content/site.json` and
-`content/pages/`, generates a new UTC timestamp/content-commit release ID,
-and uploads additively to
-`<site>/App_Data/content-releases/<releaseId>`. It does not update the app
-package. The runtime previews the candidate, then activates it only after a
-valid preview response; the workflow verifies the active release identity and
-content version and checks `/health`. The exact operational contract,
-required environment names, and rollback behavior are in
-[content-releases.md](content-releases.md).
+On a normal deployment, the caller invokes the reusable deploy workflow from
+`main`. It packages only `content/site.json` and `content/pages/`, creates a
+new UTC timestamp/content-commit release ID, and uploads additively to
+`<site>/App_Data/content-releases/<releaseId>`; it does not deploy the app.
+The runtime previews the candidate, activates only after a valid preview, and
+the workflow verifies active release identity/version and `/health`. Rollback
+selects an existing release ID without upload; it still verifies workflow
+identity, previews, activates, and performs the post-activation checks. See
+[content-releases.md](content-releases.md) for exact workflow behavior,
+environment names, and safeguards.
 
 ```mermaid
 flowchart LR
-    P["Private content change"] --> V["Caller invokes pinned validation workflow"]
+    P["Private content change"] --> V["Validate with pinned app"]
     V --> M["Merge to private main"]
-    M --> D["Caller invokes reusable deploy workflow"]
-    D --> C["Package site.json + pages/"]
-    C --> U["Additive upload to a new release folder"]
-    U --> R["Authenticated preview"]
-    R --> A["Activate only after preview succeeds"]
-    A --> H["Verify active ID/version and health"]
+    M --> D["Deploy content changes"]
+    D --> U["Upload site.json + pages/"]
+    U --> R["Preview candidate"]
+    R --> A["Activate after valid preview"]
+    A --> H["Verify active ID/version + health"]
 ```
-
-Content rollback selects an existing `releaseId`; it does not upload content.
-The deployment workflow still verifies its app repository and SHA, previews
-the selected release, activates it, and performs the post-activation checks.
 
 ## App release and recovery
 
-The app's `release.yml` is separate from content publication. It accepts tags
-matching `vMAJOR.MINOR.PATCH`, verifies the tagged commit is reachable from
-`main`, builds and validates the app's synthetic content, computes a package
-SHA-256, publishes an immutable release asset, and deploys through the
-`production-msdeploy` environment. Its deployment script verifies the package
-digest and production state before sync and updates the last-known-good state
-only after health and build metadata checks succeed.
+`release.yml` accepts `vMAJOR.MINOR.PATCH` tags, verifies the tagged commit is
+reachable from `main`, validates synthetic content, computes a package
+SHA-256, publishes an immutable asset, and deploys through
+`production-msdeploy`. The deployment script verifies the digest and
+production state, and updates last-known-good state only after health and
+build-metadata checks succeed.
 
-`manual-production-recovery.yml` requires an invocation from `main` and an
-explicit `confirm_production` input. It either builds the current main commit
-or downloads an existing release asset and verifies its recorded digest
-before deployment. The runtime state and recovery procedure are documented
-in [rollback-runbook.md](rollback-runbook.md). GitHub environment approvals,
-branch rules, and secret values are repository settings; they are not inferred
-from the workflow YAML.
+`manual-production-recovery.yml` requires invocation from `main` and explicit
+`confirm_production`. It builds current `main` or downloads an existing
+release asset and verifies its recorded digest before deployment. See the
+[rollback runbook](rollback-runbook.md). Branch rules, environment approvals,
+and secrets are GitHub settings, not facts inferred from workflow YAML.
 
 ## Generated-content validation
 
-The app's editorial integration tests can read generated pages from a private
-worktree without copying them into this repository:
+Editorial integration tests can read generated pages from a private worktree
+without copying them into this repository:
 
 ```powershell
 $env:EDITORIAL_CONTENT_PAGES = 'D:\work\private-portfolio-content\content\pages'
@@ -125,17 +138,10 @@ dotnet test tests/Portfolio.Tests/Portfolio.Tests.csproj --filter FullyQualified
 Remove-Item Env:EDITORIAL_CONTENT_PAGES
 ```
 
-The test reads the directory in place and does not record page facts. For the
-browser/a11y real-content mode, set `PLAYWRIGHT_CONTENT_MODE=real` and
+For browser/a11y real-content mode, set `PLAYWRIGHT_CONTENT_MODE=real` and
 `EDITORIAL_CONTENT_PAGES` to that same external directory, then run the
-Chromium project in `tools/a11y`. Do not copy the files into the app checkout.
-The checked-in app CI uses synthetic content; enabling private-content checks
-in CI requires an explicit private workflow contract.
+Chromium project in `tools/a11y`. The checked-in app CI remains synthetic;
+never copy private content into the app checkout.
 
-## Related documentation
-
-- [Fork guide](fork-guide.md)
-- [Source map and generation](source-map.md)
-- [Markdown content format](content.md)
-- [Content releases and activation](content-releases.md)
-- [Quality gates](quality-gates.md)
+Related: [fork guide](fork-guide.md), [source map](source-map.md),
+[Markdown format](content.md), [content releases](content-releases.md).
