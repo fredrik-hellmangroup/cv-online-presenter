@@ -164,7 +164,7 @@ function verifyAppCommitSha(value) {
 
 function verifyAppVersion(value) {
   if (!APP_VERSION_PATTERN.test(value ?? '')) {
-    fail('--app-version must be an exact release tag such as v1.0.14.');
+    fail('--app-version must be an exact release tag such as v0.1.0.');
   }
   let tagSha;
   try {

@@ -17,7 +17,7 @@ generated provenance in the fork, a public issue, or a public pull request.
 .\scripts\New-ContentRepository.ps1 -Path D:\work\my-portfolio-content -CreateGitHubRepository -ProtectAppTags
 ```
 
-It resolves your fork's latest release tag (`-AppVersion` takes `latest`, `v1.*` or
+It resolves your fork's latest release tag (`-AppVersion` takes `latest`, `v0.*` or
 an exact tag; your fork needs at least one release), copies the synthetic content
 template, writes caller workflows pinned to that tag, generates provenance with it,
 makes the first commit, and optionally creates the private GitHub repository
@@ -75,7 +75,7 @@ checks, and safe command examples are in [source-map.md](source-map.md).
 The reusable workflows require `app_repository`, which must be a valid
 `owner/repository` value identifying the repository that supplied the reusable
 workflow. The release is chosen by the caller's `uses` reference, which must be
-an exact release tag such as `@v1.0.15`; there is no SHA input. Before checkout,
+an exact release tag such as `@v0.1.1`; there is no SHA input. Before checkout,
 each workflow compares `app_repository` with `job.workflow_repository`, takes
 the commit from `job.workflow_sha` and the version from `job.workflow_ref`;
 missing context values or mismatches fail closed. Content validation also
@@ -118,14 +118,14 @@ first. To validate without an app checkout at the right tag, run
 `.\scripts\Invoke-PinnedContentCheck.ps1 -ContentRoot <path> [-Generate]`: it
 clones the release the callers are pinned to into a temporary folder. To move
 the content repository to another release, run
-`.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To latest` (or `v1.*`, or an
+`.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To latest` (or `v0.*`, or an
 exact tag; `-WhatIf` previews).
 
-Manual equivalent, from an app checkout at the release tag (`git checkout --detach v1.0.15`):
+Manual equivalent, from an app checkout at the release tag (`git checkout --detach v0.1.1`):
 
 ```powershell
 $ContentRoot = 'D:\work\private-portfolio-content'
-$AppVersion = 'v1.0.15'
+$AppVersion = 'v0.1.1'
 
 npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
 npm run content:generate -- --root $ContentRoot --app-version $AppVersion

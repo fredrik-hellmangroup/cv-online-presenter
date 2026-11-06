@@ -80,7 +80,7 @@ validation and deployment workflows require:
   supplied the reusable workflow.
 
 The release is selected by the caller's `uses` reference, which must be an
-exact release tag such as `@v1.0.15`. There is no separate SHA input; the
+exact release tag such as `@v0.1.1`. There is no separate SHA input; the
 workflow derives the commit from `job.workflow_sha` and the tag from
 `job.workflow_ref`.
 

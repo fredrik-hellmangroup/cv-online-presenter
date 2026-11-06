@@ -38,7 +38,7 @@ function Get-AppPinReference {
     [pscustomobject]@{ Repository = $pins[0].Repository; Ref = $pins[0].Ref; Files = @($pins.File | Sort-Object -Unique) }
 }
 
-# Resolves 'latest', a partial 'v1.*' / 'v1.2.*', or an exact 'vX.Y.Z' to an existing release tag.
+# Resolves 'latest', a partial 'v0.*' / 'v0.1.*', or an exact 'vX.Y.Z' to an existing release tag.
 function Resolve-AppVersion {
     param(
         [Parameter(Mandatory = $true)][string]$Repository,
@@ -49,7 +49,7 @@ function Resolve-AppVersion {
     if ($Spec -ceq 'latest') { $prefix = '' }
     elseif ($Spec -cmatch '^(v[0-9]+(?:\.[0-9]+)?)\.\*$') { $prefix = $Matches[1] + '.' }
     elseif ($Spec -cnotmatch $script:ReleaseTagPattern) {
-        throw "Version must be 'latest', a range such as 'v1.*', or an exact release tag such as 'v1.0.15'."
+        throw "Version must be 'latest', a range such as 'v0.*', or an exact release tag such as 'v0.1.1'."
     }
 
     $url = Get-AppRepositoryUrl $Repository

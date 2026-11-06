@@ -36,7 +36,7 @@ jobs:
           }
           $ref = [regex]::Match($env:WORKFLOW_REF, '(?:^|@)refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$')
           if (-not $ref.Success) {
-            throw "The reusable workflow must be called by an exact release tag such as @v1.0.14 (got '$($env:WORKFLOW_REF)')."
+            throw "The reusable workflow must be called by an exact release tag such as @v0.1.0 (got '$($env:WORKFLOW_REF)')."
           }
           "APP_SHA=$($env:WORKFLOW_SHA)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "APP_VERSION=$($ref.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

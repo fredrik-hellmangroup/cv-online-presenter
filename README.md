@@ -23,6 +23,8 @@ pages; the release package contains only site settings and those pages. The app
 and content release independently. See the [source-map quick-start](docs/source-map.md)
 and [content release contract](docs/content-releases.md).
 
+The app is **pre-stable**: releases are versioned `0.x.y` (`VERSION` and tags `v0.x.y`) until the content and release contracts settle. Content pins and workflow references always use an exact release tag.
+
 ## Requirements and build
 
 - .NET SDK 10.0.401 (pinned in `global.json`)

@@ -11,7 +11,7 @@ the content should be pinned to. -AppVersion defaults to the exact release tag a
 .\scripts\validate-content.ps1 -ContentRoot D:\work\private-portfolio-content
 
 .EXAMPLE
-.\scripts\validate-content.ps1 -ContentRoot D:\work\private-portfolio-content -AppVersion v1.0.15 -Generate
+.\scripts\validate-content.ps1 -ContentRoot D:\work\private-portfolio-content -AppVersion v0.1.1 -Generate
 #>
 [CmdletBinding()]
 param(

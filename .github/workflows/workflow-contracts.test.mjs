@@ -90,7 +90,7 @@ function assertWorkflowIdentityGuard(step) {
   assert.match(step, /\$env:WORKFLOW_SHA -cnotmatch '\^\[a-f0-9\]\{40\}\$'/);
   assert.match(step, /\[string\]::IsNullOrWhiteSpace\(\$env:WORKFLOW_REPOSITORY\)/);
   assert.match(step, /refs\/tags\/\(v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\)\$/);
-  assert.match(step, /exact release tag such as @v1\.0\.14/);
+  assert.match(step, /exact release tag such as @v0\.1\.0/);
   assert.match(step, /"APP_SHA=\$\(\$env:WORKFLOW_SHA\)" \| Out-File -FilePath \$env:GITHUB_ENV/);
   assert.match(step, /"APP_VERSION=\$\(\$ref\.Groups\[1\]\.Value\)" \| Out-File -FilePath \$env:GITHUB_ENV/);
   assert.match(step, /GitHub\.com-only; missing values on GHES fail closed/);

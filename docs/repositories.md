@@ -92,7 +92,7 @@ credentials disabled where configured.
 The private content repository holds only content, its caller workflows and a
 README; every script lives in the app repository. `scripts/Invoke-PinnedContentCheck.ps1`
 validates a content repository with its pinned release, `scripts/Update-AppPin.ps1`
-moves it to another release (`latest`, `v1.*` or an exact tag), and
+moves it to another release (`latest`, `v0.*` or an exact tag), and
 `scripts/New-ContentRepository.ps1` bootstraps a new private content repository
 for a fork from `templates/content-repository/`.
 

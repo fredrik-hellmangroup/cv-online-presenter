@@ -3,7 +3,7 @@
 Moves a content repository to another release of the app tooling.
 
 .DESCRIPTION
-Resolves -To ('latest', a range such as 'v1.*', or an exact tag such as 'v1.0.15') to an
+Resolves -To ('latest', a range such as 'v0.*', or an exact tag such as 'v0.1.1') to an
 existing release tag, rewrites every caller workflow in -ContentRoot to that tag, removes the
 obsolete app_sha input, and regenerates provenance with that release. Review the resulting diff
 and open a content PR. Use -WhatIf to only show what would change.
@@ -12,7 +12,7 @@ and open a content PR. Use -WhatIf to only show what would change.
 .\scripts\Update-AppPin.ps1 -ContentRoot D:\work\private-portfolio-content -To latest
 
 .EXAMPLE
-.\scripts\Update-AppPin.ps1 -ContentRoot D:\work\private-portfolio-content -To v1.0.15 -SkipRegenerate
+.\scripts\Update-AppPin.ps1 -ContentRoot D:\work\private-portfolio-content -To v0.1.1 -SkipRegenerate
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(

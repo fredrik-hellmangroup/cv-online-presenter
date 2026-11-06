@@ -17,7 +17,7 @@ The caller workflows in `.github/workflows` reference the app's reusable workflo
 # validate this repository with the pinned release (add -Generate to regenerate pages and provenance first)
 .\scripts\Invoke-PinnedContentCheck.ps1 -ContentRoot <path-to-this-repository>
 
-# move to another release: latest, v1.*, or an exact tag
+# move to another release: latest, v0.*, or an exact tag
 .\scripts\Update-AppPin.ps1 -ContentRoot <path-to-this-repository> -To latest
 ```
 

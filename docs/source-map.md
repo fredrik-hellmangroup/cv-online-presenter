@@ -448,7 +448,7 @@ Manual equivalent:
 
 ```powershell
 $ContentRoot = 'D:\work\private-portfolio-content'
-$AppVersion = 'v1.0.15'
+$AppVersion = 'v0.1.1'
 
 npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
 npm run content:generate -- --root $ContentRoot --app-version $AppVersion
@@ -469,8 +469,8 @@ Direct invocation is also supported:
 
 ```powershell
 node scripts/content/generate-content.mjs --validate-source
-node scripts/content/generate-content.mjs --write --root D:\work\private-portfolio-content --app-version v1.0.15
-node scripts/content/generate-content.mjs --check --root D:\work\private-portfolio-content --app-version v1.0.15
+node scripts/content/generate-content.mjs --write --root D:\work\private-portfolio-content --app-version v0.1.1
+node scripts/content/generate-content.mjs --check --root D:\work\private-portfolio-content --app-version v0.1.1
 ```
 
 | Mode | Behavior |

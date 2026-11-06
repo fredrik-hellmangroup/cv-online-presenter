@@ -41,7 +41,7 @@ be checked there.
 The private caller validates pull requests and pushes to `main`. Its deploy
 workflow runs on `main` changes to `content/pages/**` or `content/site.json`
 and validates again before packaging. The caller pins reusable-workflow
-references to an exact release tag such as `@v1.0.15`; keep it aligned with the
+references to an exact release tag such as `@v0.1.1`; keep it aligned with the
 app release used for generation and recorded in provenance. This caller
 configuration is not stored in the public repository.
 
@@ -74,18 +74,6 @@ eligible tag asset whose SHA-256 matches GitHub's recorded digest. Production
 state, package identity, and health/build metadata are verified by the
 deployment script before state is marked last-known-good. See
 [rollback-runbook.md](rollback-runbook.md).
-
-## Current verification status
-
-On 2026-11-06, `npm run test:content` was run in this shared-tooling worktree
-using synthetic fixtures. It exited successfully with **156 passing, 0
-failing, and 4 skipped (160 total)**. The skipped tests require POSIX FIFO
-behavior, which is unavailable on Windows. The source-map hierarchy and
-structural-heading tests, approved-route checks, and filesystem/reparse-point
-checks passed. The finalized workflow-contract suite also passed locally:
-**4 passing, 0 failing**. GitHub Actions smoke PR #26 passed both direct and
-nested reusable-workflow identity checks against the expected repository and
-SHA.
 
 Related references: [repository boundaries](repositories.md),
 [source-map behavior](source-map.md), [Markdown content format](content.md),

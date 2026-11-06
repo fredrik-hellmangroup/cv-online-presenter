@@ -25,7 +25,7 @@ param(
     # owner/repository of your app fork. Defaults to this checkout's 'origin' remote.
     [string]$AppRepository,
 
-    # 'latest', a range such as 'v1.*', or an exact release tag of the fork. The fork needs at least one release tag.
+    # 'latest', a range such as 'v0.*', or an exact release tag of the fork. The fork needs at least one release tag.
     [string]$AppVersion = 'latest',
 
     # Name of the GitHub repository to create. Defaults to '<app-repository-name>-content'.
