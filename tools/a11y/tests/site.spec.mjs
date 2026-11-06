@@ -298,9 +298,19 @@ test('editorial home, services and project pages expose clear content and links'
 
   await page.goto('/services');
   await expect(page.locator('main h1')).toHaveCount(1);
-  await expect(page.getByRole('tab')).toHaveCount(4);
-  await expect(page.getByRole('tab', { selected: true })).toHaveCount(1);
-  await expect(page.getByRole('tabpanel')).toBeVisible();
+  const syntheticDemo = process.env.PLAYWRIGHT_CONTENT_MODE !== 'real' && !process.env.BASE_URL;
+  const groupedServices = page.locator('[data-hero-tabs]');
+  if (await groupedServices.count()) {
+    const panelCount = await groupedServices.locator('[data-hero-tab-panel]').count();
+    expect(panelCount).toBeGreaterThan(0);
+    if (syntheticDemo) expect(panelCount).toBe(4);
+    await expect(page.getByRole('tab')).toHaveCount(panelCount);
+    await expect(page.getByRole('tab', { selected: true })).toHaveCount(1);
+    await expect(page.getByRole('tabpanel')).toBeVisible();
+  } else {
+    expect(syntheticDemo).toBe(false);
+    expect(await page.locator('.page-hero-panel .page-hero-list > li').count()).toBeGreaterThan(0);
+  }
   await expect(page.getByRole('heading', { level: 2, name: 'Teknik i uppdragen' })).toBeVisible();
   await expect(page.locator('.service-cv-cta').getByRole('link', { name: /fullständigt cv/i })).toHaveAttribute('href', '/cv');
 

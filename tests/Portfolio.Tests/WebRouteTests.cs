@@ -641,13 +641,17 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task ProjectsListShowsOrderedCardsWithMetaTagsAndKeywords()
     {
-        var html = await client.GetStringAsync("/projects");
-        var titles = Regex.Matches(html, "<h2><a href=\"/projects/[^\"]+\">(.*?)</a></h2>").Select(match => match.Groups[1].Value).ToArray();
+        using var syntheticFactory = CreateSyntheticContentFactory();
+        using var syntheticClient = syntheticFactory.CreateClient();
+        var html = WebUtility.HtmlDecode(await syntheticClient.GetStringAsync("/projects"));
+        var titles = Regex.Matches(html, "<h2><a href=\"/projects/[^\"]+\">(.*?)</a></h2>")
+            .Select(match => match.Groups[1].Value)
+            .ToArray();
 
-        Assert.Equal(["Exempelplattformen", "Demoportalen", "Exempelintegrationen", "Demologistiken", "Demobanken", "Demokommunen"], titles);
-        Assert.Contains("<p>Sex p", html);
-        Assert.Contains("class=\"project-card-meta\"", html);
-        Assert.Contains("data-keywords=\"ASP.NET Core|SQL Server|REST|Docker\"", html);
+        Assert.Equal(["Projekt Kompass", "Projekt Lanternan", "Projekt Grön Stig"], titles);
+        Assert.Equal(3, Regex.Matches(html, "class=\"project-card\"").Count);
+        Assert.Contains("class=\"project-card-meta\">2026 - pågående · Föreningsliv</p>", html);
+        Assert.Contains("data-keywords=\"TypeScript|Node.js|PostgreSQL|API\"", html);
         Assert.Contains("<ul class=\"tags\">", html);
         Assert.Contains("L\u00e4s om uppdraget", html);
         Assert.DoesNotContain("<article class=\"project-card\"", html);
@@ -656,18 +660,21 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task ProjectDetailHasBreadcrumbFactsAndTechnologyButtons()
     {
-        var html = await client.GetStringAsync("/projects/demo-platform");
+        using var syntheticFactory = CreateSyntheticContentFactory();
+        using var syntheticClient = syntheticFactory.CreateClient();
+        var html = WebUtility.HtmlDecode(await syntheticClient.GetStringAsync("/projects/kompass"));
 
         Assert.Contains("class=\"breadcrumb\"", html);
-        Assert.Contains("<dt>Period</dt>", html);
-        Assert.Contains("<dt>Roll</dt>", html);
-        Assert.Contains("<dt>Bransch</dt>", html);
-        Assert.Contains("data-page-keywords=\"ASP.NET Core|SQL Server|REST|Docker\"", html);
+        Assert.Contains("<dt>Period</dt><dd>2026 - pågående</dd>", html);
+        Assert.Contains("<dt>Roll</dt><dd>Lead utvecklare för digitala tjänster</dd>", html);
+        Assert.Contains("<dt>Bransch</dt><dd>Föreningsliv</dd>", html);
+        Assert.Contains("data-page-keywords=\"TypeScript|Node.js|PostgreSQL|API\"", html);
         Assert.Contains("Teknik i uppdraget", html);
         Assert.Contains("class=\"skill-btn\"", html);
-        Assert.Contains("data-skill=\"Docker\"", html);
+        Assert.Contains("data-skill=\"TypeScript\"", html);
         Assert.Contains("data-pin-status", html);
-        Assert.DoesNotContain("Sammanfattning", html);
+        Assert.Single(Regex.Matches(html, "<dt>Period</dt>"));
+        Assert.Single(Regex.Matches(html, "<dt>Roll</dt>"));
     }
 
     [Fact]
@@ -697,15 +704,94 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     [Fact]
     public async Task CvPutsHistoryAfterTheOverviewWithPracticalCardsAndPrintButton()
     {
-        var html = await client.GetStringAsync("/cv");
-        var headings = Regex.Matches(html, "<h2 id=\"([a-z0-9-]+)\"").Select(match => match.Groups[1].Value).ToArray();
+        using var syntheticFactory = CreateSyntheticContentFactory();
+        using var syntheticClient = syntheticFactory.CreateClient();
+        var html = await syntheticClient.GetStringAsync("/cv");
+        var headings = Regex.Matches(html, "<h2 id=\"([a-z0-9-]+)\"")
+            .Select(match => match.Groups[1].Value)
+            .ToArray();
 
-        Assert.Equal(["oversikt", "uppdragshistorik", "kompetensomraden", "branscherfarenhet"], headings);
+        Assert.Equal(["oversikt", "uppdragshistorik", "kompetensomraden", "branscherfarenhet", "anstallningar", "sprak"], headings);
         Assert.Contains("class=\"practical\"", html);
         Assert.DoesNotContain("id=\"praktiskt\"", html);
         Assert.Contains("data-print", html);
         Assert.Contains("class=\"skill-btn\"", html);
-        Assert.Contains("data-skill=\".NET\"", html);
+        Assert.Contains("data-skill=\"TypeScript\"", html);
+    }
+
+    [Fact]
+    public async Task PublicProjectListingUsesSyntheticEditorialOrderAndSourceBackedFacts()
+    {
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync("/projects"));
+        var titles = Regex.Matches(html, "<h2><a href=\"/projects/[^\"]+\">(.*?)</a></h2>")
+            .Select(match => match.Groups[1].Value)
+            .ToArray();
+
+        Assert.Equal([
+            "Exempelplattformen",
+            "Demoportalen",
+            "Exempelintegrationen",
+            "Demologistiken",
+            "Demobanken",
+            "Demokommunen"
+        ], titles);
+        Assert.Contains("class=\"project-card-meta\">2023 – 2025 · Digitala tjänster</p>", html);
+        Assert.Contains("class=\"project-card-meta\">2021 – 2023 · Offentlig sektor</p>", html);
+        Assert.Contains("class=\"project-card-meta\">2019 – 2021 · Systemintegration</p>", html);
+        Assert.Contains("class=\"project-card-meta\">2017 – 2019 · Logistik</p>", html);
+        Assert.Contains("class=\"project-card-meta\">2015 – 2017 · Finansiella tjänster</p>", html);
+        Assert.Contains("class=\"project-card-meta\">2013 – 2015 · Kommunal verksamhet</p>", html);
+    }
+
+    [Fact]
+    public async Task PublicProjectDetailRoutesExposeTheirSyntheticSourceBackedFacts()
+    {
+        var projects = new[]
+        {
+            (Slug: "demo-platform", Period: "2023 – 2025", Role: "Lösningsarkitekt (syntetiskt exempel)", Industry: "Digitala tjänster"),
+            (Slug: "demoportalen", Period: "2021 – 2023", Role: "Backendutvecklare (syntetiskt exempel)", Industry: "Offentlig sektor"),
+            (Slug: "exempelintegrationen", Period: "2019 – 2021", Role: "Integrationsutvecklare (syntetiskt exempel)", Industry: "Systemintegration"),
+            (Slug: "demologistiken", Period: "2017 – 2019", Role: "Lösningsarkitekt (syntetiskt exempel)", Industry: "Logistik"),
+            (Slug: "demobanken", Period: "2015 – 2017", Role: "Backendutvecklare (syntetiskt exempel)", Industry: "Finansiella tjänster"),
+            (Slug: "demokommunen", Period: "2013 – 2015", Role: "Integrationsutvecklare (syntetiskt exempel)", Industry: "Kommunal verksamhet")
+        };
+
+        foreach (var project in projects)
+        {
+            using var response = await client.GetAsync($"/projects/{project.Slug}");
+            var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains($"<dt>Period</dt><dd>{project.Period}</dd>", html);
+            Assert.Contains($"<dt>Roll</dt><dd>{project.Role}</dd>", html);
+            Assert.Contains($"<dt>Bransch</dt><dd>{project.Industry}</dd>", html);
+        }
+    }
+
+    [Fact]
+    public async Task PublicCvPlacesHistoryAfterOverviewAndBeforeCompetenceAndIndustry()
+    {
+        var html = await client.GetStringAsync("/cv");
+        var headings = Regex.Matches(html, "<h2 id=\"([a-z0-9-]+)\"")
+            .Select(match => match.Groups[1].Value)
+            .ToArray();
+
+        var overviewIndex = Array.IndexOf(headings, "oversikt");
+        var historyIndex = Array.IndexOf(headings, "uppdragshistorik");
+        var competenceIndex = Array.IndexOf(headings, "kompetensomraden");
+        var industryIndex = Array.IndexOf(headings, "branscherfarenhet");
+
+        Assert.True(overviewIndex >= 0);
+        Assert.True(historyIndex > overviewIndex);
+        Assert.True(competenceIndex > historyIndex);
+        Assert.True(industryIndex > competenceIndex);
+    }
+
+    private static WebApplicationFactory<Program> CreateSyntheticContentFactory()
+    {
+        var pagesRoot = Path.Combine(AppContext.BaseDirectory, "synthetic-presentation", "content", "pages");
+        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.UseSetting("Content:PagesRoot", pagesRoot));
     }
 
     [Theory]
@@ -745,7 +831,7 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     private static async Task<(string? ReleaseId, string Version)> GetActiveContentAsync(HttpClient httpsClient)
     {
         using var request = AuthorizedGet("/internal/content/active");
-        var response = await httpsClient.SendAsync(request);
+        using var response = await httpsClient.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return (body.RootElement.GetProperty("contentReleaseId").GetString(), body.RootElement.GetProperty("contentVersion").GetString()!);

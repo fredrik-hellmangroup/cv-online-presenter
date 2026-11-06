@@ -1,0 +1,9 @@
+{
+  "supportedLocales": [
+    "sv-SE"
+  ],
+  "contactEmail": "alex@example.invalid",
+  "siteName": "Alex Exempel",
+  "companyName": "Exempel Konsult AB",
+  "siteUrl": "https://example.invalid"
+}

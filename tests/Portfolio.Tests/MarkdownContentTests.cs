@@ -22,6 +22,22 @@ public sealed class MarkdownContentTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValidateAcceptsPublishedProjectWithOrWithoutLegacyLinks(bool includeLegacyLinks)
+    {
+        var legacyLinks = includeLegacyLinks ? "links: None\n" : "";
+        var source = "---\ntitle: Sample project\ndescription: Synthetic project description\nlocale: sv-SE\nstatus: published\ntype: project\nsummary: Synthetic summary\ntechnologies: [Example]\n"
+            + legacyLinks
+            + "---\n# Sample project\n\nSynthetic project body.";
+        var document = service.Parse("projects/sample-project", "projects/sample-project.md", source);
+
+        var errors = service.Validate([document], new HashSet<string> { "sv-SE" });
+
+        Assert.Empty(errors);
+    }
+
+    [Theory]
     [InlineData("projects/sample-project", false)]
     [InlineData("projects/group/sample-project", true)]
     [InlineData("projects", true)]

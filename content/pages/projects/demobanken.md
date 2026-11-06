@@ -1,29 +1,40 @@
 ---
 title: "Demobanken"
-description: "Syntetiskt demouppdrag: en backend med tydliga API-kontrakt och automatiserade kontroller."
+description: "Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på en backend med tydliga API-kontrakt och automatiserade kontroller."
-technologies: ["C#", "SQL Server", "REST", "GitHub Actions"]
-links: "Inga externa länkar"
-period: "2014 – 2016"
-role: "Backendutvecklare (demo)"
-industry: "Finans (exempel)"
-category: "Finans"
+summary: "Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank."
 order: 5
+period: "2015 – 2017"
+role: "Backendutvecklare (syntetiskt exempel)"
+industry: "Finansiella tjänster"
+technologies: ["C#","SQL Server","REST","GitHub Actions"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Demobanken"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
+
 # Demobanken
 
-Ett syntetiskt exempel på en backend med tydliga API-kontrakt och automatiserade kontroller.
+## Sammanfattning
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittade transaktionsnära tjänster. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+En fiktiv backend med tydliga API-kontrakt och automatiserade kontroller.
 
-## Arbetssätt och teknik
-- Beskriver ett fiktivt API i C# för transaktionsnära data.
-- Använde SQL Server i exempelmodellens datalager.
-- Visar en förenklad CI-kedja med GitHub Actions.
+## Ansvar och genomförande
 
-## Exempel på utfall
+- Skissade ett exempel-API för transaktionsliknande data.
+- Beskrev en förenklad kontrollkedja för demonstrationskod.
+
+## Resultat
+
 Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank.
+
+## Teknik
+
+- C#
+- SQL Server
+- REST
+- GitHub Actions
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

@@ -15,7 +15,7 @@ public sealed class MarkdownContentService
         ["page"] = ["title", "description"],
         ["profile"] = ["displayName", "headline", "summary"],
         ["experience"] = ["role", "organization", "dates", "highlights"],
-        ["project"] = ["title", "summary", "technologies", "links"],
+        ["project"] = ["title", "summary", "technologies"],
         ["service"] = ["label", "description"],
         ["skill"] = ["label", "description"]
     };

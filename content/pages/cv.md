@@ -1,111 +1,159 @@
 ---
 title: "CV"
-description: "Roller, kompetensområden och uppdragshistorik samlade i demo-CV:t."
+description: "Syntetisk profil för mallens innehållsgenerering."
 locale: "sv-SE"
 status: "published"
 type: "page"
+source: "sources/master-cv.md"
+sourceSection: "Entire source"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
-# Alex Exempel
-Lösningsarkitekt och senior konsult (demo)
+
+# Demo Consultant
+
+Syntetisk konsultprofil
 
 ## Roller
-- Lösningsarkitekt
-- Backendutvecklare
-- Integrationsutvecklare
+- Syntetisk lösningsdesigner
+- Demoarkitekt
+- Exempelintegratör
 
 ## Översikt
-Påhittad senior konsult med över 10 års erfarenhet av backendutveckling, lösningsarkitektur och integrationer. Sidan är syntetisk demodata och beskriver ingen verklig person.
-
-## Praktiskt
-- Tillgänglig: Från 1 feb 2027
-- Arbetsform: Hybrid · Stockholm eller distans
-- Språk: Svenska, engelska
-- Referenser: Kan lämnas på begäran
+En tydligt märkt syntetisk portfolio med exempel på projekt och kompetenser.
+Syntetisk profil för mallens innehållsgenerering.
+En syntetisk demo för tydliga och avgränsade digitala tjänster.
+Innehållet är fiktivt och gör inga påståenden om verkliga personer, arbetsgivare eller leveranser.
 
 ## Uppdragshistorik
 
 ### Exempelplattformen
-**Period:** 2023 - pågående\
-**Roll:** Lösningsarkitekt (demo)
+**Period:** 2023 – 2025
+**Roll:** Lösningsarkitekt (syntetiskt exempel)
+**Bransch:** Digitala tjänster
 
-Påhittat uppdrag hos Exempelbolaget AB.
+En syntetisk beskrivning av en modulär demoplattform.
+- Skissade en modulär lösningsstruktur för demonstrationsinnehåll.
+- Beskrev ett enkelt integrationslager för exempeldata.
 
 #### Resultat
-Syntetiskt resultat.
+Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund.
 
 #### Nyckelord
 ASP.NET Core, SQL Server, REST, Docker
 
 ### Demoportalen
-**Period:** 2018 - 2020\
-**Roll:** Backendutvecklare (demo)
+**Period:** 2021 – 2023
+**Roll:** Backendutvecklare (syntetiskt exempel)
+**Bransch:** Offentlig sektor
 
-Påhittat uppdrag som visar ett avslutat uppdrag i git-loggen.
+En syntetisk portal med köbaserade arbetsflöden.
+- Skissade ett fiktivt API och en exempelmodell för data.
+- Beskrev asynkrona arbetsflöden utan verkliga driftmått.
 
 #### Resultat
-Syntetiskt resultat.
+Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall.
 
 #### Nyckelord
 .NET, SQL Server, RabbitMQ, GitHub Actions
 
 ### Exempelintegrationen
-**Period:** 2016\
-**Roll:** Integrationsutvecklare (demo)
+**Period:** 2019 – 2021
+**Roll:** Integrationsutvecklare (syntetiskt exempel)
+**Bransch:** Systemintegration
 
-Påhittat enårigt uppdrag.
+En fiktiv integrationsyta mellan fristående exempelkomponenter.
+- Jämförde REST och gRPC för syntetisk demotrafik.
+- Beskrev reproducerbar paketering för lokal körning.
 
 #### Resultat
-Syntetiskt resultat.
+Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat.
 
 #### Nyckelord
 REST, gRPC, Docker, Bicep
 
 ### Demologistiken
-**Period:** 2021 - 2023\
-**Roll:** Lösningsarkitekt (demo)
+**Period:** 2017 – 2019
+**Roll:** Lösningsarkitekt (syntetiskt exempel)
+**Bransch:** Logistik
 
-Påhittat uppdrag inom logistik.
+Ett påhittat scenario med exempel på lager- och transportflöden.
+- Skissade en exempelarkitektur för order- och statusflöden.
+- Beskrev samverkan mellan meddelanden och en syntetisk datamodell.
 
 #### Resultat
-Syntetiskt resultat.
+Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått.
 
 #### Nyckelord
 .NET, Azure, RabbitMQ, SQL Server
 
 ### Demobanken
-**Period:** 2014 - 2016\
-**Roll:** Backendutvecklare (demo)
+**Period:** 2015 – 2017
+**Roll:** Backendutvecklare (syntetiskt exempel)
+**Bransch:** Finansiella tjänster
 
-Påhittat uppdrag inom finans.
+En fiktiv backend med tydliga API-kontrakt och automatiserade kontroller.
+- Skissade ett exempel-API för transaktionsliknande data.
+- Beskrev en förenklad kontrollkedja för demonstrationskod.
 
 #### Resultat
-Syntetiskt resultat.
+Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank.
 
 #### Nyckelord
 C#, SQL Server, REST, GitHub Actions
 
 ### Demokommunen
-**Period:** 2012 - 2014\
-**Roll:** Integrationsutvecklare (demo)
+**Period:** 2013 – 2015
+**Roll:** Integrationsutvecklare (syntetiskt exempel)
+**Bransch:** Kommunal verksamhet
 
-Påhittat uppdrag inom offentlig sektor.
+Ett påhittat informationsflöde mellan fristående demotjänster.
+- Skissade ett REST-baserat informationsflöde för exempeldatamängder.
+- Beskrev en containerbaserad tjänst och syntetisk infrastruktur.
 
 #### Resultat
-Syntetiskt resultat.
+Ett påhittat kommunscenario, utan personuppgifter eller verkliga system.
 
 #### Nyckelord
 .NET, REST, Docker, Bicep
 
 ## Kompetensområden
-- Lösningsarkitektur och teknisk riktning nära implementation
-- Backendutveckling i .NET/C#
-- Systemintegration och informationsflöden
-- CI/CD och plattformsarbete
+Systemdesign och teknisk riktning med praktiskt fokus.
+
+### Bygga
+Arkitektur, backend och integration.
+
+#### Lösningsarkitektur
+Teknisk riktning nära implementation.
+
+#### Backend och integration
+Backendutveckling, API:er och flöden mellan system.
+
+### Leverera
+Plattform, drift och modernisering.
+
+#### Plattform och modernisering
+Stabil leverans och stegvis utveckling av befintliga lösningar.
+
+### Domän
+Miljöer där kraven är höga.
+
+#### Offentlig sektor och reglerade miljöer
+Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning.
+
+## Nyckelteknik
 
 **Nyckelteknik**
-- Kärnplattform: .NET, C#, ASP.NET Core, SQL Server, Entity Framework
-- Integration: REST, RabbitMQ, gRPC, OpenAPI
-- Moln och DevOps: GitHub Actions, Docker, Bicep, Azure
+
+- Backend: C#, .NET, ASP.NET Core, Node.js
+- Webb: TypeScript, JavaScript, HTML, CSS
+- Data: SQL Server, PostgreSQL, Redis
+- Leverans: Docker, GitHub Actions, Azure
 
 ## Branscherfarenhet
-Offentlig sektor, logistik, finans
+Syntetiska exempelområden: teknik, logistik, finans och offentlig sektor.
+
+## Anställningar
+- Syntetisk arbetslivssektion för att demonstrera CV-mallens struktur.
+
+## Språk
+- Svenska och engelska som exempelvärden i den här syntetiska mallen.

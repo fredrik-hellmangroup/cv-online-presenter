@@ -28,11 +28,19 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             client/package-lock.json
             tools/a11y/package-lock.json
+      - run: npm ci
       - run: dotnet restore CvOnlinePresenter.sln
       - run: dotnet restore tests/Portfolio.Tests/Portfolio.Tests.csproj
       - run: npm run check:architecture
+      - run: npm run test:content
+      - run: node --test .github/workflows/workflow-contracts.test.mjs
+      - run: npm run content:source:validate
+      - run: npm run content:check
+      - run: npm run content:validate
+      - run: npm audit --audit-level=moderate
       - run: npm ci --prefix client
       - run: npm ci --prefix tools/a11y
       - run: npm run build

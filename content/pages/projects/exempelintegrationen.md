@@ -1,29 +1,40 @@
 ---
 title: "Exempelintegrationen"
-description: "Syntetiskt demouppdrag: en integrationsyta med HTTP-baserade och kontraktsstyrda gränssnitt."
+description: "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på en integrationsyta med både HTTP-baserade och kontraktsstyrda gränssnitt."
-technologies: ["REST", "gRPC", "Docker", "Bicep"]
-links: "Inga externa länkar"
-period: "2016"
-role: "Integrationsutvecklare (demo)"
-industry: "Integration (exempel)"
-category: "Integration"
+summary: "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
 order: 3
+period: "2019 – 2021"
+role: "Integrationsutvecklare (syntetiskt exempel)"
+industry: "Systemintegration"
+technologies: ["REST","gRPC","Docker","Bicep"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Exempelintegrationen"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
+
 # Exempelintegrationen
 
-Ett syntetiskt exempel på en integrationsyta med både HTTP-baserade och kontraktsstyrda gränssnitt.
+## Sammanfattning
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittad integrationsyta mellan fristående system. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+En fiktiv integrationsyta mellan fristående exempelkomponenter.
 
-## Arbetssätt och teknik
-- Jämförde REST och gRPC för olika typer av demotrafik.
-- Paketerade en minimal tjänst i Docker för lokal körning.
-- Visar hur infrastruktur kan beskrivas reproducerbart med Bicep.
+## Ansvar och genomförande
 
-## Exempel på utfall
+- Jämförde REST och gRPC för syntetisk demotrafik.
+- Beskrev reproducerbar paketering för lokal körning.
+
+## Resultat
+
 Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat.
+
+## Teknik
+
+- REST
+- gRPC
+- Docker
+- Bicep
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

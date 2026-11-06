@@ -39,6 +39,43 @@ public sealed class ContentSnapshotTests
             Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public async Task LoadAsyncAcceptsPublishedProjectWithoutLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-project-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            var projects = Path.Combine(pages, "projects");
+            Directory.CreateDirectory(projects);
+            await File.WriteAllTextAsync(Path.Combine(projects, "sample-project.md"), """
+                ---
+                title: Sample project
+                description: Synthetic project description
+                locale: sv-SE
+                status: published
+                type: project
+                summary: Synthetic summary
+                technologies: [Example]
+                ---
+                # Sample project
+
+                Synthetic project body.
+                """);
+
+            var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
+            var project = snapshot.Documents.Single(document => document.Slug == "projects/sample-project");
+
+            Assert.Equal("published", project.Status);
+            Assert.DoesNotContain("links", project.Metadata.Keys);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ActiveReleaseStatePublishesReleaseIdAndSnapshotAsOneImmutableValue()
     {

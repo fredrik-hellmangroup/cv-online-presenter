@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "source": "content/sources/master-cv.md",
+  "sourceSha256": "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5",
+  "sourceMap": "content/source-map.json",
+  "sourceMapSha256": "e7c86b6ce0a45fbf2116d71dccd65461ff569e07a3db5cc032fa419d7731b06d",
+  "cvSections": "content/cv-sections.json",
+  "cvSectionsSha256": "2d40563e3cd798f9782b0e7907e4541422c98ab3afdbc6a77e562bc3b464751c",
+  "generator": "scripts/content/generate-content.mjs",
+  "generatorSha256": "c667499bb3e4e2968ea46c7296bd971c6552439073e733ebcea6127d79888711",
+  "generatedPages": [
+    "content/pages/cv.md",
+    "content/pages/home.md",
+    "content/pages/services.md",
+    "content/pages/projects.md",
+    "content/pages/projects/demo-platform.md",
+    "content/pages/projects/demoportalen.md",
+    "content/pages/projects/exempelintegrationen.md",
+    "content/pages/projects/demologistiken.md",
+    "content/pages/projects/demobanken.md",
+    "content/pages/projects/demokommunen.md"
+  ],
+  "outputSha256": {
+    "content/pages/cv.md": "0b9ffa983b1a5f7a37574030a5bf645ab2cdde0e0715ad46c04b51455bbf5725",
+    "content/pages/home.md": "f0ca0f256ea6cbd33a312531a9ecd959255d6fe4324f22fae0783e1fd8d0dd0d",
+    "content/pages/services.md": "0597b1042aee3d3e610e02a552e890a7748645b19c74add94b406c170154af97",
+    "content/pages/projects.md": "01731d8e77eecb5123e30817cad25b226cd677f0ab1dcc6e922a713e1443157e",
+    "content/pages/projects/demo-platform.md": "52ac1fbe7a32e65069465a6baa0ba4e9b97abeba2a2f4dc411120555f6431660",
+    "content/pages/projects/demoportalen.md": "9eda4bb3aa146e3d94ffe2741ba114511349c2b5955a2d48cca2928605f7300b",
+    "content/pages/projects/exempelintegrationen.md": "202cb36c022f2cfcd0344a8b4ed037a77fd327a2d220f6c2ea3c7b9a7c10dfdd",
+    "content/pages/projects/demologistiken.md": "61759fc47956439e6050f353d227883d55dd8980f3aed54daf119a4bafbeb115",
+    "content/pages/projects/demobanken.md": "90695bab7302d0d448b175124e292703d2e2ee1e0f30eecd6f4d2c88211b7579",
+    "content/pages/projects/demokommunen.md": "6ce9c8de58cdb46fb677884a9cf9b315e1fd7ebf1ea8c6ed92043c5e8e82bb0a"
+  },
+  "provenanceSha256": "0af484b07ae18cc4809e5331ddbb34d90651b3880405ad3c3cba3f11e9ea9e83"
+}

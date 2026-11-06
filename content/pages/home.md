@@ -1,12 +1,15 @@
 ---
-title: "Alex Exempel – Lösningsarkitekt och senior konsult (demo)"
-description: "Syntetisk demoprofil som visar startsidans hero och innehållsmall."
+title: "Demo Consultant – Syntetisk konsultprofil"
+description: "En tydligt märkt syntetisk portfolio med exempel på projekt och kompetenser."
 locale: "sv-SE"
 status: "published"
 type: "page"
+source: "sources/master-cv.md"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
-# Alex Exempel
 
-Lösningsarkitekt och senior konsult (demo)
+# Demo Consultant
 
-En syntetisk introduktion till konsultprofilen. Här får besökaren en kort, tydlig riktning vidare till kompetens, projekt och CV.
+Syntetisk konsultprofil
+
+En syntetisk demo för tydliga och avgränsade digitala tjänster.

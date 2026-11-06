@@ -1,29 +1,40 @@
 ---
 title: "Demologistiken"
-description: "Syntetiskt demouppdrag: händelsedrivna flöden för en tänkt logistiklösning."
+description: "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått."
 locale: "sv-SE"
 status: "published"
 type: "project"
-summary: "Ett syntetiskt exempel på händelsedrivna flöden för en tänkt logistiklösning."
-technologies: [".NET", "Azure", "RabbitMQ", "SQL Server"]
-links: "Inga externa länkar"
-period: "2021 – 2023"
-role: "Lösningsarkitekt (demo)"
-industry: "Logistik (exempel)"
-category: "Logistik"
+summary: "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått."
 order: 4
+period: "2017 – 2019"
+role: "Lösningsarkitekt (syntetiskt exempel)"
+industry: "Logistik"
+technologies: [".NET","Azure","RabbitMQ","SQL Server"]
+source: "sources/master-cv.md"
+sourceSection: "Uppdragshistorik / Demologistiken"
+sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
 ---
+
 # Demologistiken
 
-Ett syntetiskt exempel på händelsedrivna flöden för en tänkt logistiklösning.
+## Sammanfattning
 
-## Om uppdraget
-Det här är ett påhittat exempel inom påhittade flöden för lager och transport. Beskrivningen demonstrerar sidans struktur och ska inte tolkas som en verklig kund eller leverans.
+Ett påhittat scenario med exempel på lager- och transportflöden.
 
-## Arbetssätt och teknik
-- Tog fram en exempelarkitektur för order- och statusflöden.
-- Kombinerade .NET-tjänster, RabbitMQ och SQL Server i demobeskrivningen.
-- Visar hur Azure kan utgöra en tänkt värdmiljö.
+## Ansvar och genomförande
 
-## Exempel på utfall
+- Skissade en exempelarkitektur för order- och statusflöden.
+- Beskrev samverkan mellan meddelanden och en syntetisk datamodell.
+
+## Resultat
+
 Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått.
+
+## Teknik
+
+- .NET
+- Azure
+- RabbitMQ
+- SQL Server
+
+[Till alla uppdrag](/projects) · [Fullständigt CV](/cv)

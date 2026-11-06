@@ -1,0 +1,229 @@
+{
+  "version": 1,
+  "source": "content/sources/master-cv.md",
+  "generatedPages": [
+    {
+      "path": "content/pages/cv.md",
+      "type": "page",
+      "title": "CV",
+      "description": "Syntetisk profil för mallens innehållsgenerering.",
+      "locale": "sv-SE",
+      "status": "published",
+      "sourceSection": "Entire source"
+    },
+    {
+      "path": "content/pages/home.md",
+      "type": "page",
+      "title": "Demo Consultant – Syntetisk konsultprofil",
+      "description": "En tydligt märkt syntetisk portfolio med exempel på projekt och kompetenser.",
+      "locale": "sv-SE",
+      "status": "published",
+      "heroTagline": "En syntetisk demo för tydliga och avgränsade digitala tjänster."
+    },
+    {
+      "path": "content/pages/services.md",
+      "type": "page",
+      "title": "Kompetens",
+      "description": "Systemdesign och teknisk riktning med praktiskt fokus",
+      "locale": "sv-SE",
+      "status": "published",
+      "kicker": "Kompetens · syntetisk demo",
+      "panelEyebrow": "Fyra delar i samma helhet",
+      "panelTitle": "Kompetens med sammanhang.",
+      "sourceSection": "Kompetensområden",
+      "competenceGroups": [
+        {
+          "title": "Bygga",
+          "sourceLines": [
+            "Arkitektur, backend och integration."
+          ],
+          "items": [
+            {
+              "title": "Lösningsarkitektur",
+              "sourceLines": [
+                "Teknisk riktning nära implementation."
+              ]
+            },
+            {
+              "title": "Backend och integration",
+              "sourceLines": [
+                "Backendutveckling, API:er och flöden mellan system."
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Leverera",
+          "sourceLines": [
+            "Plattform, drift och modernisering."
+          ],
+          "items": [
+            {
+              "title": "Plattform och modernisering",
+              "sourceLines": [
+                "Stabil leverans och stegvis utveckling av befintliga lösningar."
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Domän",
+          "sourceLines": [
+            "Miljöer där kraven är höga."
+          ],
+          "items": [
+            {
+              "title": "Offentlig sektor och reglerade miljöer",
+              "sourceLines": [
+                "Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects.md",
+      "type": "page",
+      "title": "Uppdrag",
+      "description": "Uppdragshistorik",
+      "locale": "sv-SE",
+      "status": "published",
+      "sourceSection": "Uppdragshistorik",
+      "selectedProjects": [
+        {
+          "section": "Exempelplattformen",
+          "path": "/projects/demo-platform",
+          "summary": "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund."
+        },
+        {
+          "section": "Demoportalen",
+          "path": "/projects/demoportalen",
+          "summary": "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall."
+        },
+        {
+          "section": "Exempelintegrationen",
+          "path": "/projects/exempelintegrationen",
+          "summary": "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat."
+        },
+        {
+          "section": "Demologistiken",
+          "path": "/projects/demologistiken",
+          "summary": "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått."
+        },
+        {
+          "section": "Demobanken",
+          "path": "/projects/demobanken",
+          "summary": "Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank."
+        },
+        {
+          "section": "Demokommunen",
+          "path": "/projects/demokommunen",
+          "summary": "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system."
+        }
+      ]
+    },
+    {
+      "path": "content/pages/projects/demo-platform.md",
+      "type": "project",
+      "title": "Exempelplattformen",
+      "description": "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett syntetiskt exempel på en sammanhållen plattformsmall; ingen verklig leverans eller kund.",
+      "sourceSection": "Uppdragshistorik / Exempelplattformen",
+      "sourceHeading": "Exempelplattformen",
+      "presentation": {
+        "order": 1,
+        "facts": ["period", "role", "industry"]
+      }
+    },
+    {
+      "path": "content/pages/projects/demoportalen.md",
+      "type": "project",
+      "title": "Demoportalen",
+      "description": "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett syntetiskt exempel på hur asynkrona arbetsflöden kan beskrivas i en uppdragsmall.",
+      "sourceSection": "Uppdragshistorik / Demoportalen",
+      "sourceHeading": "Demoportalen",
+      "presentation": {
+        "order": 2,
+        "facts": ["period", "role", "industry"]
+      }
+    },
+    {
+      "path": "content/pages/projects/exempelintegrationen.md",
+      "type": "project",
+      "title": "Exempelintegrationen",
+      "description": "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett fiktivt integrationsscenario som visar en möjlig struktur, inte ett verkligt kundresultat.",
+      "sourceSection": "Uppdragshistorik / Exempelintegrationen",
+      "sourceHeading": "Exempelintegrationen",
+      "presentation": {
+        "order": 3,
+        "facts": ["period", "role", "industry"]
+      }
+    },
+    {
+      "path": "content/pages/projects/demologistiken.md",
+      "type": "project",
+      "title": "Demologistiken",
+      "description": "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett påhittat scenario som beskriver möjliga samverkansmönster utan verkliga driftmått.",
+      "sourceSection": "Uppdragshistorik / Demologistiken",
+      "sourceHeading": "Demologistiken",
+      "presentation": {
+        "order": 4,
+        "facts": ["period", "role", "industry"]
+      }
+    },
+    {
+      "path": "content/pages/projects/demobanken.md",
+      "type": "project",
+      "title": "Demobanken",
+      "description": "Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett fiktivt exempel på tekniska avvägningar, inte en beskrivning av en verklig bank.",
+      "sourceSection": "Uppdragshistorik / Demobanken",
+      "sourceHeading": "Demobanken",
+      "presentation": {
+        "order": 5,
+        "facts": ["period", "role", "industry"]
+      }
+    },
+    {
+      "path": "content/pages/projects/demokommunen.md",
+      "type": "project",
+      "title": "Demokommunen",
+      "description": "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system.",
+      "locale": "sv-SE",
+      "status": "published",
+      "summary": "Ett påhittat kommunscenario, utan personuppgifter eller verkliga system.",
+      "sourceSection": "Uppdragshistorik / Demokommunen",
+      "sourceHeading": "Demokommunen",
+      "presentation": {
+        "order": 6,
+        "facts": ["period", "role", "industry"]
+      }
+    }
+  ],
+  "bootstrapOutputSha256": {
+    "content/pages/cv.md": "0b9ffa983b1a5f7a37574030a5bf645ab2cdde0e0715ad46c04b51455bbf5725",
+    "content/pages/home.md": "f0ca0f256ea6cbd33a312531a9ecd959255d6fe4324f22fae0783e1fd8d0dd0d",
+    "content/pages/services.md": "0597b1042aee3d3e610e02a552e890a7748645b19c74add94b406c170154af97",
+    "content/pages/projects.md": "01731d8e77eecb5123e30817cad25b226cd677f0ab1dcc6e922a713e1443157e",
+    "content/pages/projects/demo-platform.md": "52ac1fbe7a32e65069465a6baa0ba4e9b97abeba2a2f4dc411120555f6431660",
+    "content/pages/projects/demoportalen.md": "9eda4bb3aa146e3d94ffe2741ba114511349c2b5955a2d48cca2928605f7300b",
+    "content/pages/projects/exempelintegrationen.md": "202cb36c022f2cfcd0344a8b4ed037a77fd327a2d220f6c2ea3c7b9a7c10dfdd",
+    "content/pages/projects/demologistiken.md": "61759fc47956439e6050f353d227883d55dd8980f3aed54daf119a4bafbeb115",
+    "content/pages/projects/demobanken.md": "90695bab7302d0d448b175124e292703d2e2ee1e0f30eecd6f4d2c88211b7579",
+    "content/pages/projects/demokommunen.md": "6ce9c8de58cdb46fb677884a9cf9b315e1fd7ebf1ea8c6ed92043c5e8e82bb0a"
+  }
+}
