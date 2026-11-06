@@ -119,7 +119,22 @@ first. To validate without an app checkout at the right tag, run
 clones the release the callers are pinned to into a temporary folder. To move
 the content repository to another release, run
 `.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To latest` (or `v1.*`, or an
-exact tag; `-WhatIf` previews). Never run this against
+exact tag; `-WhatIf` previews).
+
+Manual equivalent, from an app checkout at the release tag (`git checkout --detach v1.0.15`):
+
+```powershell
+$ContentRoot = 'D:\work\private-portfolio-content'
+$AppVersion = 'v1.0.15'
+
+npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
+npm run content:generate -- --root $ContentRoot --app-version $AppVersion
+npm run content:check -- --root $ContentRoot --app-version $AppVersion
+npm run content:validate -- --root $ContentRoot
+dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
+```
+
+Never run this against
 private files from a public CI job unless that job is explicitly designed to
 protect and scan the private data. The content deploy workflow packages only
 `site.json` and generated `pages/`, uploads to a new release folder, previews

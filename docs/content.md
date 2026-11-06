@@ -44,6 +44,8 @@ dotnet run --project tools/Portfolio.Content.Validator -- --content content/page
 
 For private content, run `.\scripts\validate-content.ps1 -ContentRoot <content-root>`
 from the app repository root; it runs both validators against the private tree.
+The manual equivalent is `npm run content:validate -- --root <content-root>` and
+`dotnet run --project tools/Portfolio.Content.Validator -- --content <content-root>\content\pages`.
 Do not copy private files into this repository.
 
 ## Project pages and the project list

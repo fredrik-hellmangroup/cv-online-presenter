@@ -444,6 +444,19 @@ From the app repository root, with the checkout at the pinned release tag:
 .\scripts\validate-content.ps1 -ContentRoot 'D:\work\private-portfolio-content' -Generate
 ```
 
+Manual equivalent:
+
+```powershell
+$ContentRoot = 'D:\work\private-portfolio-content'
+$AppVersion = 'v1.0.15'
+
+npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
+npm run content:generate -- --root $ContentRoot --app-version $AppVersion
+npm run content:check -- --root $ContentRoot --app-version $AppVersion
+npm run content:validate -- --root $ContentRoot
+dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
+```
+
 The script runs source validation, optional generation (`-Generate`), the
 generated-output check and both content validators with `--app-version` set to
 the exact tag at `HEAD` (or `-AppVersion`). Replace the path before execution. Without `--root`, the generator uses the current

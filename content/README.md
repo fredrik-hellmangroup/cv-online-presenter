@@ -80,6 +80,19 @@ the tooling tests. With no matching app checkout, use
 pinned release temporarily; `.\scripts\Update-AppPin.ps1 -ContentRoot <path> -To <latest|v1.*|vX.Y.Z>`
 moves a content repository to another release and regenerates provenance.
 
+Manual equivalent, from an app checkout at the release tag (`git checkout --detach v1.0.15`):
+
+```powershell
+$ContentRoot = 'D:\work\private-portfolio-content'
+$AppVersion = 'v1.0.15'
+
+npm run content:source:validate -- --root $ContentRoot --app-version $AppVersion
+npm run content:generate -- --root $ContentRoot --app-version $AppVersion
+npm run content:check -- --root $ContentRoot --app-version $AppVersion
+npm run content:validate -- --root $ContentRoot
+dotnet run --project tools/Portfolio.Content.Validator -- --content "$ContentRoot\content\pages"
+```
+
 Do not use `-Generate` until every mapped seed output exists and
 `bootstrapOutputSha256` contains the matching normalized SHA-256 for each path.
 When provenance is already pinned to an app release, later checks and writes
