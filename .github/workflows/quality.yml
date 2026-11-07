@@ -14,16 +14,72 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides which gates are relevant, so a change is only re-validated by gates it can affect. Required checks still
+  # report: a job skipped by `if` counts as passed.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      any: ${{ steps.filter.outputs.any }}
+      app: ${{ steps.filter.outputs.app }}
+      browser: ${{ steps.filter.outputs.browser }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: filter
+        name: Classify changed files
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # Files no gate reads: the release switch, documentation and repository metadata.
+          $inert = '^(VERSION|LICENSE|README\.md|AGENTS\.md|ADR-[^/]*\.md|docs/.*|\.github/(PULL_REQUEST_TEMPLATE/.*|dependabot\.yml|actionlint\.yaml))$'
+          # Not built or tested by the app gate: workflows (covered by the contract tests), PowerShell scripts (covered by
+          # deployment-safety-tests), deployment files, generated artifacts and the content-repository template.
+          $notBuild = '^(\.github/.*|scripts/[^/]*\.ps(m)?1|deployment/.*|artifacts/.*|templates/.*)$'
+          # Also unreachable from the browser: .NET-only tests and tools.
+          $notBrowser = '^(tests/Portfolio\.Tests/.*|tools/Portfolio\.Content\.Validator/.*)$'
+          # Fail open: anything unexpected runs every gate.
+          $any = $true
+          $app = $true
+          $browser = $true
+          $scripts = $true
+          $range = if ($env:EVENT_NAME -ceq 'pull_request') { "$env:BASE_SHA...$env:HEAD_SHA" } else { "$env:BASE_SHA..$env:HEAD_SHA" }
+          if ($env:BASE_SHA -cmatch '^[a-f0-9]{40}$' -and $env:BASE_SHA -cnotmatch '^0+$') {
+            $changed = @(git diff --name-only $range)
+            if ($LASTEXITCODE -eq 0 -and $changed.Count -gt 0) {
+              $any = $null -ne ($changed | Where-Object { $_ -cne 'VERSION' } | Select-Object -First 1)
+              $app = $null -ne ($changed | Where-Object { $_ -cnotmatch $inert -and $_ -cnotmatch $notBuild } | Select-Object -First 1)
+              $browser = $null -ne ($changed | Where-Object { $_ -cnotmatch $inert -and $_ -cnotmatch $notBuild -and $_ -cnotmatch $notBrowser } | Select-Object -First 1)
+              $scripts = $null -ne ($changed | Where-Object { $_ -cmatch '^(scripts|\.github)/' } | Select-Object -First 1)
+            }
+            else {
+              Write-Warning "Could not classify $range; running every gate."
+            }
+          }
+          foreach ($gate in 'any', 'app', 'browser', 'scripts') {
+            "$gate=$((Get-Variable $gate -ValueOnly).ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
   build-and-security:
+    # The workflow-contract tests and the secret scan always run; everything else only when buildable code changed.
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v6.1.0
+      - if: needs.changes.outputs.app == 'true'
+        uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v7.1.0
+      - if: needs.changes.outputs.app == 'true'
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -31,31 +87,54 @@ jobs:
             package-lock.json
             client/package-lock.json
             tools/a11y/package-lock.json
-      - run: npm ci
-      - run: dotnet restore CvOnlinePresenter.sln
-      - run: dotnet restore tests/Portfolio.Tests/Portfolio.Tests.csproj
-      - run: npm run check:architecture
-      - run: npm run test:content
+      - if: needs.changes.outputs.app == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.app == 'true'
+        run: dotnet restore CvOnlinePresenter.sln
+      - if: needs.changes.outputs.app == 'true'
+        run: dotnet restore tests/Portfolio.Tests/Portfolio.Tests.csproj
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run check:architecture
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run test:content
       - run: node --test .github/workflows/workflow-contracts.test.mjs
-      - run: npm run content:source:validate
-      - run: npm run content:check
-      - run: npm run content:validate
-      - run: npm audit --audit-level=moderate
-      - run: npm ci --prefix client
-      - run: npm ci --prefix tools/a11y
-      - run: npm run build
-      - run: npm --prefix client test
-      - run: npm run build:metadata
-      - run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
-      - run: dotnet test tests/Portfolio.Tests/Portfolio.Tests.csproj --configuration Release --no-restore
-      - run: npm run validate:content
-      - run: npm audit --prefix client --audit-level=moderate
-      - run: npm audit --prefix tools/a11y --audit-level=moderate
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run content:source:validate
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run content:check
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run content:validate
+      - if: needs.changes.outputs.app == 'true'
+        run: npm audit --audit-level=moderate
+      - if: needs.changes.outputs.app == 'true'
+        run: npm ci --prefix client
+      - if: needs.changes.outputs.app == 'true'
+        run: npm ci --prefix tools/a11y
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run build
+      - if: needs.changes.outputs.app == 'true'
+        run: npm --prefix client test
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run build:metadata
+      - if: needs.changes.outputs.app == 'true'
+        run: dotnet build CvOnlinePresenter.sln --configuration Release --no-restore
+      - if: needs.changes.outputs.app == 'true'
+        run: dotnet test tests/Portfolio.Tests/Portfolio.Tests.csproj --configuration Release --no-restore
+      - if: needs.changes.outputs.app == 'true'
+        run: npm run validate:content
+      - if: needs.changes.outputs.app == 'true'
+        run: npm audit --prefix client --audit-level=moderate
+      - if: needs.changes.outputs.app == 'true'
+        run: npm audit --prefix tools/a11y --audit-level=moderate
       - name: Scan repository for secrets
         run: docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:v8.30.1 detect --source=/repo --no-git --redact --exit-code 1
-      - run: dotnet list CvOnlinePresenter.sln package --vulnerable --include-transitive
+      - if: needs.changes.outputs.app == 'true'
+        run: dotnet list CvOnlinePresenter.sln package --vulnerable --include-transitive
 
   deployment-safety-tests:
+    # These tests read only scripts/ and .github/workflows/.
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -73,8 +152,10 @@ jobs:
 
   browser-quality:
     # The three-browser matrix already ran on the PR. After merge, main only re-runs the fast build/security gate.
-    if: github.event_name == 'pull_request'
-    needs: build-and-security
+    # The required matrix check names only expand when the job itself runs; a job-level skip would leave them
+    # "Expected" forever. So the job always runs on PRs and only its steps are skipped for irrelevant changes.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.build-and-security.result != 'failure' }}
+    needs: [changes, build-and-security]
     timeout-minutes: 20
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -88,21 +169,29 @@ jobs:
           - browser: webkit
             runner: windows-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - if: needs.changes.outputs.browser == 'true'
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v6.1.0
+      - if: needs.changes.outputs.browser == 'true'
+        uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v7.1.0
+      - if: needs.changes.outputs.browser == 'true'
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-      - run: npm ci --prefix client
-      - run: npm run build
-      - run: dotnet build CvOnlinePresenter.sln --configuration Release
-      - run: npm ci --prefix tools/a11y
-      - if: matrix.runner == 'ubuntu-24.04'
+      - if: needs.changes.outputs.browser == 'true'
+        run: npm ci --prefix client
+      - if: needs.changes.outputs.browser == 'true'
+        run: npm run build
+      - if: needs.changes.outputs.browser == 'true'
+        run: dotnet build CvOnlinePresenter.sln --configuration Release
+      - if: needs.changes.outputs.browser == 'true'
+        run: npm ci --prefix tools/a11y
+      - if: needs.changes.outputs.browser == 'true' && matrix.runner == 'ubuntu-24.04'
         run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
-      - if: matrix.runner == 'windows-latest'
+      - if: needs.changes.outputs.browser == 'true' && matrix.runner == 'windows-latest'
         run: npx --prefix tools/a11y playwright install ${{ matrix.browser }}
-      - run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
+      - if: needs.changes.outputs.browser == 'true'
+        run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
