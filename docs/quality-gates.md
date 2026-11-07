@@ -26,10 +26,10 @@ updates, and the workflow-contract tests enforce the rule.
 
 | Job | When | Checks |
 |---|---|---|
-| `changes` | Pull request and `main` push | Classifies the changed files. Inert files (`VERSION`, `docs/**`, `README.md`, `AGENTS.md`, ADRs, `LICENSE`, Dependabot/PR-template/actionlint config) skip every gate below; any unexpected result runs all of them. |
-| `build-and-security` | Pull request and `main` push, unless only inert files changed | .NET and Node setup/restore; module-boundary check; `npm run test:content`; workflow-contract tests; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; Gitleaks; vulnerable transitive package scan. |
+| `changes` | Pull request and `main` push | Classifies the changed files into `any` (anything but `VERSION`), `app` (code, content or config that is built or tested), `browser` (`app` minus .NET-only tests and the content validator) and `scripts`. Unexpected results run every gate. |
+| `build-and-security` | Pull request and `main` push, unless only `VERSION` changed | Always: workflow-contract tests and the Gitleaks secret scan. Only when `app` is true: .NET and Node setup/restore; module-boundary check; `npm run test:content`; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; vulnerable transitive package scan. Workflow, PowerShell-script, deployment, template and documentation changes alone do not trigger the `app` steps. |
 | `deployment-safety-tests` | Pull request and `main` push, only when `scripts/` or `.github/` changed | Windows tests for production-deployment state recovery, version-bump validation and app-pin resolution. |
-| `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. The job always starts so the required matrix check names report; its steps are skipped unless something the browser can reach changed: i.e. not for inert files, other workflows, PowerShell scripts, `deployment/`, `artifacts/`, `templates/`, `tests/Portfolio.Tests/` or `tools/Portfolio.Content.Validator/` alone. |
+| `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. The job always starts so the required matrix check names report; its steps run only when `browser` is true. |
 
 A job skipped with `if` counts as passed for required status checks. Matrix
 jobs are the exception: a job-level skip leaves the expanded check names
