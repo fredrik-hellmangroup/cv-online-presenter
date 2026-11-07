@@ -264,6 +264,16 @@ test('workflow action references are exact versions for verified publishers and 
   assert.ok(checked > 0, 'workflows reference external actions');
 });
 
+test('quality gates skip irrelevant work without leaving required checks pending', () => {
+  const jobs = getIndentedBlock(quality, 0, 'jobs');
+  assert.match(getIndentedBlock(jobs, 2, 'build-and-security'), /^    if: needs\.changes\.outputs\.app == 'true'$/m);
+  assert.match(getIndentedBlock(jobs, 2, 'deployment-safety-tests'), /^    if: needs\.changes\.outputs\.scripts == 'true'$/m);
+  const browser = getIndentedBlock(jobs, 2, 'browser-quality');
+  assert.doesNotMatch(browser, /^    if: .*outputs\./m, 'a job-level skip leaves the expanded matrix check names pending');
+  const steps = getSteps(browser);
+  assert.ok(steps.length > 0 && steps.every(step => /^      - if: needs\.changes\.outputs\.app == 'true'/u.test(step)));
+});
+
 test('quality required job keeps its existing name and runs content checks', () => {
   const jobs = getIndentedBlock(quality, 0, 'jobs');
   const buildAndSecurity = getIndentedBlock(jobs, 2, 'build-and-security');

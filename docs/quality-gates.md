@@ -26,9 +26,15 @@ updates, and the workflow-contract tests enforce the rule.
 
 | Job | When | Checks |
 |---|---|---|
-| `build-and-security` | Pull request and `main` push | .NET and Node setup/restore; module-boundary check; `npm run test:content`; workflow-contract tests; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; Gitleaks; vulnerable transitive package scan. |
-| `deployment-safety-tests` | Pull request and `main` push | Windows tests for production-deployment state recovery, version-bump validation and app-pin resolution. |
-| `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. |
+| `changes` | Pull request and `main` push | Classifies the changed files. A `VERSION`-only change (the release PR) skips the gates below; any unexpected result runs all of them. |
+| `build-and-security` | Pull request and `main` push, unless only `VERSION` changed | .NET and Node setup/restore; module-boundary check; `npm run test:content`; workflow-contract tests; source-map validation, generated-output check, and Node content validation against the synthetic app tree; client build and tests; .NET build and tests; .NET content validation; npm audits; Gitleaks; vulnerable transitive package scan. |
+| `deployment-safety-tests` | Pull request and `main` push, only when `scripts/` or `.github/` changed | Windows tests for production-deployment state recovery, version-bump validation and app-pin resolution. |
+| `browser-quality` | Pull request only | Playwright matrix for Chromium, Firefox, and WebKit on Windows; it depends on `build-and-security`. The job always starts so the required matrix check names report; its steps are skipped when only `VERSION` changed. |
+
+A job skipped with `if` counts as passed for required status checks. Matrix
+jobs are the exception: a job-level skip leaves the expanded check names
+pending, which is why `browser-quality` skips steps instead. `version-guard.yml`
+runs only on pull requests that touch `VERSION`.
 
 The content commands in this app workflow use the public synthetic tree. They
 do not read a private CV repository. The public job IDs and browser matrix are
