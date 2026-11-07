@@ -264,15 +264,29 @@ test('workflow action references are exact versions for verified publishers and 
   assert.ok(checked > 0, 'workflows reference external actions');
 });
 
+test('quality gates skip irrelevant work without leaving required checks pending', () => {
+  const jobs = getIndentedBlock(quality, 0, 'jobs');
+  assert.match(getIndentedBlock(jobs, 2, 'build-and-security'), /^    if: needs\.changes\.outputs\.any == 'true'$/m);
+  assert.match(getIndentedBlock(jobs, 2, 'deployment-safety-tests'), /^    if: needs\.changes\.outputs\.scripts == 'true'$/m);
+  const browser = getIndentedBlock(jobs, 2, 'browser-quality');
+  assert.doesNotMatch(browser, /^    if: .*outputs\./m, 'a job-level skip leaves the expanded matrix check names pending');
+  const steps = getSteps(browser);
+  assert.ok(steps.length > 0 && steps.every(step => /^      - if: needs\.changes\.outputs\.browser == 'true'/u.test(step)));
+
+  const buildSteps = getSteps(getIndentedBlock(jobs, 2, 'build-and-security'));
+  const alwaysOn = buildSteps.filter(step => !/^      - if: needs\.changes\.outputs\.app == 'true'/u.test(step));
+  assert.deepEqual(alwaysOn.map(step => /actions\/checkout|workflow-contracts|gitleaks/u.exec(step)?.[0]), ['actions/checkout', 'workflow-contracts', 'gitleaks'], 'only checkout, the workflow-contract tests and the secret scan run for every non-release change');
+});
+
 test('quality required job keeps its existing name and runs content checks', () => {
   const jobs = getIndentedBlock(quality, 0, 'jobs');
   const buildAndSecurity = getIndentedBlock(jobs, 2, 'build-and-security');
-  assert.match(buildAndSecurity, /^      - run: npm run test:content$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm run test:content$/m);
   assert.match(buildAndSecurity, /^      - run: node --test \.github\/workflows\/workflow-contracts\.test\.mjs$/m);
-  assert.match(buildAndSecurity, /^      - run: npm run content:source:validate$/m);
-  assert.match(buildAndSecurity, /^      - run: npm run content:check$/m);
-  assert.match(buildAndSecurity, /^      - run: npm run content:validate$/m);
-  assert.match(buildAndSecurity, /^      - run: npm audit --audit-level=moderate$/m);
-  assert.match(buildAndSecurity, /^      - run: npm run validate:content$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm run content:source:validate$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm run content:check$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm run content:validate$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm audit --audit-level=moderate$/m);
+  assert.match(buildAndSecurity, /^      - if: needs\.changes\.outputs\.app == 'true'\n        run: npm run validate:content$/m);
   assert.match(quality, /Run VERSION bump validation tests/);
 });
