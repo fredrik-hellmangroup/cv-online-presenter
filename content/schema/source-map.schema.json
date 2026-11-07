@@ -47,6 +47,20 @@
         }
       },
       "additionalProperties": false
+    },
+    "techReview": {
+      "type": "object",
+      "description": "Hand-written, optional, private record of assignment keywords reviewed and deliberately left out of site.json techGroups. Used only by the unmapped-technology report.",
+      "additionalProperties": false,
+      "properties": {
+        "ignored": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/singleLine"
+          },
+          "uniqueItems": true
+        }
+      }
     }
   },
   "$defs": {
