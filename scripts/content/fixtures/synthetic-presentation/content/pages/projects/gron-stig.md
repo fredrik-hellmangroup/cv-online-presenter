@@ -12,7 +12,7 @@ industry: "Friluftsliv"
 technologies: ["Python","REST","GeoJSON"]
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik / Projekt Grön Stig"
-sourceSha256: "729028700e5a11fa854ddab98a9fe2e16a9d11084dc455b6060d55f9a93c8dbf"
+sourceSha256: "00e5fd757c9cc31aa1d9c7d5e3868197c09f52dd3d351384c9f8193956adfff3"
 ---
 
 # Projekt Grön Stig

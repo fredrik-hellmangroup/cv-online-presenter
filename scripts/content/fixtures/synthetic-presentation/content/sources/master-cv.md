@@ -67,10 +67,6 @@ Python, REST, GeoJSON
 - Tillförlitliga API:er och informationsflöden
 - Automatiserad testning och hållbar leverans
 
-**Nyckelteknik**
-- Kärna: TypeScript, Node.js
-- Data: SQLite, PostgreSQL
-
 ## Branscherfarenhet
 Utbildning, kultur och lokala tjänster
 

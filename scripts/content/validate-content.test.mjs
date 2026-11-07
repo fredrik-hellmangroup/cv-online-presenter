@@ -47,6 +47,23 @@ function addDocument(root, type, fields) {
   fs.writeFileSync(file, content);
   return file;
 }
+test('rejects empty, unnamed and duplicated techGroups in site.json', () => withFixture(root => {
+  const siteFile = target(root, 'content/site.json');
+  const site = JSON.parse(fs.readFileSync(siteFile, 'utf8'));
+  const cases = [
+    [[{ name: '', items: ['A'] }], /needs a name and non-empty items/],
+    [[{ name: 'Core', items: [] }], /needs a name and non-empty items/],
+    [[{ name: 'Core', items: ['A'] }, { name: 'Data', items: ['a'] }], /lists 'a' more than once/]
+  ];
+  for (const [techGroups, message] of cases) {
+    fs.writeFileSync(siteFile, JSON.stringify({ ...site, techGroups }));
+    const result = run(root);
+    assert.notEqual(result.status, 0, JSON.stringify(techGroups));
+    assert.match(result.stderr, message);
+  }
+  fs.writeFileSync(siteFile, JSON.stringify({ ...site, techGroups: [{ name: 'Core', items: ['A', 'B'] }] }));
+  assert.equal(run(root).status, 0);
+}));
 test('rejects array and object values for required title and description strings', () => withFixture(root => {
   const cases = [
     ['title', 'title: [Invalid]'],

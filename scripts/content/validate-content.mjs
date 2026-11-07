@@ -202,6 +202,18 @@ const siteUrl = new URL(settings.siteUrl);
 const files = enumerateMarkdownFiles();
 const documents = [];
 const failures = [];
+const seenTechItems = new Set();
+for (const group of settings.techGroups ?? []) {
+  const items = Array.isArray(group?.items) ? group.items.map(item => (typeof item === 'string' ? item.trim() : '')) : [];
+  if (typeof group?.name !== 'string' || !group.name.trim() || items.length === 0 || items.includes('')) {
+    failures.push('content/site.json: every techGroups entry needs a name and non-empty items');
+    continue;
+  }
+  for (const item of items) {
+    if (seenTechItems.has(item.toLowerCase())) failures.push(`content/site.json: techGroups lists '${item}' more than once`);
+    seenTechItems.add(item.toLowerCase());
+  }
+}
 const markdownParser = new MarkdownIt('commonmark', { html: true });
 markdownParser.validateLink = () => true;
 markdownParser.normalizeLink = destination => destination;

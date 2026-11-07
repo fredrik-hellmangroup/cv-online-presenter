@@ -134,12 +134,12 @@
     }
   ],
   "bootstrapOutputSha256": {
-    "content/pages/cv.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/home.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/services.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/projects.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/projects/kompass.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/projects/lanternan.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2",
-    "content/pages/projects/gron-stig.md": "8243fb62ae77a8e474b45c438ac0ffc12ffe6966d72a4709ac4fa3b49becdfa2"
+    "content/pages/cv.md": "64c4c4a2fbf251287f7b5d80ef1a80ce23d38a84ce44b88e4124915ff282d6a2",
+    "content/pages/home.md": "f980023c90c48799566d87fb480a20185b24146a643641a90cd83b148abae4cd",
+    "content/pages/services.md": "8face77f1d4997f20d8d458c2f5ce51c6ea00129b05987818ba137a19180b28b",
+    "content/pages/projects.md": "93f67aa0a7415fb51384ef3942c0f2619f13d21538d3121ddcfcd7c1512877ec",
+    "content/pages/projects/kompass.md": "dc9d90f10c2bb7e1f24f203e68a97e393465bf143a1dc3c740c8520c5b078ccf",
+    "content/pages/projects/lanternan.md": "fb3e1b6e45f726da5a24a6eeff2d7ba3b414eddedb402cd3ea45ddf1a6b8c1a6",
+    "content/pages/projects/gron-stig.md": "ea94e2997557660ab84850c0fdb99e8174a69fd6d63d3666bbebf264e4a277c3"
   }
 }

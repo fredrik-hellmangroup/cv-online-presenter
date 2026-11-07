@@ -14,12 +14,26 @@ The Swedish heading names are defaults in `CvHeadings`; pass another `CvHeadings
 | `## Praktiskt` with a list of `Label: value` | Small fact cards (availability, working model, languages, references…) shown at the end of the overview. The section itself is left out of the body and the table of contents. Optional; items without a `:` are ignored. |
 | `## Branscherfarenhet`, comma-separated paragraph | Number of industries (figure). |
 | `## Anställningar`, first list item `Role, Company, 2023 - pågående` | Hero kicker: `Company · Role · sedan 2023`. |
-| `**Nyckelteknik**` followed by a list of `Group: a, b, c` | Skill buttons (`button.skill-btn`), and the nodes of the background constellation. Clicking a button highlights the technology; clicking again or pressing Escape releases it. |
 | `## Uppdragshistorik` with one `###` per assignment | Assignment cards, the git log, and the figure for number of assignments. |
 | `**Period:** 2023 - pågående` and `**Roll:** …` under each `###` | Period (`2016`, `2018 - 2020`, or `2023 - pågående`) and role. |
-| `#### Nyckelord` followed by a comma-separated line | Technology tags on the card. Technologies that appear together in at least two assignments are linked in the constellation, and hovering or reading an assignment lights its technologies. |
+| `#### Nyckelord` followed by a comma-separated line | Technology tags on the card, and the source of the skill buttons (see below). Technologies that appear together in at least two assignments are linked in the constellation, and hovering or reading an assignment lights its technologies. |
 
-The recommended section order is Översikt, Praktiskt, Uppdragshistorik, Kompetensområden, Branscherfarenhet: what the visitor most often wants (the assignments) comes right after the overview. Everything before `## Uppdragshistorik` is rendered above the git log and everything after it below the assignment cards, so another order also works. Other sections (for example `## Kompetensområden`) render as normal Markdown.
+### Technologies come from the assignment keywords
+
+There is no technology list to maintain in the CV Markdown. The skill buttons (`button.skill-btn`) on `/cv` and `/services`, the nodes of the background constellation and the *nyckelteknologier* figure are all derived from the `#### Nyckelord` of the assignments. Duplicates are merged without regard to case, and within a group the keywords used in the most assignments come first.
+
+The optional `techGroups` array in `content/site.json` only decides which group a keyword is listed under. Groups appear in the order given, and keywords that are in no group are listed last under *Övrigt* (`CvHeadings.OtherSkills`); items that no assignment uses are ignored. Without `techGroups` all keywords form one group. When groups are defined, *Övrigt* is not counted in the *nyckelteknologier* figure.
+
+```json
+"techGroups": [
+  { "name": "Kärnplattform", "items": [".NET", "C#", "SQL Server"] },
+  { "name": "Moln och DevOps", "items": ["Azure DevOps", "Docker", "Kubernetes"] }
+]
+```
+
+Every group needs a name and at least one item, and an item may only appear in one group (case-insensitive); otherwise the content release fails validation when it is loaded. The list is rendered at the end of the `## Kompetensområden` section (`CvHeadings.Competence`), or first among the sections after the history if there is none, under the title `CvHeadings.Skills` (*Teknik i uppdragen*). Clicking a button highlights the technology; clicking again or pressing Escape releases it.
+
+The recommended section order is Översikt, Praktiskt, Uppdragshistorik, Kompetensområden, Branscherfarenhet: what the visitor most often wants (the assignments) comes right after the overview. Everything before `## Uppdragshistorik` is rendered above the git log and everything after it below the assignment cards, so another order also works. Other sections (for example `## Kompetensområden`) render as normal Markdown; the derived technology list is added at the end of `## Kompetensområden`.
 
 ## PDF and print
 

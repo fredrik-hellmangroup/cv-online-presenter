@@ -5,5 +5,11 @@
     "contactEmail": "demo@example.invalid",
     "siteName": "Demo Consultant",
     "companyName": "Example Studio",
-    "siteUrl": "https://example.invalid"
+    "siteUrl": "https://example.invalid",
+    "techGroups": [
+        { "name": "Backend", "items": ["C#", ".NET", "ASP.NET Core", "Node.js"] },
+        { "name": "Webb", "items": ["TypeScript", "JavaScript", "HTML", "CSS"] },
+        { "name": "Data", "items": ["SQL Server", "PostgreSQL", "Redis"] },
+        { "name": "Leverans", "items": ["Docker", "GitHub Actions", "Azure"] }
+    ]
 }

@@ -5,7 +5,7 @@ locale: "sv-SE"
 status: "published"
 type: "page"
 source: "sources/master-cv.md"
-sourceSha256: "e4eed0cf814144bfb01868bcf154bef47e6366c4e318f2df3a3722ffb3277fc8"
+sourceSha256: "aad0e81a0e3c4c93bee163348bd1bcf5b3f60eb097b1ac387a5064b2e0c80c02"
 ---
 
 # Alex Exempel

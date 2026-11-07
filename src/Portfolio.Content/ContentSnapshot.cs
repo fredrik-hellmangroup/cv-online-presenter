@@ -5,7 +5,16 @@ using System.Text.Json;
 
 namespace Portfolio.Content;
 
-public sealed record SiteIdentity(IReadOnlyList<string> SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null);
+// A named group of technologies from site.json "techGroups"; it only says where an assignment keyword is listed.
+public sealed record TechGroup(string Name, IReadOnlyList<string> Items);
+
+public sealed record SiteIdentity(
+    IReadOnlyList<string> SupportedLocales,
+    string? ContactEmail,
+    string SiteName,
+    string? SiteUrl,
+    string? CompanyName = null,
+    IReadOnlyList<TechGroup>? TechGroups = null);
 
 public sealed record ContentSnapshot(
     string Version,
@@ -71,8 +80,26 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
             source.Append('\n').Append(document.SourcePath).Append('\n').Append(document.Markdown).Append('\n')
                 .Append(JsonSerializer.Serialize(document.Metadata));
         var version = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString()))).ToLowerInvariant();
-        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName);
+        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName, NormalizeTechGroups(settings.TechGroups));
         return new(version, identity, immutableDocuments, sections);
+    }
+
+    private static IReadOnlyList<TechGroup>? NormalizeTechGroups(TechGroup[]? groups)
+    {
+        if (groups is null || groups.Length == 0) return null;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<TechGroup>();
+        foreach (var group in groups)
+        {
+            var name = group?.Name?.Trim();
+            var items = group?.Items?.Select(item => item?.Trim() ?? string.Empty).ToArray() ?? [];
+            if (string.IsNullOrEmpty(name) || items.Length == 0 || items.Any(item => item.Length == 0))
+                throw new InvalidOperationException("Every techGroups entry in site.json needs a name and non-empty items.");
+            foreach (var item in items)
+                if (!seen.Add(item)) throw new InvalidOperationException($"techGroups in site.json lists '{item}' more than once.");
+            normalized.Add(new TechGroup(name, items));
+        }
+        return normalized;
     }
 
     private static string? NormalizeSiteUrl(string? value)
@@ -97,7 +124,8 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
         return new(before.Version, after.Version, added, removed, changed);
     }
 
-    private sealed record SiteIdentitySettings(string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null);
+    private sealed record SiteIdentitySettings(
+        string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null, TechGroup[]? TechGroups = null);
 }
 
 public sealed record ContentReleaseState(string? ContentReleaseId, ContentSnapshot Snapshot);

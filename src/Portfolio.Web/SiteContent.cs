@@ -45,7 +45,7 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
                 if (cachedCvVersion == snapshot.Version) return cachedCv;
             }
             var document = FindByPath("/cv");
-            var view = document is null ? null : CvPresenter.Build(Render(document), null, ProjectUrlFor);
+            var view = document is null ? null : CvPresenter.Build(Render(document), null, ProjectUrlFor, snapshot.Identity.TechGroups);
             lock (CvLock)
             {
                 cachedCvVersion = snapshot.Version;

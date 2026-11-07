@@ -5,5 +5,9 @@
   "contactEmail": "alex@example.invalid",
   "siteName": "Alex Exempel",
   "companyName": "Exempel Konsult AB",
-  "siteUrl": "https://example.invalid"
+  "siteUrl": "https://example.invalid",
+  "techGroups": [
+    { "name": "Kärna", "items": ["TypeScript", "Node.js"] },
+    { "name": "Data", "items": ["SQLite", "PostgreSQL"] }
+  ]
 }
