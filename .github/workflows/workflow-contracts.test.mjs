@@ -271,7 +271,7 @@ test('quality gates skip irrelevant work without leaving required checks pending
   const browser = getIndentedBlock(jobs, 2, 'browser-quality');
   assert.doesNotMatch(browser, /^    if: .*outputs\./m, 'a job-level skip leaves the expanded matrix check names pending');
   const steps = getSteps(browser);
-  assert.ok(steps.length > 0 && steps.every(step => /^      - if: needs\.changes\.outputs\.app == 'true'/u.test(step)));
+  assert.ok(steps.length > 0 && steps.every(step => /^      - if: needs\.changes\.outputs\.browser == 'true'/u.test(step)));
 });
 
 test('quality required job keeps its existing name and runs content checks', () => {

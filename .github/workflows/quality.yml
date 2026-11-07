@@ -14,13 +14,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decides which gates are relevant. A VERSION-only change (the release PR) was already verified when its content
-  # merged, so it skips the build and browser gates. Required checks still report: a job skipped by `if` counts as passed.
+  # Decides which gates are relevant, so a change is only re-validated by gates it can affect. Required checks still
+  # report: a job skipped by `if` counts as passed.
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       app: ${{ steps.filter.outputs.app }}
+      browser: ${{ steps.filter.outputs.browser }}
       scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -35,23 +36,29 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          # Files no gate reads: the release switch, documentation and repository metadata.
+          $inert = '^(VERSION|LICENSE|README\.md|AGENTS\.md|ADR-[^/]*\.md|docs/.*|\.github/(PULL_REQUEST_TEMPLATE/.*|dependabot\.yml|actionlint\.yaml))$'
+          # Also unreachable from the browser: other workflows, PowerShell scripts, deployment files and .NET-only tests/tools.
+          $notBrowser = '^(\.github/workflows/(?!quality\.yml$).*|scripts/[^/]*\.ps(m)?1|deployment/.*|artifacts/.*|templates/.*|tests/Portfolio\.Tests/.*|tools/Portfolio\.Content\.Validator/.*)$'
           # Fail open: anything unexpected runs every gate.
           $app = $true
+          $browser = $true
           $scripts = $true
           $range = if ($env:EVENT_NAME -ceq 'pull_request') { "$env:BASE_SHA...$env:HEAD_SHA" } else { "$env:BASE_SHA..$env:HEAD_SHA" }
           if ($env:BASE_SHA -cmatch '^[a-f0-9]{40}$' -and $env:BASE_SHA -cnotmatch '^0+$') {
             $changed = @(git diff --name-only $range)
             if ($LASTEXITCODE -eq 0 -and $changed.Count -gt 0) {
-              $app = $null -ne ($changed | Where-Object { $_ -cne 'VERSION' } | Select-Object -First 1)
+              $app = $null -ne ($changed | Where-Object { $_ -cnotmatch $inert } | Select-Object -First 1)
+              $browser = $null -ne ($changed | Where-Object { $_ -cnotmatch $inert -and $_ -cnotmatch $notBrowser } | Select-Object -First 1)
               $scripts = $null -ne ($changed | Where-Object { $_ -cmatch '^(scripts|\.github)/' } | Select-Object -First 1)
             }
             else {
               Write-Warning "Could not classify $range; running every gate."
             }
           }
-          "app=$($app.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "scripts=$($scripts.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
+          foreach ($gate in 'app', 'browser', 'scripts') {
+            "$gate=$((Get-Variable $gate -ValueOnly).ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
   build-and-security:
     needs: changes
     if: needs.changes.outputs.app == 'true'
@@ -133,29 +140,29 @@ jobs:
           - browser: webkit
             runner: windows-latest
     steps:
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         run: npm ci --prefix client
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         run: npm run build
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         run: dotnet build CvOnlinePresenter.sln --configuration Release
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         run: npm ci --prefix tools/a11y
-      - if: needs.changes.outputs.app == 'true' && matrix.runner == 'ubuntu-24.04'
+      - if: needs.changes.outputs.browser == 'true' && matrix.runner == 'ubuntu-24.04'
         run: npx --prefix tools/a11y playwright install --with-deps ${{ matrix.browser }}
-      - if: needs.changes.outputs.app == 'true' && matrix.runner == 'windows-latest'
+      - if: needs.changes.outputs.browser == 'true' && matrix.runner == 'windows-latest'
         run: npx --prefix tools/a11y playwright install ${{ matrix.browser }}
-      - if: needs.changes.outputs.app == 'true'
+      - if: needs.changes.outputs.browser == 'true'
         run: npm --prefix tools/a11y test -- --project=${{ matrix.browser }}
