@@ -22,7 +22,7 @@ The Swedish heading names are defaults in `CvHeadings`; pass another `CvHeadings
 
 There is no technology list to maintain in the CV Markdown. The skill buttons (`button.skill-btn`) on `/cv` and `/services`, the nodes of the background constellation and the *nyckelteknologier* figure are all derived from the `#### Nyckelord` of the assignments. Duplicates are merged without regard to case, and within a group the keywords used in the most assignments come first.
 
-The optional `techGroups` array in `content/site.json` only decides which group a keyword is listed under. Groups appear in the order given, and keywords that are in no group are listed last under *Övrigt* (`CvHeadings.OtherSkills`); items that no assignment uses are ignored. Without `techGroups` all keywords form one group. When groups are defined, *Övrigt* is not counted in the *nyckelteknologier* figure.
+The optional `techGroups` array in `content/site.json` only decides which group a keyword is listed under. Groups appear in the order given, and keywords that are in no group are listed last under *Övrigt* (`CvHeadings.OtherSkills`); items that no assignment uses are ignored. Without `techGroups` all keywords form one group. When groups are defined, *Övrigt* is not counted in the *nyckelteknologier* figure. Keywords you have reviewed and deliberately left out can be listed in `"techReview": { "ignored": [...] }` in the same file; only `npm run content:tech:report` reads it (see [source-map.md](./source-map.md#technology-coverage-report)).
 
 ```json
 "techGroups": [

@@ -29,13 +29,6 @@ test('validates the app template and synthetic fixture against draft 2020-12 sch
 });
 
 
-test('accepts an optional private techReview list and rejects duplicates or unknown fields', () => {
-  const base = readJson('scripts/content/fixtures/synthetic/content/source-map.json');
-  assert.equal(validateSourceMap({ ...base, techReview: { ignored: ['SOLID', 'Perl'] } }), true);
-  assert.equal(validateSourceMap({ ...base, techReview: { ignored: ['SOLID', 'SOLID'] } }), false);
-  assert.equal(validateSourceMap({ ...base, techReview: { ignored: [], extra: true } }), false);
-});
-
 test('rejects noncanonical, reserved, and malformed project routes in schemas', () => {
   const base = readJson('scripts/content/fixtures/synthetic/content/source-map.json');
   for (const slug of ['Bad', 'bad--slug', 'con', 'aux', 'com1', 'lpt9']) {

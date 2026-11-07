@@ -1,5 +1,5 @@
 // Reports assignment keywords in the canonical CV that neither site.json "techGroups" nor the
-// reviewed list in source-map.json "techReview.ignored" accounts for. Reporting only: it never edits content.
+// reviewed list in site.json "techReview.ignored" accounts for. Reporting only: it never edits content.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -83,7 +83,7 @@ export function loadTechCoverageInput(root) {
   return {
     keywords,
     techGroups: site.techGroups ?? [],
-    ignored: sourceMap.techReview?.ignored ?? [],
+    ignored: site.techReview?.ignored ?? [],
     hasTechGroups: Array.isArray(site.techGroups) && site.techGroups.length > 0
   };
 }
@@ -95,7 +95,7 @@ export function formatReport(result, keywordCount) {
     for (const { keyword, assignments } of result.unmapped) {
       lines.push(`  - ${keyword} (${assignments} ${assignments === 1 ? 'assignment' : 'assignments'})`);
     }
-    lines.push('  Add each one to a techGroups group in content/site.json, or to techReview.ignored in content/source-map.json to accept that it is left out.');
+    lines.push('  Add each one to a techGroups group, or to techReview.ignored, in content/site.json to accept that it is left out.');
   }
   for (const names of result.sameTechnology) {
     lines.push(`WARN: possibly the same technology under different names: ${names.join(' / ')}. Pick one spelling.`);

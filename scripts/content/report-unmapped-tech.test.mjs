@@ -51,9 +51,9 @@ function writeContentRoot(ignored) {
   fs.mkdirSync(path.join(root, 'content', 'sources'), { recursive: true });
   fs.writeFileSync(path.join(root, 'content', 'sources', 'master-cv.md'), cv);
   fs.writeFileSync(path.join(root, 'content', 'source-map.json'),
-    JSON.stringify({ source: 'content/sources/master-cv.md', techReview: { ignored } }));
+    JSON.stringify({ source: 'content/sources/master-cv.md' }));
   fs.writeFileSync(path.join(root, 'content', 'site.json'),
-    JSON.stringify({ techGroups: [{ name: 'Core', items: ['.NET', 'SQL Server', 'Azure'] }] }));
+    JSON.stringify({ techGroups: [{ name: 'Core', items: ['.NET', 'SQL Server', 'Azure'] }], techReview: { ignored } }));
   return root;
 }
 

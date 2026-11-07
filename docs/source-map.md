@@ -120,7 +120,6 @@ The top-level object supports:
 | `source` | Must be exactly `content/sources/master-cv.md`. |
 | `generatedPages` | Non-empty array. It must include exactly one each of `content/pages/cv.md`, `home.md`, `services.md`, and `projects.md`; every other entry must be a project detail page. Paths must be unique case-insensitively. The projects index must also select at least one mapped project page. |
 | `bootstrapOutputSha256` | Lowercase 64-character SHA-256 values keyed by **exactly** the paths in `generatedPages`; see [Bootstrap and provenance](#bootstrap-and-provenance). |
-| `techReview` | Optional. `{ "ignored": ["SOLID", ...] }` lists assignment keywords you have reviewed and chose not to put in `site.json` `techGroups`. Only the [technology coverage report](#technology-coverage-report) reads it; the generator ignores it. |
 
 Every page entry has these required fields:
 
@@ -445,9 +444,9 @@ See [repositories.md](repositories.md#shared-content-workflow-pin).
 npm run content:tech:report -- --root D:\work\private-portfolio-content
 ```
 
-The report lists every keyword that is in no `techGroups` group and not in `techReview.ignored` in `source-map.json`, with the number of assignments using it. Act on each one by adding it to a group in `site.json`, or to `techReview.ignored` to record that you decided to leave it out; reviewed keywords are not reported again. It also warns about spelling variants of one technology (`Microsoft X`/`X`, `X Core`/`X`, `X-API`/`X API`), entries that are both mapped and ignored, and (as INFO) ignored entries that no assignment uses any more.
+The report lists every keyword that is in no `techGroups` group and not in `techReview.ignored`, both in `content/site.json` (`"techReview": { "ignored": ["SOLID", ...] }`), with the number of assignments using it. Act on each one by adding it to a group, or to `techReview.ignored` to record that you decided to leave it out; reviewed keywords are not reported again. `site.json` is published, so the ignored list is public too. It also warns about spelling variants of one technology (`Microsoft X`/`X`, `X Core`/`X`, `X-API`/`X API`), entries that are both mapped and ignored, and (as INFO) ignored entries that no assignment uses any more.
 
-By default the report only prints and exits 0. With `--strict` it exits 1 while unreviewed keywords, spelling variants or mapped-and-ignored entries remain; the reusable content workflow runs it that way. It is skipped when `site.json` has no `techGroups`. Editing `source-map.json` changes its hash, so run the generator with `--write` afterwards.
+By default the report only prints and exits 0. With `--strict` it exits 1 while unreviewed keywords, spelling variants or mapped-and-ignored entries remain; the reusable content workflow runs it that way. It is skipped when `site.json` has no `techGroups`.
 
 ## Commands, `--root`, and errors
 
