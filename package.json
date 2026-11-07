@@ -15,6 +15,7 @@
     "content:generate": "node scripts/content/generate-content.mjs --write",
     "content:check": "node scripts/content/generate-content.mjs --check",
     "content:validate": "node scripts/content/validate-content.mjs",
+    "content:tech:report": "node scripts/content/report-unmapped-tech.mjs",
     "content:active-release:verify": "node scripts/content/verify-active-release.mjs",
     "test:content": "node --test scripts/content/*.test.mjs",
     "validate:content": "dotnet run --project tools/Portfolio.Content.Validator -- --content content/pages",

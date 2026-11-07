@@ -436,6 +436,18 @@ See [repositories.md](repositories.md#shared-content-workflow-pin).
    check, and both content validators. If provenance is pinned, pass the same
    `--app-version` to each generator command (the script below does this).
 
+## Technology coverage report
+
+`site.json` `techGroups` is maintained by hand. To see which assignment keywords (the `#### Nyckelord` lines in the CV) it does not cover:
+
+```powershell
+npm run content:tech:report -- --root D:\work\private-portfolio-content
+```
+
+The report lists every keyword that is in no `techGroups` group and not in `techReview.ignored`, both in `content/site.json` (`"techReview": { "ignored": ["SOLID", ...] }`), with the number of assignments using it. Act on each one by adding it to a group, or to `techReview.ignored` to record that you decided to leave it out; reviewed keywords are not reported again. `site.json` is published, so the ignored list is public too. It also warns about spelling variants of one technology (`Microsoft X`/`X`, `X Core`/`X`, `X-API`/`X API`), entries that are both mapped and ignored, and (as INFO) ignored entries that no assignment uses any more.
+
+By default the report only prints and exits 0. With `--strict` it exits 1 while unreviewed keywords, spelling variants or mapped-and-ignored entries remain; the reusable content workflow runs it that way. It is skipped when `site.json` has no `techGroups`.
+
 ## Commands, `--root`, and errors
 
 From the app repository root, with the checkout at the pinned release tag:

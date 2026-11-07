@@ -214,6 +214,17 @@ for (const group of settings.techGroups ?? []) {
     seenTechItems.add(item.toLowerCase());
   }
 }
+const techReviewIgnored = settings.techReview?.ignored;
+if (settings.techReview !== undefined &&
+    (!Array.isArray(techReviewIgnored) || techReviewIgnored.some(item => typeof item !== 'string' || !item.trim()))) {
+  failures.push('content/site.json: techReview.ignored must be an array of non-empty strings');
+} else {
+  const seenIgnored = new Set();
+  for (const item of techReviewIgnored ?? []) {
+    if (seenIgnored.has(item.trim().toLowerCase())) failures.push(`content/site.json: techReview.ignored lists '${item}' more than once`);
+    seenIgnored.add(item.trim().toLowerCase());
+  }
+}
 const markdownParser = new MarkdownIt('commonmark', { html: true });
 markdownParser.validateLink = () => true;
 markdownParser.normalizeLink = destination => destination;

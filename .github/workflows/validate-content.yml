@@ -104,6 +104,7 @@ jobs:
         run: |
           npm run content:source:validate -- --root ../content-repo --app-version $env:APP_VERSION --app-commit-sha $env:APP_SHA
           npm run content:check -- --root ../content-repo --app-version $env:APP_VERSION --app-commit-sha $env:APP_SHA
+          npm run content:tech:report -- --root ../content-repo --strict
       - name: Validate content with the Node.js validator
         working-directory: app
         shell: pwsh

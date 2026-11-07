@@ -64,6 +64,23 @@ test('rejects empty, unnamed and duplicated techGroups in site.json', () => with
   fs.writeFileSync(siteFile, JSON.stringify({ ...site, techGroups: [{ name: 'Core', items: ['A', 'B'] }] }));
   assert.equal(run(root).status, 0);
 }));
+test('rejects malformed or duplicated techReview.ignored in site.json', () => withFixture(root => {
+  const siteFile = target(root, 'content/site.json');
+  const site = JSON.parse(fs.readFileSync(siteFile, 'utf8'));
+  const cases = [
+    [{ ignored: 'SOLID' }, /must be an array of non-empty strings/],
+    [{ ignored: ['SOLID', ''] }, /must be an array of non-empty strings/],
+    [{ ignored: ['SOLID', 'solid'] }, /lists 'solid' more than once/]
+  ];
+  for (const [techReview, message] of cases) {
+    fs.writeFileSync(siteFile, JSON.stringify({ ...site, techReview }));
+    const result = run(root);
+    assert.notEqual(result.status, 0, JSON.stringify(techReview));
+    assert.match(result.stderr, message);
+  }
+  fs.writeFileSync(siteFile, JSON.stringify({ ...site, techReview: { ignored: ['SOLID'] } }));
+  assert.equal(run(root).status, 0);
+}));
 test('rejects array and object values for required title and description strings', () => withFixture(root => {
   const cases = [
     ['title', 'title: [Invalid]'],
