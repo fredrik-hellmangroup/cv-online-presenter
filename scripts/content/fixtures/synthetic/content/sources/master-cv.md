@@ -15,10 +15,6 @@ Alex arbetar nära användare och utvecklare för att göra vardagens verktyg ty
 - Tillförlitliga API:er och informationsflöden
 - Automatiserad testning och hållbar leverans
 
-**Nyckelteknik**
-- Kärna: TypeScript, Node.js
-- Data: SQLite, PostgreSQL
-
 ## Branscherfarenhet
 Utbildning, kultur och lokala tjänster
 

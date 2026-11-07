@@ -41,12 +41,14 @@ public sealed record CvHeadings(
     string Industries = "Branscherfarenhet",
     string History = "Uppdragshistorik",
     string Employment = "Anställningar",
-    string Skills = "Nyckelteknik",
+    string Skills = "Teknik i uppdragen",
     string Keywords = "Nyckelord",
     string Period = "Period",
     string Role = "Roll",
     string Ongoing = "pågående",
-    string Practical = "Praktiskt");
+    string Practical = "Praktiskt",
+    string Competence = "Kompetensområden",
+    string OtherSkills = "Övrigt");
 
 /// <summary>
 /// Turns the sanitized HTML of the CV page into a structured view: hero facts, assignment cards,
@@ -62,7 +64,8 @@ public static class CvPresenter
     private static readonly Regex YearsPattern = new(
         @"över\s+(?<years>\d+)\s+års", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    public static CvView? Build(string renderedHtml, CvHeadings? headings = null, Func<string, string?>? projectUrl = null)
+    public static CvView? Build(
+        string renderedHtml, CvHeadings? headings = null, Func<string, string?>? projectUrl = null, IReadOnlyList<TechGroup>? techGroups = null)
     {
         var names = headings ?? new CvHeadings();
         using var document = new HtmlParser().ParseDocument(renderedHtml);
@@ -78,9 +81,13 @@ public static class CvPresenter
         var tagline = taglineParagraph?.TextContent.Trim();
         if (string.IsNullOrWhiteSpace(tagline)) tagline = null;
 
-        var skillGroups = TransformSkillGroups(document, sections, names);
         var (introHtml, cards, assignments) = BuildAssignments(document, history, names, projectUrl);
         if (assignments.Count == 0) return null;
+
+        var skillGroups = DeriveSkillGroups(assignments, techGroups, names, out var ungroupedCount);
+        var skillsContainer = BuildSkillGroups(document, skillGroups, names);
+        var competence = Find(sections, names.Competence);
+        if (skillsContainer is not null && competence is not null) competence.Items.Add(skillsContainer);
 
         var roles = Find(sections, names.Roles)?.Items.FirstOrDefault(item => item.LocalName == "ul")
             ?.Children.Select(item => item.TextContent.Trim()).Where(text => text.Length > 0).ToList() ?? [];
@@ -94,13 +101,15 @@ public static class CvPresenter
         if (yearsMatch.Success) figures.Add(new(int.Parse(yearsMatch.Groups["years"].Value, CultureInfo.InvariantCulture), "+", "års erfarenhet"));
         figures.Add(new(assignments.Count, string.Empty, "uppdrag"));
         if (industries > 0) figures.Add(new(industries, string.Empty, "branscher"));
-        var technologyCount = skillGroups.SelectMany(group => group.Skills).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        // Ungrouped keywords are not counted as technologies once the content defines groups.
+        var technologyCount = skillGroups.Sum(group => group.Skills.Count) - ungroupedCount;
         if (technologyCount > 0) figures.Add(new(technologyCount, string.Empty, "nyckelteknologier"));
 
         var historyIndex = sections.IndexOf(history);
         var practicalHtml = BuildPractical(document, Find(sections, names.Practical));
         var before = string.Concat(sections.Take(historyIndex).SelectMany(section => Render(section, names, h1, taglineParagraph, practicalHtml)));
-        var after = string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names, h1, taglineParagraph, practicalHtml)));
+        var after = (skillsContainer is not null && competence is null ? skillsContainer.OuterHtml : string.Empty)
+            + string.Concat(sections.Skip(historyIndex + 1).SelectMany(section => Render(section, names, h1, taglineParagraph, practicalHtml)));
 
         return new CvView(
             h1.TextContent.Trim(),
@@ -196,73 +205,78 @@ public static class CvPresenter
         return end < 0 ? text : text[..(end + 1)];
     }
 
-    private static List<SkillGroup> TransformSkillGroups(IDocument document, IEnumerable<Section> sections, CvHeadings names)
+    // The technology list is the union of the assignment keywords. Site settings only decide which group a keyword is
+    // listed under; most used first within a group, and keywords without a group end up last under "other".
+    private static List<SkillGroup> DeriveSkillGroups(
+        IEnumerable<CvAssignment> assignments, IReadOnlyList<TechGroup>? mapping, CvHeadings names, out int ungroupedCount)
     {
+        var usage = new Dictionary<string, (string Name, int Count)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in assignments)
+            foreach (var keyword in assignment.Keywords.Distinct(StringComparer.OrdinalIgnoreCase))
+                usage[keyword] = usage.TryGetValue(keyword, out var seen) ? (seen.Name, seen.Count + 1) : (keyword, 1);
+
+        var remaining = usage.Values
+            .OrderByDescending(entry => entry.Count)
+            .ThenBy(entry => entry.Name, StringComparer.InvariantCultureIgnoreCase)
+            .ToList();
         var groups = new List<SkillGroup>();
-        foreach (var section in sections)
+        foreach (var group in mapping ?? [])
         {
-            for (var index = 0; index < section.Items.Count; index++)
-            {
-                var paragraph = section.Items[index];
-                if (paragraph.LocalName != "p" || !Matches(paragraph.FirstElementChild?.TextContent ?? string.Empty, names.Skills)) continue;
-                if (paragraph.NextElementSibling is not { LocalName: "ul" } list) continue;
-
-                var container = document.CreateElement("div");
-                container.ClassName = "skill-groups";
-                var title = document.CreateElement("p");
-                title.ClassName = "skill-groups-title";
-                title.TextContent = names.Skills;
-                var hint = document.CreateElement("span");
-                hint.ClassName = "tech-hint";
-                hint.TextContent = " · klicka för att markera";
-                title.AppendChild(hint);
-                container.AppendChild(title);
-
-                foreach (var item in list.Children)
-                {
-                    var text = item.TextContent.Trim();
-                    var colon = text.IndexOf(':');
-                    var groupName = colon > 0 ? text[..colon].Trim() : names.Skills;
-                    var skills = (colon > 0 ? text[(colon + 1)..] : text)
-                        .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                    if (skills.Length == 0) continue;
-                    groups.Add(new SkillGroup(groupName, skills));
-
-                    var group = document.CreateElement("div");
-                    group.ClassName = "skill-group";
-                    group.SetAttribute("role", "group");
-                    group.SetAttribute("aria-label", groupName);
-                    // Hovering the group lights up all of its technologies in the constellation, like hovering an assignment.
-                    group.SetAttribute("data-keywords", string.Join('|', skills));
-                    var label = document.CreateElement("p");
-                    label.ClassName = "skill-group-name";
-                    label.TextContent = groupName;
-                    var chips = document.CreateElement("ul");
-                    chips.ClassName = "chips";
-                    foreach (var skill in skills)
-                    {
-                        var chip = document.CreateElement("li");
-                        var button = document.CreateElement("button");
-                        button.ClassName = "skill-btn";
-                        button.SetAttribute("type", "button");
-                        button.SetAttribute("data-skill", skill);
-                        button.SetAttribute("aria-pressed", "false");
-                        button.TextContent = skill;
-                        chip.AppendChild(button);
-                        chips.AppendChild(chip);
-                    }
-                    group.Append(label, chips);
-                    container.AppendChild(group);
-                }
-
-                section.Items[index] = container;
-                section.Items.Remove(list);
-                paragraph.Replace(container);
-                list.Remove();
-                break;
-            }
+            var members = remaining.Where(entry => group.Items.Contains(entry.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (members.Count == 0) continue;
+            remaining.RemoveAll(members.Contains);
+            groups.Add(new SkillGroup(group.Name, members.Select(entry => entry.Name).ToList()));
         }
+        // Keywords without a group are not counted as technologies once the content defines groups.
+        ungroupedCount = mapping is { Count: > 0 } ? remaining.Count : 0;
+        if (remaining.Count > 0)
+            groups.Add(new SkillGroup(mapping is { Count: > 0 } ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList()));
         return groups;
+    }
+
+    private static IElement? BuildSkillGroups(IDocument document, IReadOnlyList<SkillGroup> groups, CvHeadings names)
+    {
+        if (groups.Count == 0) return null;
+        var container = document.CreateElement("div");
+        container.ClassName = "skill-groups";
+        var title = document.CreateElement("p");
+        title.ClassName = "skill-groups-title";
+        title.TextContent = names.Skills;
+        var hint = document.CreateElement("span");
+        hint.ClassName = "tech-hint";
+        hint.TextContent = " · klicka för att markera";
+        title.AppendChild(hint);
+        container.AppendChild(title);
+
+        foreach (var skillGroup in groups)
+        {
+            var group = document.CreateElement("div");
+            group.ClassName = "skill-group";
+            group.SetAttribute("role", "group");
+            group.SetAttribute("aria-label", skillGroup.Name);
+            // Hovering the group lights up all of its technologies in the constellation, like hovering an assignment.
+            group.SetAttribute("data-keywords", string.Join('|', skillGroup.Skills));
+            var label = document.CreateElement("p");
+            label.ClassName = "skill-group-name";
+            label.TextContent = skillGroup.Name;
+            var chips = document.CreateElement("ul");
+            chips.ClassName = "chips";
+            foreach (var skill in skillGroup.Skills)
+            {
+                var chip = document.CreateElement("li");
+                var button = document.CreateElement("button");
+                button.ClassName = "skill-btn";
+                button.SetAttribute("type", "button");
+                button.SetAttribute("data-skill", skill);
+                button.SetAttribute("aria-pressed", "false");
+                button.TextContent = skill;
+                chip.AppendChild(button);
+                chips.AppendChild(chip);
+            }
+            group.Append(label, chips);
+            container.AppendChild(group);
+        }
+        return container;
     }
 
     private static (string IntroHtml, List<IElement> Cards, List<CvAssignment> Assignments) BuildAssignments(

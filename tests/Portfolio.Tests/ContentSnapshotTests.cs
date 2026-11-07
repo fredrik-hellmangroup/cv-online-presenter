@@ -209,6 +209,50 @@ public sealed class ContentSnapshotTests
         }
     }
 
+    [Fact]
+    public async Task LoadAsyncReadsTechGroupsFromSiteSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-techgroups-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techGroups\":[{\"name\":\" Core \",\"items\":[\".NET\",\" C# \"]}]}");
+
+            var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
+
+            var group = Assert.Single(snapshot.Identity.TechGroups!);
+            Assert.Equal("Core", group.Name);
+            Assert.Equal([".NET", "C#"], group.Items);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("[{\"name\":\"\",\"items\":[\"A\"]}]")]
+    [InlineData("[{\"name\":\"Core\",\"items\":[]}]")]
+    [InlineData("[{\"name\":\"Core\",\"items\":[\"A\",\" \"]}]")]
+    [InlineData("[{\"name\":\"Core\",\"items\":[\"A\"]},{\"name\":\"Data\",\"items\":[\"a\"]}]")]
+    public async Task LoadAsyncRejectsInvalidTechGroups(string techGroups)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-techgroups-invalid-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                $"{{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techGroups\":{techGroups}}}");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new ContentSnapshotLoader().LoadAsync(pages));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static string CreatePages(string parent, string siteName)
     {
         var pages = Path.Combine(parent, "pages");

@@ -28,10 +28,6 @@ public sealed class CvPresenterTests
         ## Expertise
         - Example technical capability
 
-        **Key Technologies**
-        - Core: .NET, C#, Azure
-        - Integration: REST, MQTT
-
         ## Industries
         Sample Sector A, Sample Sector B, Sample Sector C
 
@@ -72,15 +68,23 @@ public sealed class CvPresenterTests
         Example language
         """;
 
-    private static CvView Build(string? document = null)
+    private static readonly CvHeadings Headings = new(
+        Roles: "Roles", Overview: "Overview", Industries: "Industries",
+        History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
+        Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing", Practical: "Practical",
+        Competence: "Expertise", OtherSkills: "Other");
+
+    private static readonly TechGroup[] Mapping =
+    [
+        new("Integration", ["MQTT", "Unused"]),
+        new("Core", [".NET", "C#", "Azure"])
+    ];
+
+    private static CvView Build(string? document = null, IReadOnlyList<TechGroup>? techGroups = null)
     {
         var sample = (document ?? Cv).Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal);
         var html = new MarkdownContentService().Render(sample);
-        var headings = new CvHeadings(
-            Roles: "Roles", Overview: "Overview", Industries: "Industries",
-            History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
-            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing", Practical: "Practical");
-        return CvPresenter.Build(html, headings) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
+        return CvPresenter.Build(html, Headings, techGroups: techGroups) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
     }
 
     [Fact]
@@ -146,15 +150,68 @@ public sealed class CvPresenterTests
     }
 
     [Fact]
-    public void GroupsSkillsAndRendersChips()
+    public void DerivesSkillGroupsFromAssignmentKeywordsUsingTheConfiguredGroups()
+    {
+        var view = Build(techGroups: Mapping);
+
+        Assert.Equal(["Integration", "Core", "Other"], view.SkillGroups.Select(group => group.Name));
+        Assert.Equal(["MQTT"], view.SkillGroups[0].Skills);
+        Assert.Equal([".NET", "Azure", "C#"], view.SkillGroups[1].Skills);
+        Assert.Equal(["REST"], view.SkillGroups[2].Skills);
+        Assert.Contains("data-keywords=\"MQTT\"", view.BeforeHistoryHtml);
+        Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
+        Assert.DoesNotContain("Unused", view.BeforeHistoryHtml);
+        Assert.DoesNotContain("<strong>Key Technologies</strong>", view.BeforeHistoryHtml);
+    }
+
+    [Fact]
+    public void ListsTheSkillGroupsAtTheEndOfTheCompetenceSection()
+    {
+        var html = Build(techGroups: Mapping).BeforeHistoryHtml;
+        var expertise = html.IndexOf("id=\"expertise\"", StringComparison.Ordinal);
+        var skills = html.IndexOf("class=\"skill-groups\"", StringComparison.Ordinal);
+        var industries = html.IndexOf("id=\"industries\"", StringComparison.Ordinal);
+
+        Assert.True(expertise >= 0 && expertise < skills && skills < industries, "The technology groups should end the competence section.");
+        Assert.DoesNotContain("class=\"skill-groups\"", Build(techGroups: Mapping).AfterHistoryHtml);
+    }
+
+    [Fact]
+    public void ListsAllKeywordsInOneGroupWhenNoGroupsAreConfigured()
     {
         var view = Build();
-        Assert.Equal(["Core", "Integration"], view.SkillGroups.Select(group => group.Name));
-        Assert.Equal([".NET", "C#", "Azure"], view.SkillGroups[0].Skills);
-        Assert.Contains("data-keywords=\".NET|C#|Azure\"", view.BeforeHistoryHtml);
-        Assert.Contains("data-keywords=\"REST|MQTT\"", view.BeforeHistoryHtml);
-        Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
-        Assert.DoesNotContain("<strong>Key Technologies</strong>", view.BeforeHistoryHtml);
+
+        var group = Assert.Single(view.SkillGroups);
+        Assert.Equal("Key Technologies", group.Name);
+        Assert.Equal([".NET", "Azure", "C#", "MQTT", "REST"], group.Skills);
+    }
+
+    [Fact]
+    public void CountsOnlyGroupedKeywordsAsTechnologiesWhenGroupsAreConfigured()
+    {
+        var figure = Build(techGroups: Mapping).Figures.Single(item => item.Label == "nyckelteknologier");
+
+        Assert.Equal(4, figure.Count);
+    }
+
+    [Fact]
+    public void ListsMoreUsedKeywordsFirstAndMergesCaseVariants()
+    {
+        var document = Cv.Replace(".NET, Azure, REST", ".NET, Azure, REST, c#", StringComparison.Ordinal)
+            .Replace("C#, MQTT", "C#, MQTT, Azure", StringComparison.Ordinal);
+        var view = Build(document, [new("Core", [".NET", "C#", "Azure"])]);
+
+        Assert.Equal(["Azure", "c#", ".NET"], view.SkillGroups[0].Skills);
+    }
+
+    [Fact]
+    public void FallsBackToTheStartOfTheLaterSectionsWhenThereIsNoCompetenceSection()
+    {
+        var document = System.Text.RegularExpressions.Regex.Replace(
+            Cv, @"## Expertise.*?(?=## Industries)", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
+        var view = Build(document, Mapping);
+
+        Assert.StartsWith("<div class=\"skill-groups\">", view.AfterHistoryHtml);
     }
 
     [Fact]
@@ -184,11 +241,7 @@ public sealed class CvPresenterTests
     public void AssignmentsLinkToTheirProjectPageWhenOneIsFound()
     {
         var html = new MarkdownContentService().Render(Cv.Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal));
-        var headings = new CvHeadings(
-            Roles: "Roles", Overview: "Overview", Industries: "Industries",
-            History: "Assignment History", Employment: "Employment", Skills: "Key Technologies",
-            Keywords: "Keywords", Period: "Period", Role: "Role", Ongoing: "ongoing", Practical: "Practical");
-        var view = CvPresenter.Build(html, headings, title => title == "Sample Project Beta" ? "/projects/beta" : null)!;
+        var view = CvPresenter.Build(html, Headings, title => title == "Sample Project Beta" ? "/projects/beta" : null)!;
 
         Assert.Equal([null, "/projects/beta", null], view.Assignments.Select(item => item.Url));
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(view.AssignmentsHtml, "class=\"assignment-link\""));

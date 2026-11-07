@@ -6,7 +6,7 @@ status: "published"
 type: "page"
 source: "sources/master-cv.md"
 sourceSection: "Entire source"
-sourceSha256: "e4eed0cf814144bfb01868bcf154bef47e6366c4e318f2df3a3722ffb3277fc8"
+sourceSha256: "aad0e81a0e3c4c93bee163348bd1bcf5b3f60eb097b1ac387a5064b2e0c80c02"
 ---
 
 # Alex Exempel
@@ -25,10 +25,6 @@ Alex arbetar nära användare och utvecklare för att göra vardagens verktyg ty
 - Systemdesign och teknisk riktning med praktiskt fokus
 - Tillförlitliga API:er och informationsflöden
 - Automatiserad testning och hållbar leverans
-
-**Nyckelteknik**
-- Kärna: TypeScript, Node.js
-- Data: SQLite, PostgreSQL
 
 ## Branscherfarenhet
 Utbildning, kultur och lokala tjänster

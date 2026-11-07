@@ -6,7 +6,7 @@ status: "published"
 type: "page"
 source: "sources/master-cv.md"
 sourceSection: "Uppdragshistorik"
-sourceSha256: "692cccfcefc5bbdac2f79b7111849ea382b6907c3073680903781046d0b429a5"
+sourceSha256: "e335a013ecdcd2bd6d2dca4b7a68668e950c4f7d9e88c73bc1926bcf543c1c8c"
 ---
 
 # Uppdrag

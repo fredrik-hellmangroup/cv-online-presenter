@@ -129,15 +129,6 @@ Miljöer där kraven är höga.
 #### Offentlig sektor och reglerade miljöer
 Informationskänsliga miljöer med krav på spårbarhet och behörighetsstyrning.
 
-## Nyckelteknik
-
-**Nyckelteknik**
-
-- Backend: C#, .NET, ASP.NET Core, Node.js
-- Webb: TypeScript, JavaScript, HTML, CSS
-- Data: SQL Server, PostgreSQL, Redis
-- Leverans: Docker, GitHub Actions, Azure
-
 ## Branscherfarenhet
 Syntetiska exempelområden: teknik, logistik, finans och offentlig sektor.
 
