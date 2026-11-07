@@ -4,8 +4,6 @@ name: Version guard
 # It may only change in a pull request that touches nothing else (see the Release PR template).
 on:
   pull_request:
-    # Not a required check, so it may be skipped entirely when VERSION is untouched.
-    paths: [VERSION]
 
 permissions:
   contents: read

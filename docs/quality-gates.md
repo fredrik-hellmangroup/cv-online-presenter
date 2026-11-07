@@ -34,7 +34,8 @@ updates, and the workflow-contract tests enforce the rule.
 A job skipped with `if` counts as passed for required status checks. Matrix
 jobs are the exception: a job-level skip leaves the expanded check names
 pending, which is why `browser-quality` skips steps instead. `version-guard.yml`
-runs only on pull requests that touch `VERSION`.
+deliberately has no path filter: it exits early when `VERSION` is unchanged, and
+a filter could skip the guard on very large diffs.
 
 The content commands in this app workflow use the public synthetic tree. They
 do not read a private CV repository. The public job IDs and browser matrix are
