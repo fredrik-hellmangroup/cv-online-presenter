@@ -157,7 +157,7 @@ jobs:
             [IO.File]::WriteAllText((Join-Path $tokenDirectory 'activation-token.txt'), $token, $encoding)
             $deployContentPath = "$($env:MSDEPLOY_SITE_NAME)/App_Data/content-releases"
 
-            & .\app\scripts\deploy-beebyte-iis.ps1 `
+            & .\app\scripts\deploy-iis.ps1 `
               -ActivationTokenOnly `
               -SourcePath $tokenDirectory `
               -DeployContentPath $deployContentPath `
