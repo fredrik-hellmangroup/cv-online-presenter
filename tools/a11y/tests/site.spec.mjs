@@ -190,6 +190,26 @@ test('/cv constellation background respects reduced motion', async ({ page }) =>
   }, { intervals: [100], timeout: 1_500 }).toBe(true);
 });
 
+test('/cv narrow screens put text on opaque surfaces in both themes', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/cv');
+  const themeToggle = page.getByRole('button', { name: 'Växla tema' });
+  await expect(themeToggle).toBeVisible();
+  for (const theme of ['dark', 'light']) {
+    if (await page.locator('html').getAttribute('data-theme') !== theme) await themeToggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await settled(page);
+    const surfaces = await page.locator('.assignment, .skill-group, .cv-figures > div, .cv-roles li, #cv-toc')
+      .evaluateAll(elements => elements.map(element => ({
+        name: element.className || element.id,
+        alpha: (getComputedStyle(element).backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1].split(',')[3] ?? '1').trim()
+      })));
+    expect(surfaces.length).toBeGreaterThan(0);
+    expect(surfaces.filter(surface => Number(surface.alpha) < 1), theme).toEqual([]);
+    expect(Number(await page.locator('#constellation-field').evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
+  }
+});
+
 test('/cv constellation reacts to hovering an assignment and runs without errors', async ({ page, browserName }) => {
   if (browserName !== 'chromium') test.skip();
   await page.emulateMedia({ reducedMotion: 'reduce' });
