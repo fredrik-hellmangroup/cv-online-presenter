@@ -17,7 +17,7 @@ import {
   exitVector,
   scatterPoint
 } from '../wwwroot/js/constellation-layout.js';
-import { shouldAnimateConstellation } from '../wwwroot/js/constellation-engine.js';
+import { shouldAnimateConstellation, shouldDrawConstellationLabels } from '../wwwroot/js/constellation-engine.js';
 
 const groups = [
   { name: 'Plattform', skills: ['.NET', 'C#', 'ASP.NET Core', 'SQL Server'] },
@@ -151,4 +151,9 @@ test('reduced motion and hidden documents keep the constellation static', () => 
   assert.equal(shouldAnimateConstellation(false, true), true);
   assert.equal(shouldAnimateConstellation(true, true), false);
   assert.equal(shouldAnimateConstellation(false, false), false);
+});
+
+test('technology labels are only drawn where there is room beside the text', () => {
+  for (const width of [320, 375, 390, 428, 699]) assert.equal(shouldDrawConstellationLabels(width), false, `${width}px`);
+  for (const width of [700, 768, 1440]) assert.equal(shouldDrawConstellationLabels(width), true, `${width}px`);
 });

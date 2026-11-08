@@ -84,6 +84,13 @@ body::before {
   pointer-events: none;
 }
 
+/* Narrow screens (matches NARROW_VIEWPORT in constellation-engine.ts): the constellation floats behind the copy,
+   so it is subdued and every card and sticky bar becomes opaque to keep the text readable. */
+@media (max-width: 699.98px) {
+  #constellation-field { opacity: .55; }
+  :root, :root[data-theme="light"] { --surface: var(--surface-solid); --header-bg: var(--page-bg); }
+}
+
 header, main, footer { position: relative; z-index: 1; width: min(100% - 2rem, 72rem); margin-inline: auto; }
 
 a { color: var(--link); text-underline-offset: .2em; }
