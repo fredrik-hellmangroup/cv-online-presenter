@@ -80,11 +80,11 @@ public sealed class CvPresenterTests
         new("Core", [".NET", "C#", "Azure"])
     ];
 
-    private static CvView Build(string? document = null, IReadOnlyList<TechGroup>? techGroups = null)
+    private static CvView Build(string? document = null, IReadOnlyList<TechGroup>? techGroups = null, OtherSkillsOptions? otherSkills = null)
     {
         var sample = (document ?? Cv).Replace("over 18 years", "\u00f6" + "ver 18 " + "\u00e5" + "rs", StringComparison.Ordinal);
         var html = new MarkdownContentService().Render(sample);
-        return CvPresenter.Build(html, Headings, techGroups: techGroups) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
+        return CvPresenter.Build(html, Headings, techGroups: techGroups, otherSkills: otherSkills) ?? throw new InvalidOperationException("The synthetic sample CV was not recognised.");
     }
 
     [Fact]
@@ -158,7 +158,6 @@ public sealed class CvPresenterTests
         Assert.Equal(["MQTT"], view.SkillGroups[0].Skills);
         Assert.Equal([".NET", "Azure", "C#"], view.SkillGroups[1].Skills);
         Assert.Equal(["REST"], view.SkillGroups[2].Skills);
-        Assert.Equal([false, false, true], view.SkillGroups.Select(group => group.IsOther));
         Assert.Contains("data-keywords=\"MQTT\"", view.BeforeHistoryHtml);
         Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
         Assert.DoesNotContain("Unused", view.BeforeHistoryHtml);
@@ -185,6 +184,27 @@ public sealed class CvPresenterTests
         var group = Assert.Single(view.SkillGroups);
         Assert.Equal("Key Technologies", group.Name);
         Assert.Equal([".NET", "Azure", "C#", "MQTT", "REST"], group.Skills);
+    }
+
+    [Fact]
+    public void KeepsOnlyTheMostUsedNonConceptKeywordsInTheOtherGroupAndPicksTiesAtRandom()
+    {
+        var document = Cv.Replace(".NET, Azure, REST", ".NET, Azure, REST, SOLID, Git, Perl", StringComparison.Ordinal)
+            .Replace("C#, MQTT", "C#, MQTT, Git", StringComparison.Ordinal);
+        string[] Other(int seed) => Build(document, Mapping, new OtherSkillsOptions(2, ["solid"], new Random(seed)))
+            .SkillGroups.Single(group => group.Name == "Other").Skills.ToArray();
+
+        var seconds = new HashSet<string>();
+        foreach (var seed in Enumerable.Range(0, 20))
+        {
+            var other = Other(seed);
+            Assert.Equal(2, other.Length);
+            Assert.Equal("Git", other[0]);
+            seconds.Add(other[1]);
+        }
+        Assert.Equal(["Perl", "REST"], seconds.Order());
+        Assert.DoesNotContain(Build(document, Mapping, new OtherSkillsOptions(0)).SkillGroups, group => group.Name == "Other");
+        Assert.Equal(4, Build(document, Mapping, new OtherSkillsOptions(2)).Figures.Single(item => item.Label == "nyckelteknologier").Count);
     }
 
     [Fact]

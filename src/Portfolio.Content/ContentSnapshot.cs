@@ -15,10 +15,10 @@ public sealed record SiteIdentity(
     string? SiteUrl,
     string? CompanyName = null,
     IReadOnlyList<TechGroup>? TechGroups = null,
-    int ConstellationOtherLimit = SiteIdentity.DefaultConstellationOtherLimit,
+    int OtherSkillsLimit = SiteIdentity.DefaultOtherSkillsLimit,
     IReadOnlyList<string>? TechConcepts = null)
 {
-    public const int DefaultConstellationOtherLimit = 9;
+    public const int DefaultOtherSkillsLimit = 9;
 }
 
 public sealed record ContentSnapshot(
@@ -85,14 +85,14 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
             source.Append('\n').Append(document.SourcePath).Append('\n').Append(document.Markdown).Append('\n')
                 .Append(JsonSerializer.Serialize(document.Metadata));
         var version = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString()))).ToLowerInvariant();
-        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName, NormalizeTechGroups(settings.TechGroups), NormalizeOtherLimit(settings.Constellation), NormalizeConcepts(settings.TechReview));
+        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName, NormalizeTechGroups(settings.TechGroups), NormalizeOtherLimit(settings.OtherSkills), NormalizeConcepts(settings.TechReview));
         return new(version, identity, immutableDocuments, sections);
     }
 
-    private static int NormalizeOtherLimit(ConstellationSettings? settings)
+    private static int NormalizeOtherLimit(OtherSkillsSettings? settings)
     {
-        var limit = settings?.OtherLimit ?? SiteIdentity.DefaultConstellationOtherLimit;
-        if (limit < 0) throw new InvalidOperationException("constellation.otherLimit in site.json must not be negative.");
+        var limit = settings?.Limit ?? SiteIdentity.DefaultOtherSkillsLimit;
+        if (limit < 0) throw new InvalidOperationException("otherSkills.limit in site.json must not be negative.");
         return limit;
     }
 
@@ -147,9 +147,9 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
 
     private sealed record SiteIdentitySettings(
         string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null, TechGroup[]? TechGroups = null,
-        ConstellationSettings? Constellation = null, TechReviewSettings? TechReview = null);
+        OtherSkillsSettings? OtherSkills = null, TechReviewSettings? TechReview = null);
 
-    private sealed record ConstellationSettings(int? OtherLimit = null);
+    private sealed record OtherSkillsSettings(int? Limit = null);
 
     private sealed record TechReviewSettings(string[]? Concepts = null);
 }

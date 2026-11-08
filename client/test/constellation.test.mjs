@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildEdges,
-  limitOtherSkills,
   matchesSkill,
   nodesMatching,
   nodesMatchingQuery,
@@ -145,30 +144,6 @@ test('constellation data is parsed defensively', () => {
   const parsed = parseConstellationData(JSON.stringify({ groups, assignments: [{ title: 'A', keywords: ['x'] }] }));
   assert.equal(parsed?.groups.length, 2);
   assert.equal(parsed?.assignments.length, 1);
-  assert.equal(parsed?.otherLimit, undefined);
-  assert.equal(parseConstellationData(JSON.stringify({ groups, otherLimit: 9 }))?.otherLimit, 9);
-});
-
-test('only the most used skills of the catch-all group are kept, ties broken at random', () => {
-  const other = { name: 'Övrigt', isOther: true, skills: ['Rare A', 'SOLID', 'Rare B', 'Rare C', 'Git'] };
-  const assignments = [
-    { title: '1', keywords: ['solid', 'Git', 'Rare A'] },
-    { title: '2', keywords: ['SOLID', 'Git'] },
-    { title: '3', keywords: ['SOLID'] },
-    { title: '4', keywords: ['Rare B'] }
-  ];
-  const [plain, limited] = limitOtherSkills([groups[0], other], assignments, 3, () => 0.5);
-  assert.equal(plain, groups[0]);
-  assert.deepEqual(limited.skills.slice(0, 2), ['SOLID', 'Git']);
-  assert.equal(limited.skills.length, 3);
-
-  const pick = (rareA, rareB) => {
-    const rolls = [rareA, 0, rareB, 0, 0];
-    return limitOtherSkills([other], assignments, 3, () => rolls.shift())[0].skills[2];
-  };
-  assert.equal(pick(0.1, 0.9), 'Rare A');
-  assert.equal(pick(0.9, 0.1), 'Rare B');
-  assert.deepEqual(limitOtherSkills([other], assignments, 0, () => 0)[0].skills, []);
 });
 
 

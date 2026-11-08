@@ -255,9 +255,9 @@ public sealed class ContentSnapshotTests
 
     [Theory]
     [InlineData("", 9)]
-    [InlineData(",\"constellation\":{\"otherLimit\":4}", 4)]
-    [InlineData(",\"constellation\":{\"otherLimit\":0}", 0)]
-    public async Task LoadAsyncReadsTheConstellationOtherLimit(string setting, int expected)
+    [InlineData(",\"otherSkills\":{\"limit\":4}", 4)]
+    [InlineData(",\"otherSkills\":{\"limit\":0}", 0)]
+    public async Task LoadAsyncReadsTheOtherSkillsLimit(string setting, int expected)
     {
         var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-otherlimit-" + Guid.NewGuid().ToString("N"));
         var pages = CreatePages(root, "Synthetic");
@@ -268,7 +268,7 @@ public sealed class ContentSnapshotTests
 
             var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
 
-            Assert.Equal(expected, snapshot.Identity.ConstellationOtherLimit);
+            Assert.Equal(expected, snapshot.Identity.OtherSkillsLimit);
         }
         finally
         {
@@ -277,14 +277,14 @@ public sealed class ContentSnapshotTests
     }
 
     [Fact]
-    public async Task LoadAsyncRejectsANegativeConstellationOtherLimit()
+    public async Task LoadAsyncRejectsANegativeOtherSkillsLimit()
     {
         var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-otherlimit-invalid-" + Guid.NewGuid().ToString("N"));
         var pages = CreatePages(root, "Synthetic");
         try
         {
             await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
-                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"constellation\":{\"otherLimit\":-1}}");
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"otherSkills\":{\"limit\":-1}}");
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => new ContentSnapshotLoader().LoadAsync(pages));
         }
