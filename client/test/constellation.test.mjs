@@ -20,7 +20,7 @@ import {
 import {
   resolveMotionState,
   shouldAnimateConstellation,
-  shouldDrawConstellationLabels
+  constellationLabelFontSize
 } from '../wwwroot/js/constellation-engine.js';
 
 const groups = [
@@ -148,6 +148,14 @@ test('constellation data is parsed defensively', () => {
   const parsed = parseConstellationData(JSON.stringify({ groups, assignments: [{ title: 'A', keywords: ['x'] }] }));
   assert.equal(parsed?.groups.length, 2);
   assert.equal(parsed?.assignments.length, 1);
+  const withOther = parseConstellationData(JSON.stringify({
+    groups: [...groups, { name: 'Övrigt', skills: ['Unsorted'], isOther: true }],
+    assignments: [{ title: 'A', keywords: ['x', null] }, null]
+  }));
+  assert.equal(withOther?.groups.at(-1)?.isOther, true);
+  assert.equal(withOther?.groups[0]?.isOther, undefined);
+  assert.deepEqual(withOther?.assignments, [{ title: 'A', keywords: ['x'] }]);
+  assert.equal(parseConstellationData(JSON.stringify({ groups: [{ name: 7, skills: ['x'] }] })), null);
 });
 
 
@@ -166,7 +174,7 @@ test('only a running constellation in a visible document animates', () => {
   assert.equal(shouldAnimateConstellation('running', false), false);
 });
 
-test('technology labels are only drawn where there is room beside the text', () => {
-  for (const width of [320, 375, 390, 428, 699]) assert.equal(shouldDrawConstellationLabels(width), false, `${width}px`);
-  for (const width of [700, 768, 1440]) assert.equal(shouldDrawConstellationLabels(width), true, `${width}px`);
+test('technology labels use a compact mobile font and remain enabled at every width', () => {
+  for (const width of [320, 375, 390, 428, 699]) assert.equal(constellationLabelFontSize(width), 11, `${width}px`);
+  for (const width of [700, 768, 1440]) assert.equal(constellationLabelFontSize(width), 13, `${width}px`);
 });

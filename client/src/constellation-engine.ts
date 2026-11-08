@@ -12,6 +12,7 @@ import {
   scatterPoint
 } from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
+import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, usageCounts, visibleBudget } from './constellation-clusters.js';
 import {
   MOTE_LINK_DISTANCE,
   createMotes,
@@ -52,6 +53,14 @@ interface Body extends SkillNode {
   glow: number;
   boost: number;
   half: number;
+  cluster: Area;
+  introX: number;
+  introY: number;
+  introAlpha: number;
+  popAlpha: number;
+  popTarget: boolean;
+  popX: number;
+  popY: number;
 }
 
 interface Packet {
@@ -59,6 +68,24 @@ interface Packet {
   progress: number;
   speed: number;
   reverse: boolean;
+}
+
+interface Bubble {
+  x: number;
+  y: number;
+  hx: number;
+  hy: number;
+  glow: number;
+  introX: number;
+  introY: number;
+  introAlpha: number;
+}
+
+interface RenderEdge {
+  a: number;
+  b: number;
+  strong: boolean;
+  faint: boolean;
 }
 
 const MAX_PIXEL_RATIO = 1.5;
@@ -102,6 +129,12 @@ const OBSTACLE_REFRESH_WHILE_SCROLLING_MS = 60;
 const RETARGET_MIN_MS = 20000;
 const RETARGET_SPREAD_MS = 40000;
 const HOME_EASE = 0.005;
+const INTRO_DURATION_MS = 1200;
+const INTRO_CLUSTER_STAGGER_MS = 110;
+const POPOUT_DESKTOP = 3;
+const POPOUT_MOBILE = 2;
+const BUBBLE_RADIUS = 5;
+const POP_RADIUS = 110;
 
 export type MotionState = 'running' | 'paused' | 'reduced';
 
@@ -114,8 +147,8 @@ export const resolveMotionState = (reducedMotion: boolean, saved: string | null,
 export const shouldAnimateConstellation = (state: MotionState, documentVisible: boolean): boolean =>
   state === 'running' && documentVisible;
 
-// A narrow screen has no clear space beside the text, so technology names would be drawn behind the copy.
-export const shouldDrawConstellationLabels = (viewportWidth: number): boolean => viewportWidth >= NARROW_VIEWPORT;
+export const constellationLabelFontSize = (viewportWidth: number): number =>
+  viewportWidth < NARROW_VIEWPORT ? 11 : 13;
 
 const keywordsOf = (target: EventTarget | null): string[] | null => {
   const element = target instanceof Element ? target.closest('[data-keywords], [data-skill]') : null;
@@ -142,6 +175,9 @@ export class ConstellationEngine implements ExperienceEngine {
     if (nodes.length < 2) return;
 
     const edges = buildEdges(nodes, data.assignments);
+    const usage = usageCounts(nodes, data.assignments);
+    const otherGroup = data.groups.find(group => group.isOther === true);
+    const otherName = otherGroup?.name ?? 'Övrigt';
     const root = document.documentElement;
     const playful = document.querySelector('main.home') !== null;
     const ambientGlow = playful ? HOME_AMBIENT_GLOW : AMBIENT_GLOW;
@@ -164,6 +200,17 @@ export class ConstellationEngine implements ExperienceEngine {
     const pointer = { x: -9999, y: -9999 };
     let bodies: Body[] = [];
     let packets: Packet[] = [];
+    let visibleIndices = new Set<number>();
+    let hiddenSortedByUsage: number[] = [];
+    let renderEdges: RenderEdge[] = [];
+    let bubble: Bubble | null = null;
+    let popIndices = new Set<number>();
+    let temporaryPop = false;
+    let moreMatches = 0;
+    let bubbleHasMatches = false;
+    let introActive = false;
+    let introStart = 0;
+    let firstLayout = true;
     let focus: Set<number> | null = null;
     let litEdges: SkillEdge[] = [];
     let ambientEdges: SkillEdge[] = edges.filter(edge => edge.strong);
@@ -209,18 +256,11 @@ export class ConstellationEngine implements ExperienceEngine {
       return 0;
     };
 
-    // On a narrow screen the text and cards cover nearly all of the viewport, so there is no clear space to steer
-    // the technologies towards: they simply float behind the content.
-    const isNarrow = () => width < NARROW_VIEWPORT;
-
+    // Measure text and cards at every width so nodes can steer clear of their visible regions.
     // The visible text (measured tightly around the letters) and the cards that cover the background right now.
     const refreshObstacles = (time: number) => {
       lastObstacleRefresh = time;
       obstaclesDirty = false;
-      if (isNarrow()) {
-        obstacles = [];
-        return;
-      }
       const rects: Area[] = [];
       const visible = (rect: DOMRect) =>
         rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.top < height && rect.right > 0 && rect.left < width;
@@ -242,22 +282,44 @@ export class ConstellationEngine implements ExperienceEngine {
     const areaWidth = () => area.right - area.left;
     const areaHeight = () => area.bottom - area.top;
 
-    const homeOf = (body: Pick<Body, 'u' | 'v' | 'half'>): { hx: number; hy: number } => ({
-      hx: clampRange(area.left + body.u * areaWidth(), area.left + body.half + WOBBLE, area.right - body.half - WOBBLE),
-      hy: clampRange(area.top + body.v * areaHeight(), area.top + LABEL_HEIGHT + WOBBLE, area.bottom - WOBBLE)
-    });
+    const fittingRegion = (cluster: Area, half: number): Area =>
+      cluster.right - cluster.left >= half * 2 + WOBBLE * 2 && cluster.bottom - cluster.top >= LABEL_HEIGHT + WOBBLE * 2
+        ? cluster
+        : area;
+
+    const homeOf = (body: Pick<Body, 'u' | 'v' | 'half' | 'cluster'>): { hx: number; hy: number } => {
+      const region = fittingRegion(body.cluster, body.half);
+      return {
+        hx: clampRange(area.left + body.u * areaWidth(), region.left + body.half + WOBBLE, region.right - body.half - WOBBLE),
+        hy: clampRange(area.top + body.v * areaHeight(), region.top + LABEL_HEIGHT + WOBBLE, region.bottom - WOBBLE)
+      };
+    };
 
     const share = (point: { x: number; y: number }) => ({
       u: areaWidth() > 0 ? (point.x - area.left) / areaWidth() : 0.5,
       v: areaHeight() > 0 ? (point.y - area.top) / areaHeight() : 0.5
     });
 
-    // A new destination for one technology: random, clear of text, and away from where the others are heading.
+    const clusterOrigins = (count: number): { x: number; y: number }[] => {
+      const columns = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / columns);
+      return Array.from({ length: count }, (_, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        return {
+          x: area.left + areaWidth() * (0.5 + (column - (columns - 1) / 2) * 0.035),
+          y: area.top + areaHeight() * (0.5 + (row - (rows - 1) / 2) * 0.035)
+        };
+      });
+    };
+
+    // A new destination stays inside the technology's category region, clear of text and other destinations.
     const retarget = (index: number) => {
       const body = bodies[index];
-      const others = bodies.filter((_, other) => other !== index).map(other => homeOf({ u: other.tu, v: other.tv, half: other.half }))
+      const others = bodies.filter((other, otherIndex) => otherIndex !== index && other.group === body.group)
+        .map(other => homeOf({ u: other.tu, v: other.tv, half: other.half, cluster: other.cluster }))
         .map(home => ({ x: home.hx, y: home.hy }));
-      const { u, v } = share(scatterPoint(area, body.half, obstacles, others));
+      const { u, v } = share(scatterPoint(fittingRegion(body.cluster, body.half), body.half, obstacles, others));
       body.tu = u;
       body.tv = v;
     };
@@ -269,30 +331,102 @@ export class ConstellationEngine implements ExperienceEngine {
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.font = '600 13px "Segoe UI", system-ui, sans-serif';
+      const fontSize = constellationLabelFontSize(width);
+      context.font = `600 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
 
+      const previousArea = area;
       area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
+      const remapPoint = (point: { x: number; y: number }) => ({
+        x: previousArea.right > previousArea.left
+          ? area.left + (point.x - previousArea.left) / (previousArea.right - previousArea.left) * areaWidth()
+          : area.left + areaWidth() / 2,
+        y: previousArea.bottom > previousArea.top
+          ? area.top + (point.y - previousArea.top) / (previousArea.bottom - previousArea.top) * areaHeight()
+          : area.top + areaHeight() / 2
+      });
       refreshObstacles(performance.now());
       motes = createMotes(moteCount(width, height, nodes.length), width, height);
+      const categoryAreas = clusterAreas(area, data.groups.length);
       const previous = bodies;
+      const origins = clusterOrigins(data.groups.length);
+      const animateIntro = firstLayout && !motion.matches;
+      if (animateIntro) {
+        introActive = true;
+        introStart = performance.now();
+      }
       const taken: { x: number; y: number }[] = [];
       bodies = nodes.map((node, index) => {
         const half = context.measureText(node.name).width / 2 + LABEL_PADDING;
+        const cluster = categoryAreas[node.group] ?? area;
         const earlier = previous[index];
-        // A fresh page load scatters the technologies at random; a resize keeps the places they already had.
-        const { u, v } = earlier ?? share(scatterPoint(area, half, obstacles, taken));
-        const { hx, hy } = homeOf({ u, v, half });
+        const { u, v } = earlier ?? share(scatterPoint(fittingRegion(cluster, half), half, obstacles, taken));
+        const { hx, hy } = homeOf({ u, v, half, cluster });
+        const remapped = earlier ? remapPoint(earlier) : null;
         taken.push({ x: hx, y: hy });
+        const origin = origins[node.group] ?? { x: area.left + areaWidth() / 2, y: area.top + areaHeight() / 2 };
         return {
           ...node, u, v, tu: earlier?.tu ?? u, tv: earlier?.tv ?? v, nextMove: earlier?.nextMove ?? 0, coolUntil: 0,
-          hx, hy, x: hx, y: hy, vx: 0, vy: 0, phase: Math.random() * TAU, glow: ambientGlow, boost: 0, half
+          hx, hy, x: remapped?.x ?? (animateIntro ? origin.x : hx), y: remapped?.y ?? (animateIntro ? origin.y : hy),
+          vx: earlier?.vx ?? 0, vy: earlier?.vy ?? 0, phase: earlier?.phase ?? Math.random() * TAU,
+          glow: ambientGlow, boost: 0, half, cluster, introX: origin.x, introY: origin.y,
+          introAlpha: earlier?.introAlpha ?? (animateIntro ? 0 : 1), popAlpha: earlier?.popAlpha ?? 0,
+          popTarget: false, popX: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).x : hx,
+          popY: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).y : hy
         };
       });
+      firstLayout = false;
+
+      const budget = visibleBudget({ width: areaWidth(), height: areaHeight() }, nodes.length, width < NARROW_VIEWPORT ? 112 : 130, fontSize * 2.3);
+      const selected = selectVisible(nodes, usage, budget);
+      visibleIndices = new Set(selected);
+      hiddenSortedByUsage = nodes.map((_, index) => index).filter(index => !visibleIndices.has(index))
+        .sort((a, b) => usage[b] - usage[a] || a - b);
+      const previousBubble = bubble;
+      const bubbleLabelWidth = Math.max(
+        context.measureText(`${otherName} (+${hiddenSortedByUsage.length})`).width,
+        context.measureText(`${otherName} (+${hiddenSortedByUsage.length}) · +${hiddenSortedByUsage.length} fler`).width
+      );
+      const bubbleHalf = Math.min(width / 2 - SIDE_INSET, bubbleLabelWidth / 2 + LABEL_PADDING);
+      const bubbleX = clampRange(area.right - bubbleHalf - 20, area.left + bubbleHalf, area.right - bubbleHalf);
+      const bubbleY = clampRange(area.bottom - 12, area.top + LABEL_HEIGHT, area.bottom);
+      const bubbleOrigin = { x: area.left + areaWidth() / 2 + 8, y: area.top + areaHeight() / 2 - 5 };
+      bubble = hiddenSortedByUsage.length === 0 ? null : {
+        x: previousBubble ? remapPoint(previousBubble).x : animateIntro ? bubbleOrigin.x : bubbleX,
+        y: previousBubble ? remapPoint(previousBubble).y : animateIntro ? bubbleOrigin.y : bubbleY,
+        hx: bubbleX, hy: bubbleY, glow: 0,
+        introX: bubbleOrigin.x, introY: bubbleOrigin.y, introAlpha: previousBubble ? previousBubble.introAlpha : animateIntro ? 0 : 1
+      };
+      bodies.forEach((body, index) => {
+        if (!visibleIndices.has(index) && body.popAlpha === 0 && bubble) {
+          body.x = bubble.x;
+          body.y = bubble.y;
+        }
+      });
+      if (bubble && animateIntro) {
+        bubble.x = bubbleOrigin.x;
+        bubble.y = bubbleOrigin.y;
+      }
     };
 
     const targetGlow = (index: number) => {
       if (focus) return focus.has(index) ? 1 : DIM_GLOW;
       return Math.max(ambientGlow, bodies[index]?.boost ?? 0);
+    };
+
+    const rebuildRenderEdges = () => {
+      const mappedEdges = new Map<string, RenderEdge>();
+      for (const edge of edges) {
+        const endpoint = (index: number): number => visibleIndices.has(index) || bodies[index].popTarget || bodies[index].popAlpha > 0 ? index : -1;
+        const a = endpoint(edge.a);
+        const b = endpoint(edge.b);
+        if (a === -1 && b === -1 || a === b) continue;
+        const key = `${Math.min(a, b)}:${Math.max(a, b)}`;
+        const faint = a === -1 || b === -1;
+        const candidate = { a, b, strong: edge.strong, faint };
+        const existing = mappedEdges.get(key);
+        if (!existing || (existing.faint && !faint) || (!existing.strong && edge.strong)) mappedEdges.set(key, candidate);
+      }
+      renderEdges = [...mappedEdges.values()];
     };
 
     const recompute = () => {
@@ -305,8 +439,52 @@ export class ConstellationEngine implements ExperienceEngine {
       const active = focus;
       litEdges = active ? edges.filter(edge => active.has(edge.a) && active.has(edge.b)) : [];
       ambientEdges = edges.filter(edge => edge.strong);
+      const limit = width < NARROW_VIEWPORT ? POPOUT_MOBILE : POPOUT_DESKTOP;
+      const focusedPops = focus ? poppedOut(hiddenSortedByUsage, focus, limit) : { shown: [], remaining: 0 };
+      moreMatches = focusedPops.remaining;
+      popIndices = new Set(focusedPops.shown);
+      if (temporaryPop) {
+        for (const index of hiddenSortedByUsage) {
+          if (popIndices.size >= limit) break;
+          popIndices.add(index);
+        }
+      }
+      bubbleHasMatches = !!bubble && !!focus && hiddenSortedByUsage.some(index => focus?.has(index));
+      if (bubble && bubbleHasMatches) bubble.glow = Math.max(bubble.glow, 0.65);
+      const popTaken: { x: number; y: number }[] = [];
+      for (const index of hiddenSortedByUsage) {
+        const body = bodies[index];
+        const shouldPop = popIndices.has(index);
+        if (shouldPop && !body.popTarget && body.popAlpha === 0 && bubble) {
+          body.x = bubble.x;
+          body.y = bubble.y;
+        }
+        body.popTarget = shouldPop;
+        if (shouldPop && bubble) {
+          const left = Math.max(area.left + body.half, bubble.x - POP_RADIUS);
+          const right = Math.min(area.right - body.half, bubble.x + POP_RADIUS);
+          const top = Math.max(area.top + LABEL_HEIGHT, bubble.y - POP_RADIUS);
+          const bottom = Math.min(area.bottom, bubble.y + POP_RADIUS);
+          const region: Area = { left, top, right: Math.max(left, right), bottom: Math.max(top, bottom) };
+          const point = scatterPoint(region, body.half, obstacles, popTaken, Math.random, 44, 24);
+          body.popX = point.x;
+          body.popY = point.y;
+          popTaken.push(point);
+        }
+      }
+
+      rebuildRenderEdges();
       if (frame === 0) {
-        bodies.forEach((body, index) => { body.glow = targetGlow(index); });
+        bodies.forEach((body, index) => {
+          body.glow = targetGlow(index);
+          if (!introActive && !visibleIndices.has(index)) {
+            body.popAlpha = body.popTarget ? 1 : 0;
+            if (body.popTarget) { body.x = body.popX; body.y = body.popY; }
+            else if (bubble) { body.x = bubble.x; body.y = bubble.y; }
+          }
+        });
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        rebuildRenderEdges();
         draw();
       }
     };
@@ -346,19 +524,57 @@ export class ConstellationEngine implements ExperienceEngine {
       });
     };
 
-    const shockwave = (event: PointerEvent) => {
-      if (frame === 0 || (event.target instanceof Element && event.target.closest('a, button, input, textarea, select'))) return;
-      for (const body of bodies) {
-        const dx = body.x - event.clientX;
-        const dy = body.y - event.clientY;
-        const distance = Math.hypot(dx, dy);
-        if (distance > SHOCK_RADIUS || distance < 0.1) continue;
-        const push = (1 - distance / SHOCK_RADIUS) * 14;
-        body.vx += (dx / distance) * push;
-        body.vy += (dy / distance) * push;
-        body.boost = 1;
+    const isInteractiveTarget = (target: EventTarget | null): boolean =>
+      target instanceof Element && target.closest('a, button, input, textarea, select, [contenteditable="true"]') !== null;
+
+    const navigateToTechnologies = () => {
+      const groups = document.querySelector<HTMLElement>('#service-skill-groups');
+      if (!groups) {
+        window.location.assign('/services#service-technologies');
+        return;
       }
-      for (let count = 0; count < 8; count++) spawnPacket();
+      // The canvas is decorative; send users to the semantic list when they ask for more hidden items.
+      groups.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      [...groups.querySelectorAll<HTMLButtonElement>('button[data-group]')]
+        .find(button => button.dataset.group === otherName)?.click();
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (isInteractiveTarget(event.target)) return;
+      if (bubble) {
+        const hiddenCount = hiddenSortedByUsage.length - popIndices.size;
+        const label = moreMatches > 0
+          ? `${otherName} (+${hiddenCount}) · +${moreMatches} fler`
+          : `${otherName} (+${hiddenCount})`;
+        context.font = `600 ${constellationLabelFontSize(width)}px "Segoe UI", system-ui, sans-serif`;
+        const labelWidth = context.measureText(label).width / 2 + 8;
+        const onDot = Math.hypot(event.clientX - bubble.x, event.clientY - bubble.y) <= BUBBLE_RADIUS + 9;
+        const onLabel = Math.abs(event.clientX - bubble.x) <= labelWidth
+          && event.clientY >= bubble.y - 30 && event.clientY <= bubble.y - 7;
+        if (onDot || onLabel) {
+          const hasMore = moreMatches > 0 || hiddenSortedByUsage.length > popIndices.size;
+          if ((onLabel && moreMatches > 0) || (temporaryPop && hasMore)) {
+            navigateToTechnologies();
+          } else {
+            temporaryPop = !temporaryPop;
+            recompute();
+          }
+          return;
+        }
+      }
+      if (playful && frame !== 0) {
+        bodies.forEach((body, index) => {
+          const dx = body.x - event.clientX;
+          const dy = body.y - event.clientY;
+          const distance = Math.hypot(dx, dy);
+          if (!visibleIndices.has(index) || distance > SHOCK_RADIUS || distance < 0.1) return;
+          const push = (1 - distance / SHOCK_RADIUS) * 14;
+          body.vx += (dx / distance) * push;
+          body.vy += (dy / distance) * push;
+          body.boost = 1;
+        });
+        for (let count = 0; count < 8; count++) spawnPacket();
+      }
     };
 
     const update = (delta: number, time: number) => {
@@ -366,53 +582,93 @@ export class ConstellationEngine implements ExperienceEngine {
       driftMotes(motes, delta, width, height);
       repelMotes(motes, pointer.x, pointer.y, MOTE_POINTER_RADIUS);
       if (time - lastObstacleRefresh > (obstaclesDirty ? OBSTACLE_REFRESH_WHILE_SCROLLING_MS : OBSTACLE_REFRESH_MS)) refreshObstacles(time);
-      bodies.forEach((body, index) => {
-        if (time >= body.nextMove) {
-          if (body.nextMove > 0) retarget(index);
-          body.nextMove = time + RETARGET_MIN_MS + Math.random() * RETARGET_SPREAD_MS;
+
+      let edgeRoutesChanged = false;
+      if (introActive) {
+        bodies.forEach((body, index) => {
+          if (!visibleIndices.has(index)) return;
+          const progress = introProgress(time, introStart, INTRO_DURATION_MS, body.group * INTRO_CLUSTER_STAGGER_MS);
+          const point = introPosition({ x: body.hx, y: body.hy }, { x: body.introX, y: body.introY }, progress);
+          body.x = point.x;
+          body.y = point.y;
+          body.introAlpha = progress;
+        });
+        if (bubble) {
+          const progress = introProgress(time, introStart, INTRO_DURATION_MS, data.groups.length * INTRO_CLUSTER_STAGGER_MS);
+          const point = introPosition({ x: bubble.hx, y: bubble.hy }, { x: bubble.introX, y: bubble.introY }, progress);
+          bubble.x = point.x;
+          bubble.y = point.y;
+          bubble.introAlpha = progress;
         }
-        // Text scrolled over the destination: pick another place right away (but not every frame).
-        const destination = homeOf({ u: body.tu, v: body.tv, half: body.half });
-        if (time >= body.coolUntil && exitVector(destination.hx, destination.hy - PROBE_OFFSET, obstacles)) {
-          retarget(index);
-          body.coolUntil = time + RETARGET_COOLDOWN_MS;
+        if (time >= introStart + INTRO_DURATION_MS + data.groups.length * INTRO_CLUSTER_STAGGER_MS) {
+          introActive = false;
+          bodies.forEach(body => { body.introAlpha = 1; });
+          if (bubble) bubble.introAlpha = 1;
         }
-        body.u += (body.tu - body.u) * HOME_EASE * delta;
-        body.v += (body.tv - body.v) * HOME_EASE * delta;
-        Object.assign(body, homeOf(body));
-      });
-      for (const body of bodies) {
-        const targetX = body.hx
-          + Math.sin(time / 1700 + body.phase) * WOBBLE * 1.8
-          + Math.cos(time / 4300 + body.phase * 1.7) * 14
-          + Math.sin(time / 7200) * 16;
-        const targetY = body.hy
-          + Math.cos(time / 2100 + body.phase) * WOBBLE * 1.8
-          + Math.sin(time / 5100 + body.phase * 1.3) * 12
-          + Math.cos(time / 8300) * 12;
-        let forceX = (targetX - body.x) * 0.02;
-        let forceY = (targetY - body.y) * 0.02;
-        // Technologies under a text block or a card are nudged out to its nearest edge.
-        const exit = exitVector(body.x, body.y - PROBE_OFFSET, obstacles);
-        if (exit) {
-          forceX += exit.dx * OBSTACLE_PUSH;
-          forceY += exit.dy * OBSTACLE_PUSH;
-        }
-        const dx = body.x - pointer.x;
-        const dy = body.y - pointer.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance < POINTER_RADIUS && distance > 0.1) {
-          forceX += (dx / distance) * (POINTER_RADIUS - distance) * 0.012;
-          forceY += (dy / distance) * (POINTER_RADIUS - distance) * 0.012;
-        }
-        body.vx = (body.vx + forceX) * 0.86;
-        body.vy = (body.vy + forceY) * 0.86;
-        body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
-        body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
       }
+
       bodies.forEach((body, index) => {
+        const wasPoppedOut = body.popAlpha > 0;
+        if (visibleIndices.has(index) && !introActive) {
+          if (time >= body.nextMove) {
+            if (body.nextMove > 0) retarget(index);
+            body.nextMove = time + RETARGET_MIN_MS + Math.random() * RETARGET_SPREAD_MS;
+          }
+          const destination = homeOf(body);
+          if (time >= body.coolUntil && exitVector(destination.hx, destination.hy - PROBE_OFFSET, obstacles)) {
+            retarget(index);
+            body.coolUntil = time + RETARGET_COOLDOWN_MS;
+          }
+          body.u += (body.tu - body.u) * HOME_EASE * delta;
+          body.v += (body.tv - body.v) * HOME_EASE * delta;
+          Object.assign(body, homeOf(body));
+          const targetX = body.hx
+            + Math.sin(time / 1700 + body.phase) * WOBBLE * 1.8
+            + Math.cos(time / 4300 + body.phase * 1.7) * 14
+            + Math.sin(time / 7200) * 16;
+          const targetY = body.hy
+            + Math.cos(time / 2100 + body.phase) * WOBBLE * 1.8
+            + Math.sin(time / 5100 + body.phase * 1.3) * 12
+            + Math.cos(time / 8300) * 12;
+          let forceX = (targetX - body.x) * 0.02;
+          let forceY = (targetY - body.y) * 0.02;
+          const exit = exitVector(body.x, body.y - PROBE_OFFSET, obstacles);
+          if (exit) {
+            forceX += exit.dx * OBSTACLE_PUSH;
+            forceY += exit.dy * OBSTACLE_PUSH;
+          }
+          const dx = body.x - pointer.x;
+          const dy = body.y - pointer.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance < POINTER_RADIUS && distance > 0.1) {
+            forceX += (dx / distance) * (POINTER_RADIUS - distance) * 0.012;
+            forceY += (dy / distance) * (POINTER_RADIUS - distance) * 0.012;
+          }
+          body.vx = (body.vx + forceX) * 0.86;
+          body.vy = (body.vy + forceY) * 0.86;
+          body.x = clampRange(body.x + body.vx * delta, body.cluster.left + body.half, body.cluster.right - body.half);
+          body.y = clampRange(body.y + body.vy * delta, body.cluster.top + LABEL_HEIGHT, body.cluster.bottom);
+        } else if (body.popAlpha > 0 || body.popTarget) {
+          if (introActive && body.popTarget) body.introAlpha = bubble?.introAlpha ?? 1;
+          const targetX = body.popTarget ? body.popX : bubble?.x ?? body.x;
+          const targetY = body.popTarget ? body.popY : bubble?.y ?? body.y;
+          const amount = Math.min(1, (body.popTarget ? 0.075 : 0.12) * delta);
+          body.popAlpha = clampRange(body.popAlpha + (body.popTarget ? amount : -amount), 0, 1);
+          const forceX = (targetX - body.x) * 0.035;
+          const forceY = (targetY - body.y) * 0.035;
+          body.vx = (body.vx + forceX) * 0.82;
+          body.vy = (body.vy + forceY) * 0.82;
+          body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
+          body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
+          if (wasPoppedOut !== (body.popAlpha > 0)) edgeRoutesChanged = true;
+        }
         body.glow += (targetGlow(index) - body.glow) * Math.min(1, 0.08 * delta);
       });
+      if (bubble) {
+        const target = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        bubble.glow += (target - bubble.glow) * Math.min(1, 0.08 * delta);
+      }
+      if (edgeRoutesChanged) rebuildRenderEdges();
       if (Math.random() < (litEdges.length > 0 ? 0.18 : 0.05) * delta) spawnPacket();
       for (const packet of packets) packet.progress += packet.speed * delta;
       packets = packets.filter(packet => packet.progress < 1);
@@ -420,7 +676,7 @@ export class ConstellationEngine implements ExperienceEngine {
 
     // Background dust: it links up faintly, twinkles, and lights up near the cursor and near highlighted technologies.
     const drawMotes = () => {
-      const lit = bodies.filter(body => body.glow > 0.6);
+      const lit = bodies.filter((body, index) => (visibleIndices.has(index) || body.popAlpha > 0) && body.glow > 0.6);
       forEachMoteLink(motes, MOTE_LINK_DISTANCE, (first, second, closeness) => {
         context.strokeStyle = `rgba(${colour}, ${closeness * 0.17 * moteBoost})`;
         context.lineWidth = 0.8;
@@ -446,16 +702,26 @@ export class ConstellationEngine implements ExperienceEngine {
 
     const draw = () => {
       context.clearRect(0, 0, width, height);
-      const drawLabels = shouldDrawConstellationLabels(width);
       drawMotes();
+      const fontSize = constellationLabelFontSize(width);
+      context.font = `600 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+      context.textAlign = 'center';
 
-      for (const edge of edges) {
-        const from = bodies[edge.a];
-        const to = bodies[edge.b];
+      const endpoint = (index: number): { x: number; y: number; glow: number } | null => {
+        if (index < 0) return bubble ? { x: bubble.x, y: bubble.y, glow: bubble.glow } : null;
+        return { x: bodies[index].x, y: bodies[index].y, glow: bodies[index].glow };
+      };
+      for (const edge of renderEdges) {
+        const from = endpoint(edge.a);
+        const to = endpoint(edge.b);
+        if (!from || !to) continue;
         const lit = Math.min(from.glow, to.glow);
-        const alpha = edge.strong ? 0.05 + lit * 0.5 : 0.03 + lit * 0.18;
+        const fromIntro = edge.a < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.a].introAlpha;
+        const toIntro = edge.b < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.b].introAlpha;
+        const alphaFade = Math.min(fromIntro, toIntro);
+        const alpha = (edge.faint ? 0.018 + lit * 0.08 : edge.strong ? 0.05 + lit * 0.5 : 0.03 + lit * 0.18) * alphaFade;
         context.strokeStyle = `rgba(${colour}, ${alpha})`;
-        context.lineWidth = edge.strong && lit > 0.6 ? 1.4 : 1;
+        context.lineWidth = edge.strong && lit > 0.6 && !edge.faint ? 1.4 : 1;
         context.beginPath();
         context.moveTo(from.x, from.y);
         context.lineTo(to.x, to.y);
@@ -463,8 +729,11 @@ export class ConstellationEngine implements ExperienceEngine {
       }
 
       for (const packet of packets) {
-        const from = bodies[packet.edge.a];
-        const to = bodies[packet.edge.b];
+        const edge = packet.edge;
+        const hiddenA = !visibleIndices.has(edge.a) && bodies[edge.a].popAlpha === 0;
+        const hiddenB = !visibleIndices.has(edge.b) && bodies[edge.b].popAlpha === 0;
+        const from = hiddenA && bubble ? { x: bubble.x, y: bubble.y } : bodies[edge.a];
+        const to = hiddenB && bubble ? { x: bubble.x, y: bubble.y } : bodies[edge.b];
         const amount = packet.reverse ? 1 - packet.progress : packet.progress;
         const x = from.x + (to.x - from.x) * amount;
         const y = from.y + (to.y - from.y) * amount;
@@ -478,35 +747,66 @@ export class ConstellationEngine implements ExperienceEngine {
         context.fill();
       }
 
-      context.font = '600 13px "Segoe UI", system-ui, sans-serif';
-      context.textAlign = 'center';
-      for (const body of bodies) {
+      for (let index = 0; index < bodies.length; index++) {
+        const body = bodies[index];
+        if (!visibleIndices.has(index) && body.popAlpha <= 0) continue;
+        const alpha = (visibleIndices.has(index) ? 1 : body.popAlpha) * body.introAlpha;
+        if (alpha <= 0) continue;
         if (body.glow > LIT_GLOW) {
           const halo = context.createRadialGradient(body.x, body.y, 0, body.x, body.y, HALO_RADIUS);
-          halo.addColorStop(0, `rgba(${colour}, ${body.glow * 0.5})`);
+          halo.addColorStop(0, `rgba(${colour}, ${body.glow * 0.5 * alpha})`);
           halo.addColorStop(1, `rgba(${colour}, 0)`);
           context.fillStyle = halo;
           context.beginPath();
           context.arc(body.x, body.y, HALO_RADIUS, 0, TAU);
           context.fill();
         }
-        context.fillStyle = body.glow > LIT_GLOW ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
+        context.fillStyle = body.glow > LIT_GLOW ? `rgba(${coreColour}, ${alpha})` : `rgba(${colour}, ${(0.35 + body.glow * 0.5) * alpha})`;
         context.beginPath();
         context.arc(body.x, body.y, NODE_BASE_RADIUS + body.glow * NODE_GLOW_RADIUS, 0, TAU);
         context.fill();
-        if (!drawLabels) continue;
-        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8) * alpha})`;
         context.fillText(body.name, body.x, body.y - 12);
+      }
+
+      if (bubble && bubble.introAlpha > 0) {
+        const alpha = bubble.introAlpha;
+        const glow = bubble.glow * alpha;
+        if (glow > 0.05) {
+          const halo = context.createRadialGradient(bubble.x, bubble.y, BUBBLE_RADIUS, bubble.x, bubble.y, HALO_RADIUS + 4);
+          halo.addColorStop(0, `rgba(${colour}, ${glow * 0.65})`);
+          halo.addColorStop(1, `rgba(${colour}, 0)`);
+          context.fillStyle = halo;
+          context.beginPath();
+          context.arc(bubble.x, bubble.y, HALO_RADIUS + 4, 0, TAU);
+          context.fill();
+        }
+        context.strokeStyle = `rgba(${colour}, ${(0.22 + glow * 0.55) * alpha})`;
+        context.lineWidth = 1.2 + glow;
+        context.beginPath();
+        context.arc(bubble.x, bubble.y, BUBBLE_RADIUS + 3 + glow * 3, 0, TAU);
+        context.stroke();
+        context.fillStyle = `rgba(${colour}, ${(0.55 + glow * 0.4) * alpha})`;
+        context.beginPath();
+        context.arc(bubble.x, bubble.y, BUBBLE_RADIUS + glow, 0, TAU);
+        context.fill();
+        const hiddenCount = hiddenSortedByUsage.length - popIndices.size;
+        const label = moreMatches > 0
+          ? `${otherName} (+${hiddenCount}) · +${moreMatches} fler`
+          : `${otherName} (+${hiddenCount})`;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + 0.45 + glow * 0.3) * alpha})`;
+        context.fillText(label, bubble.x, bubble.y - 15);
       }
     };
 
     const step = (time: number) => {
-      frame = requestAnimationFrame(step);
+      frame = 0;
       const delta = Math.min((time - last) / 16.67, 3);
       last = time;
       frameTime = time;
       update(delta, time);
       draw();
+      if (shouldAnimateConstellation(state, !document.hidden) || (introActive && !document.hidden)) frame = requestAnimationFrame(step);
     };
 
     const sync = () => {
@@ -519,7 +819,12 @@ export class ConstellationEngine implements ExperienceEngine {
         motionToggle.setAttribute('aria-pressed', String(state === 'paused'));
       }
       refreshColour();
-      if (!shouldAnimateConstellation(state, !document.hidden)) {
+      if (state === 'reduced' && introActive) {
+        introActive = false;
+        bodies.forEach(body => { body.x = body.hx; body.y = body.hy; body.introAlpha = 1; });
+        if (bubble) { bubble.x = bubble.hx; bubble.y = bubble.hy; bubble.introAlpha = 1; }
+      }
+      if (!shouldAnimateConstellation(state, !document.hidden) && !(introActive && !document.hidden)) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
         return;
@@ -549,7 +854,7 @@ export class ConstellationEngine implements ExperienceEngine {
       pointer.y = event.clientY;
     }, { passive: true });
     document.documentElement.addEventListener('mouseleave', () => { pointer.x = pointer.y = -9999; });
-    if (playful) window.addEventListener('pointerdown', shockwave, { passive: true });
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
     document.addEventListener('pointerover', onEnter);
     document.addEventListener('pointerout', onLeave);
     document.addEventListener('focusin', onEnter);
