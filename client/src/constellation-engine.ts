@@ -150,6 +150,9 @@ export const resolveMotionState = (reducedMotion: boolean, saved: string | null,
 export const shouldAnimateConstellation = (state: MotionState, documentVisible: boolean): boolean =>
   state === 'running' && documentVisible;
 
+export const shouldSettleConstellationTransitions = (state: MotionState, initialSync: boolean): boolean =>
+  state === 'reduced' || (state === 'paused' && !initialSync);
+
 export const constellationLabelFontSize = (viewportWidth: number): number =>
   viewportWidth < NARROW_VIEWPORT ? 11 : 13;
 
@@ -200,6 +203,7 @@ export class ConstellationEngine implements ExperienceEngine {
       // Storage is optional.
     }
     let state: MotionState = 'running';
+    let motionInitialized = false;
     const pointer = { x: -9999, y: -9999 };
     let bodies: Body[] = [];
     let packets: Packet[] = [];
@@ -226,6 +230,7 @@ export class ConstellationEngine implements ExperienceEngine {
     let width = 0;
     let height = 0;
     let frame = 0;
+    let deferredLayoutFrame = 0;
     let last = 0;
     let colour = '255, 140, 80';
     let labelColour = '215, 222, 238';
@@ -457,6 +462,25 @@ export class ConstellationEngine implements ExperienceEngine {
       renderEdges = [...mappedEdges.values()];
     };
 
+    const finishIntro = () => {
+      if (!introActive) return;
+      introActive = false;
+      bodies.forEach((body, index) => {
+        if (visibleIndices.has(index)) {
+          body.x = body.hx;
+          body.y = body.hy;
+        }
+        body.introAlpha = 1;
+        body.vx = 0;
+        body.vy = 0;
+      });
+      if (bubble) {
+        bubble.x = bubble.hx;
+        bubble.y = bubble.hy;
+        bubble.introAlpha = 1;
+      }
+    };
+
     const settleHiddenPopouts = () => {
       if (!bubble || introActive) return;
       const bubblePoint = { x: bubble.x, y: bubble.y };
@@ -465,6 +489,8 @@ export class ConstellationEngine implements ExperienceEngine {
         const settled = settlePopout(body.popTarget, { x: body.popX, y: body.popY }, bubblePoint);
         body.x = settled.x;
         body.y = settled.y;
+        body.vx = 0;
+        body.vy = 0;
         body.popAlpha = settled.alpha;
       });
       rebuildRenderEdges();
@@ -640,16 +666,12 @@ export class ConstellationEngine implements ExperienceEngine {
           bubble.y = point.y;
           bubble.introAlpha = progress;
         }
-        if (time >= introStart + INTRO_DURATION_MS + data.groups.length * INTRO_CLUSTER_STAGGER_MS) {
-          introActive = false;
-          bodies.forEach(body => { body.introAlpha = 1; });
-          if (bubble) bubble.introAlpha = 1;
-        }
+        if (time >= introStart + INTRO_DURATION_MS + data.groups.length * INTRO_CLUSTER_STAGGER_MS) finishIntro();
       }
 
       bodies.forEach((body, index) => {
         const wasPoppedOut = body.popAlpha > 0;
-        if (visibleIndices.has(index) && !introActive) {
+        if (visibleIndices.has(index) && !introActive && shouldAnimateConstellation(state, !document.hidden)) {
           if (time >= body.nextMove) {
             if (body.nextMove > 0) retarget(index);
             body.nextMove = time + RETARGET_MIN_MS + Math.random() * RETARGET_SPREAD_MS;
@@ -708,6 +730,11 @@ export class ConstellationEngine implements ExperienceEngine {
       if (bubble) {
         const target = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
         bubble.glow += (target - bubble.glow) * Math.min(1, 0.08 * delta);
+      }
+      if (!shouldAnimateConstellation(state, !document.hidden) && !introActive) {
+        settleHiddenPopouts();
+        bodies.forEach((body, index) => { body.glow = targetGlow(index); });
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
       }
       if (edgeRoutesChanged) rebuildRenderEdges();
       if (Math.random() < (litEdges.length > 0 ? 0.18 : 0.05) * delta) spawnPacket();
@@ -853,21 +880,25 @@ export class ConstellationEngine implements ExperienceEngine {
     const sync = () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      const initialSync = !motionInitialized;
       state = resolveMotionState(motion.matches, savedChoice, window.innerWidth);
+      motionInitialized = true;
+      const settleTransitions = shouldSettleConstellationTransitions(state, initialSync);
+      if (settleTransitions && deferredLayoutFrame) {
+        cancelAnimationFrame(deferredLayoutFrame);
+        deferredLayoutFrame = 0;
+      }
       root.dataset.constellationMotion = state;
       if (motionToggle) {
         motionToggle.hidden = state === 'reduced';
         motionToggle.setAttribute('aria-pressed', String(state === 'paused'));
       }
       refreshColour();
-      if (state === 'reduced' && introActive) {
-        introActive = false;
-        bodies.forEach(body => { body.x = body.hx; body.y = body.hy; body.introAlpha = 1; });
-        if (bubble) { bubble.x = bubble.hx; bubble.y = bubble.hy; bubble.introAlpha = 1; }
-      }
+      if (settleTransitions) finishIntro();
       if (!shouldAnimateConstellation(state, !document.hidden) && !(introActive && !document.hidden)) {
         settleHiddenPopouts();
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
         draw();
         return;
       }
@@ -943,6 +974,11 @@ export class ConstellationEngine implements ExperienceEngine {
     recompute();
     sync();
     // Sticky elements (the table of contents on narrow screens) are only measurable once enhanced.
-    requestAnimationFrame(() => { layout(); recompute(); });
+    deferredLayoutFrame = requestAnimationFrame(() => {
+      deferredLayoutFrame = 0;
+      if (!shouldAnimateConstellation(state, !document.hidden) && !introActive) return;
+      layout();
+      recompute();
+    });
   }
 }

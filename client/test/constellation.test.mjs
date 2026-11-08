@@ -22,6 +22,7 @@ import {
 import {
   resolveMotionState,
   shouldAnimateConstellation,
+  shouldSettleConstellationTransitions,
   constellationLabelFontSize
 } from '../wwwroot/js/constellation-engine.js';
 
@@ -167,6 +168,13 @@ test('motion state prioritizes reduced motion, then a saved choice, then the nar
   assert.equal(resolveMotionState(false, 'paused', 1440), 'paused');
   assert.equal(resolveMotionState(false, null, 699), 'paused');
   assert.equal(resolveMotionState(false, null, 700), 'running');
+});
+
+test('motion transitions settle except for the initial paused state', () => {
+  assert.equal(shouldSettleConstellationTransitions('paused', true), false);
+  assert.equal(shouldSettleConstellationTransitions('paused', false), true);
+  assert.equal(shouldSettleConstellationTransitions('reduced', true), true);
+  assert.equal(shouldSettleConstellationTransitions('running', false), false);
 });
 
 test('only a running constellation in a visible document animates', () => {
