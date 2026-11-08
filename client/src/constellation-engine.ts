@@ -9,10 +9,11 @@ import {
   clampRange,
   effectiveObstacles,
   exitVector,
+  labelRectAt,
   scatterPoint
 } from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
-import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from './constellation-clusters.js';
+import { assignClusterGroups, clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from './constellation-clusters.js';
 import {
   MOTE_LINK_DISTANCE,
   createMotes,
@@ -54,6 +55,7 @@ interface Body extends SkillNode {
   boost: number;
   half: number;
   cluster: Area;
+  clusterGroup: number;
   introX: number;
   introY: number;
   introAlpha: number;
@@ -76,6 +78,7 @@ interface Bubble {
   hx: number;
   hy: number;
   glow: number;
+  labelHalf: number;
   introX: number;
   introY: number;
   introAlpha: number;
@@ -316,10 +319,16 @@ export class ConstellationEngine implements ExperienceEngine {
     // A new destination stays inside the technology's category region, clear of text and other destinations.
     const retarget = (index: number) => {
       const body = bodies[index];
-      const others = bodies.filter((other, otherIndex) => otherIndex !== index && other.group === body.group)
-        .map(other => homeOf({ u: other.tu, v: other.tv, half: other.half, cluster: other.cluster }))
-        .map(home => ({ x: home.hx, y: home.hy }));
-      const { u, v } = share(scatterPoint(fittingRegion(body.cluster, body.half), body.half, obstacles, others));
+      const others = bodies.flatMap((other, otherIndex) => {
+        if (otherIndex === index || !visibleIndices.has(otherIndex)) return [];
+        const home = homeOf({ u: other.tu, v: other.tv, half: other.half, cluster: other.cluster });
+        return [{ ...home, half: other.half }];
+      });
+      const taken = others.map(({ hx, hy }) => ({ x: hx, y: hy }));
+      const takenLabels = others.map(({ hx, hy, half }) => labelRectAt({ x: hx, y: hy }, half));
+      if (bubble) takenLabels.push(labelRectAt({ x: bubble.x, y: bubble.y - 15 }, bubble.labelHalf));
+      const { u, v } = share(scatterPoint(fittingRegion(body.cluster, body.half), body.half, obstacles, taken,
+        Math.random, 110, 100, takenLabels));
       body.tu = u;
       body.tv = v;
     };
@@ -346,40 +355,17 @@ export class ConstellationEngine implements ExperienceEngine {
       });
       refreshObstacles(performance.now());
       motes = createMotes(moteCount(width, height, nodes.length), width, height);
-      const categoryAreas = clusterAreas(area, data.groups.length);
       const previous = bodies;
-      const origins = clusterOrigins(data.groups.length);
-      const animateIntro = firstLayout && !motion.matches;
-      if (animateIntro) {
-        introActive = true;
-        introStart = performance.now();
-      }
-      const taken: { x: number; y: number }[] = [];
-      bodies = nodes.map((node, index) => {
-        const half = context.measureText(node.name).width / 2 + LABEL_PADDING;
-        const cluster = categoryAreas[node.group] ?? area;
-        const earlier = previous[index];
-        const { u, v } = earlier ?? share(scatterPoint(fittingRegion(cluster, half), half, obstacles, taken));
-        const { hx, hy } = homeOf({ u, v, half, cluster });
-        const remapped = earlier ? remapPoint(earlier) : null;
-        taken.push({ x: hx, y: hy });
-        const origin = origins[node.group] ?? { x: area.left + areaWidth() / 2, y: area.top + areaHeight() / 2 };
-        return {
-          ...node, u, v, tu: earlier?.tu ?? u, tv: earlier?.tv ?? v, nextMove: earlier?.nextMove ?? 0, coolUntil: 0,
-          hx, hy, x: remapped?.x ?? (animateIntro ? origin.x : hx), y: remapped?.y ?? (animateIntro ? origin.y : hy),
-          vx: earlier?.vx ?? 0, vy: earlier?.vy ?? 0, phase: earlier?.phase ?? Math.random() * TAU,
-          glow: ambientGlow, boost: 0, half, cluster, introX: origin.x, introY: origin.y,
-          introAlpha: earlier?.introAlpha ?? (animateIntro ? 0 : 1), popAlpha: earlier?.popAlpha ?? 0,
-          popTarget: false, popX: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).x : hx,
-          popY: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).y : hy
-        };
-      });
-      firstLayout = false;
-
-      const budget = visibleBudget({ width: areaWidth(), height: areaHeight() }, nodes.length, width < NARROW_VIEWPORT ? 112 : 130, fontSize * 2.3);
-      const selected = selectVisible(nodes, usage, budget);
       const previouslyVisible = visibleIndices;
+      const budget = visibleBudget({ width: areaWidth(), height: areaHeight() }, nodes.length,
+        width < NARROW_VIEWPORT ? 112 : 130, fontSize * 2.3);
+      const selected = selectVisible(nodes, usage, budget);
       visibleIndices = new Set(selected);
+      const clusterGroups = assignClusterGroups(nodes, selected, data.groups.length);
+      const clusterLoads = Array.from({ length: data.groups.length }, () => 0);
+      selected.forEach(index => { clusterLoads[clusterGroups[index]]++; });
+      const categoryAreas = clusterAreas(area, clusterLoads);
+      const origins = clusterOrigins(data.groups.length);
       hiddenSortedByUsage = nodes.map((_, index) => index).filter(index => !visibleIndices.has(index))
         .sort((a, b) => usage[b] - usage[a] || a - b);
       const previousBubble = bubble;
@@ -391,12 +377,51 @@ export class ConstellationEngine implements ExperienceEngine {
       const bubbleX = clampRange(area.right - bubbleHalf - 20, area.left + bubbleHalf, area.right - bubbleHalf);
       const bubbleY = clampRange(area.bottom - 12, area.top + LABEL_HEIGHT, area.bottom);
       const bubbleOrigin = { x: area.left + areaWidth() / 2 + 8, y: area.top + areaHeight() / 2 - 5 };
+      const animateIntro = firstLayout && !motion.matches;
+      if (animateIntro) {
+        introActive = true;
+        introStart = performance.now();
+      }
       bubble = hiddenSortedByUsage.length === 0 ? null : {
         x: previousBubble ? remapPoint(previousBubble).x : animateIntro ? bubbleOrigin.x : bubbleX,
         y: previousBubble ? remapPoint(previousBubble).y : animateIntro ? bubbleOrigin.y : bubbleY,
-        hx: bubbleX, hy: bubbleY, glow: 0,
-        introX: bubbleOrigin.x, introY: bubbleOrigin.y, introAlpha: previousBubble ? previousBubble.introAlpha : animateIntro ? 0 : 1
+        hx: bubbleX, hy: bubbleY, glow: 0, labelHalf: bubbleHalf,
+        introX: bubbleOrigin.x, introY: bubbleOrigin.y,
+        introAlpha: previousBubble ? previousBubble.introAlpha : animateIntro ? 0 : 1
       };
+      const halves = nodes.map(node => context.measureText(node.name).width / 2 + LABEL_PADDING);
+      const taken: { x: number; y: number }[] = [];
+      const takenLabels: ReturnType<typeof labelRectAt>[] = bubble
+        ? [labelRectAt({ x: bubbleX, y: bubbleY - 15 }, bubbleHalf)]
+        : [];
+      bodies = nodes.map((node, index) => {
+        const half = halves[index];
+        const clusterGroup = clusterGroups[index];
+        const cluster = clusterLoads[clusterGroup] > 0 ? categoryAreas[clusterGroup] ?? area : area;
+        const earlier = previous[index];
+        const isVisible = visibleIndices.has(index);
+        const placement = earlier ?? share(scatterPoint(fittingRegion(cluster, half), half, obstacles,
+          isVisible ? taken : [], Math.random, 110, 100, isVisible ? takenLabels : []));
+        const { u, v } = placement;
+        const { hx, hy } = homeOf({ u, v, half, cluster });
+        const remapped = earlier ? remapPoint(earlier) : null;
+        if (isVisible) {
+          taken.push({ x: hx, y: hy });
+          takenLabels.push(labelRectAt({ x: hx, y: hy }, half));
+        }
+        const origin = origins[clusterGroup] ?? { x: area.left + areaWidth() / 2, y: area.top + areaHeight() / 2 };
+        return {
+          ...node, u, v, tu: earlier?.tu ?? u, tv: earlier?.tv ?? v, nextMove: earlier?.nextMove ?? 0, coolUntil: 0,
+          hx, hy, x: remapped?.x ?? (animateIntro ? origin.x : hx), y: remapped?.y ?? (animateIntro ? origin.y : hy),
+          vx: earlier?.vx ?? 0, vy: earlier?.vy ?? 0, phase: earlier?.phase ?? Math.random() * TAU,
+          glow: ambientGlow, boost: 0, half, cluster, clusterGroup, introX: origin.x, introY: origin.y,
+          introAlpha: earlier?.introAlpha ?? (animateIntro ? 0 : 1), popAlpha: earlier?.popAlpha ?? 0,
+          popTarget: false, popX: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).x : hx,
+          popY: earlier ? remapPoint({ x: earlier.popX, y: earlier.popY }).y : hy
+        };
+      });
+      firstLayout = false;
+
       bodies.forEach((body, index) => {
         if (previous.length > 0 && visibleIndices.has(index) && !previouslyVisible.has(index)) {
           body.x = body.hx;
@@ -409,10 +434,6 @@ export class ConstellationEngine implements ExperienceEngine {
           body.y = bubble.y;
         }
       });
-      if (bubble && animateIntro) {
-        bubble.x = bubbleOrigin.x;
-        bubble.y = bubbleOrigin.y;
-      }
     };
 
     const targetGlow = (index: number) => {
@@ -471,7 +492,11 @@ export class ConstellationEngine implements ExperienceEngine {
       }
       bubbleHasMatches = !!bubble && !!focus && hiddenSortedByUsage.some(index => focus?.has(index));
       if (bubble && bubbleHasMatches) bubble.glow = Math.max(bubble.glow, 0.65);
-      const popTaken: { x: number; y: number }[] = [];
+      const popTaken = bodies.flatMap((body, index) => visibleIndices.has(index) ? [{ x: body.x, y: body.y }] : []);
+      const popTakenLabels = bodies.flatMap((body, index) => visibleIndices.has(index)
+        ? [labelRectAt({ x: body.x, y: body.y }, body.half)]
+        : []);
+      if (bubble) popTakenLabels.push(labelRectAt({ x: bubble.x, y: bubble.y - 15 }, bubble.labelHalf));
       for (const index of hiddenSortedByUsage) {
         const body = bodies[index];
         const shouldPop = popIndices.has(index);
@@ -486,10 +511,11 @@ export class ConstellationEngine implements ExperienceEngine {
           const top = Math.max(area.top + LABEL_HEIGHT, bubble.y - POP_RADIUS);
           const bottom = Math.min(area.bottom, bubble.y + POP_RADIUS);
           const region: Area = { left, top, right: Math.max(left, right), bottom: Math.max(top, bottom) };
-          const point = scatterPoint(region, body.half, obstacles, popTaken, Math.random, 44, 24);
+          const point = scatterPoint(region, body.half, obstacles, popTaken, Math.random, 44, 36, popTakenLabels);
           body.popX = point.x;
           body.popY = point.y;
           popTaken.push(point);
+          popTakenLabels.push(labelRectAt(point, body.half));
         }
       }
 
@@ -660,8 +686,9 @@ export class ConstellationEngine implements ExperienceEngine {
           }
           body.vx = (body.vx + forceX) * 0.86;
           body.vy = (body.vy + forceY) * 0.86;
-          body.x = clampRange(body.x + body.vx * delta, body.cluster.left + body.half, body.cluster.right - body.half);
-          body.y = clampRange(body.y + body.vy * delta, body.cluster.top + LABEL_HEIGHT, body.cluster.bottom);
+          const movementRegion = fittingRegion(body.cluster, body.half);
+          body.x = clampRange(body.x + body.vx * delta, movementRegion.left + body.half, movementRegion.right - body.half);
+          body.y = clampRange(body.y + body.vy * delta, movementRegion.top + LABEL_HEIGHT, movementRegion.bottom);
         } else if (body.popAlpha > 0 || body.popTarget) {
           if (introActive && body.popTarget) body.introAlpha = bubble?.introAlpha ?? 1;
           const targetX = body.popTarget ? body.popX : bubble?.x ?? body.x;

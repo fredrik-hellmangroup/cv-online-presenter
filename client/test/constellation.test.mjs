@@ -15,6 +15,8 @@ import {
   clampRange,
   effectiveObstacles,
   exitVector,
+  labelOverlapArea,
+  labelRectAt,
   scatterPoint
 } from '../wwwroot/js/constellation-layout.js';
 import {
@@ -177,4 +179,11 @@ test('only a running constellation in a visible document animates', () => {
 test('technology labels use a compact mobile font and remain enabled at every width', () => {
   for (const width of [320, 375, 390, 428, 699]) assert.equal(constellationLabelFontSize(width), 11, `${width}px`);
   for (const width of [700, 768, 1440]) assert.equal(constellationLabelFontSize(width), 13, `${width}px`);
+});
+
+
+test('scattering avoids overlapping occupied label rectangles when space is available', () => {
+  const occupied = [labelRectAt({ x: 200, y: 180 }, 50)];
+  const point = scatterPoint({ left: 20, top: 20, right: 380, bottom: 380 }, 45, [], [], seeded(123), 0, 100, occupied);
+  assert.equal(labelOverlapArea(labelRectAt(point, 45), occupied[0]), 0);
 });

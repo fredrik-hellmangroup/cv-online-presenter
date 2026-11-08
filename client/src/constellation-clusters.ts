@@ -26,7 +26,7 @@ export const visibleBudget = (
   labelHeight = 30
 ): number => {
   if (nodeCount <= 0) return 0;
-  const footprint = Math.max(1, labelWidth * labelHeight * 2.5);
+  const footprint = Math.max(1, labelWidth * labelHeight * 7);
   const estimate = Math.floor(Math.max(0, size.width) * Math.max(0, size.height) / footprint);
   return Math.min(nodeCount, Math.max(Math.min(6, nodeCount), estimate));
 };
@@ -84,27 +84,77 @@ export const introPosition = <T extends { readonly x: number; readonly y: number
   y: origin.y + (home.y - origin.y) * progress
 });
 
-export const clusterAreas = (area: Area, count: number): Area[] => {
-  const total = Math.max(0, Math.floor(count));
-  if (total === 0) return [];
-  const width = Math.max(1, area.right - area.left);
-  const height = Math.max(1, area.bottom - area.top);
-  const columns = Math.ceil(Math.sqrt(total * width / height));
-  const rows = Math.ceil(total / columns);
-  const cellWidth = width / columns;
-  const cellHeight = height / rows;
-  return Array.from({ length: total }, (_, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const insetX = Math.min(20, cellWidth * 0.08);
-    const insetY = Math.min(18, cellHeight * 0.08);
-    return {
-      left: area.left + column * cellWidth + insetX,
-      top: area.top + row * cellHeight + insetY,
-      right: area.left + (column + 1) * cellWidth - insetX,
-      bottom: area.top + (row + 1) * cellHeight - insetY
-    };
-  });
+export const clusterAreas = (area: Area, weightsOrCount: number | readonly number[]): Area[] => {
+  const weights = typeof weightsOrCount === 'number'
+    ? Array.from({ length: Math.max(0, Math.floor(weightsOrCount)) }, () => 1)
+    : [...weightsOrCount].map(weight => Math.max(0, weight));
+  if (weights.length === 0) return [];
+  const regions = Array.from({ length: weights.length }, () => area);
+  const active = weights.map((weight, index) => weight > 0 ? index : -1).filter(index => index >= 0);
+  if (active.length === 0) return regions;
+
+  const partition = (indices: readonly number[], bounds: Area): void => {
+    if (indices.length === 1) {
+      const insetX = Math.min(20, (bounds.right - bounds.left) * 0.08);
+      const insetY = Math.min(18, (bounds.bottom - bounds.top) * 0.08);
+      regions[indices[0]] = {
+        left: bounds.left + insetX,
+        top: bounds.top + insetY,
+        right: bounds.right - insetX,
+        bottom: bounds.bottom - insetY
+      };
+      return;
+    }
+    const total = indices.reduce((sum, index) => sum + weights[index], 0);
+    let split = 1;
+    let subtotal = weights[indices[0]];
+    while (split < indices.length - 1 && subtotal < total / 2) subtotal += weights[indices[split++]];
+    const ratio = subtotal / total;
+    const first = indices.slice(0, split);
+    const second = indices.slice(split);
+    if (bounds.right - bounds.left >= bounds.bottom - bounds.top) {
+      const middle = bounds.left + (bounds.right - bounds.left) * ratio;
+      partition(first, { ...bounds, right: middle });
+      partition(second, { ...bounds, left: middle });
+    } else {
+      const middle = bounds.top + (bounds.bottom - bounds.top) * ratio;
+      partition(first, { ...bounds, bottom: middle });
+      partition(second, { ...bounds, top: middle });
+    }
+  };
+
+  partition(active, area);
+  return regions;
+};
+
+export const assignClusterGroups = (
+  nodes: readonly SkillNode[],
+  visibleIndices: readonly number[],
+  groupCount: number
+): number[] => {
+  const assignments = nodes.map(node => node.group);
+  const loads = Array.from({ length: groupCount }, () => 0);
+  const candidates = [...new Set(nodes.filter(node => !node.isOther).map(node => node.group))];
+  const destinations = candidates.length > 0
+    ? candidates
+    : [...new Set(nodes.map(node => node.group))];
+  for (const index of visibleIndices) {
+    if (!nodes[index]?.isOther && nodes[index]?.group >= 0 && nodes[index]?.group < groupCount)
+      loads[nodes[index].group]++;
+  }
+  let cursor = 0;
+  for (const index of visibleIndices) {
+    if (!nodes[index]?.isOther || destinations.length === 0) continue;
+    let chosen = destinations[cursor % destinations.length];
+    for (let offset = 1; offset < destinations.length; offset++) {
+      const candidate = destinations[(cursor + offset) % destinations.length];
+      if ((loads[candidate] ?? 0) < (loads[chosen] ?? 0)) chosen = candidate;
+    }
+    assignments[index] = chosen;
+    loads[chosen]++;
+    cursor = (destinations.indexOf(chosen) + 1) % destinations.length;
+  }
+  return assignments;
 };
 
 export const settlePopout = (

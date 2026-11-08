@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from '../wwwroot/js/constellation-clusters.js';
+import { assignClusterGroups, clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from '../wwwroot/js/constellation-clusters.js';
 
 const nodes = [
   { name: 'C#', group: 0 }, { name: '.NET', group: 0 }, { name: 'ASP.NET', group: 0 }, { name: 'EF Core', group: 0 },
@@ -22,6 +22,8 @@ test('usage counts each assignment once for every matching technology', () => {
 
 test('visible budget scales with usable label area and stays bounded', () => {
   assert.equal(visibleBudget({ width: 0, height: 0 }, 30), 6);
+  assert.equal(visibleBudget({ width: 1392, height: 709 }, 103, 130, 30), 36);
+  assert.equal(visibleBudget({ width: 342, height: 656 }, 103, 112, 25.3), 11);
   assert.equal(visibleBudget({ width: 5000, height: 3000 }, 11), 11);
   assert.equal(visibleBudget({ width: 5000, height: 3000 }, 0), 0);
 });
@@ -66,4 +68,22 @@ test('cluster areas partition the usable area into distinct anchor regions', () 
 test('paused pop-outs settle at their target or return fully to the bubble', () => {
   assert.deepEqual(settlePopout(true, { x: 140, y: 80 }, { x: 20, y: 30 }), { x: 140, y: 80, alpha: 1 });
   assert.deepEqual(settlePopout(false, { x: 140, y: 80 }, { x: 20, y: 30 }), { x: 20, y: 30, alpha: 0 });
+});
+
+
+test('weighted cluster regions scale with visible membership', () => {
+  const [small, large, unused] = clusterAreas({ left: 0, top: 0, right: 1000, bottom: 500 }, [1, 3, 0]);
+  const smallWidth = small.right - small.left;
+  const largeWidth = large.right - large.left;
+  assert.ok(largeWidth > smallWidth * 2);
+  assert.deepEqual(unused, { left: 0, top: 0, right: 1000, bottom: 500 });
+});
+
+test('visible Övrigt nodes are assigned across the least-loaded regular clusters', () => {
+  const grouped = [
+    { name: 'A', group: 0 }, { name: 'B', group: 1 }, { name: 'C', group: 1 },
+    { name: 'Other one', group: 2, isOther: true }, { name: 'Other two', group: 2, isOther: true }
+  ];
+  const assignments = assignClusterGroups(grouped, [0, 1, 3, 4], 3);
+  assert.deepEqual(assignments.slice(3), [0, 1]);
 });

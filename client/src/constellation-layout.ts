@@ -15,6 +15,8 @@ export interface Vector {
   dy: number;
 }
 
+export type LabelRect = Area;
+
 // Labels are drawn centred above a node, and nodes drift a little around their home position.
 export const LABEL_HEIGHT = 26;
 export const LABEL_PADDING = 10;
@@ -59,6 +61,17 @@ export const exitVector = (x: number, y: number, rects: readonly Area[]): Vector
   return best;
 };
 
+export const labelRectAt = (point: Point, half: number, height = LABEL_HEIGHT): LabelRect => ({
+  left: point.x - half,
+  top: point.y - height,
+  right: point.x + half,
+  bottom: point.y
+});
+
+export const labelOverlapArea = (first: LabelRect, second: LabelRect): number =>
+  Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
+  * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+
 /**
  * Picks a random position for a node: inside the area (the node, its label and its drift stay inside),
  * outside the given obstacles, and as far as possible from the positions that are already taken.
@@ -71,7 +84,8 @@ export const scatterPoint = (
   taken: readonly Point[],
   random: () => number = Math.random,
   minGap = 110,
-  tries = 60
+  tries = 60,
+  takenLabels: readonly LabelRect[] = []
 ): Point => {
   const left = area.left + half + WOBBLE;
   const right = Math.max(left, area.right - half - WOBBLE);
@@ -85,11 +99,18 @@ export const scatterPoint = (
     const y = top + random() * (bottom - top);
     const covered = exitVector(x, y - PROBE_OFFSET, obstacles) !== null;
     const nearest = taken.reduce((shortest, point) => Math.min(shortest, Math.hypot(point.x - x, point.y - y)), Infinity);
-    const score = (covered ? -1000 : 0) + Math.min(nearest, minGap);
+    const label = { left: x - half, top: y - LABEL_HEIGHT, right: x + half, bottom: y };
+    let overlap = 0;
+    for (const other of takenLabels) {
+      const overlapWidth = Math.max(0, Math.min(label.right, other.right) - Math.max(label.left, other.left));
+      const overlapHeight = Math.max(0, Math.min(label.bottom, other.bottom) - Math.max(label.top, other.top));
+      overlap += overlapWidth * overlapHeight;
+    }
+    const score = (covered ? -1000 : 0) + Math.min(nearest, minGap) - (overlap > 0 ? 180 + overlap / 10 : 0);
     if (score > bestScore) {
       best = { x, y };
       bestScore = score;
-      if (!covered && nearest >= minGap) break;
+      if (!covered && overlap === 0 && nearest >= minGap) break;
     }
   }
   return best;
