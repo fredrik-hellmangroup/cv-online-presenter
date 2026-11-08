@@ -58,19 +58,17 @@ export class TagClampEngine implements ExperienceEngine {
     const lists = [...document.querySelectorAll<HTMLElement>(CLAMP_TARGETS)];
     if (lists.length === 0) return;
 
-    let lastWidth = -1;
-    const run = (): void => {
-      lastWidth = Math.round(lists[0].clientWidth);
-      lists.forEach(clamp);
-    };
+    const run = (): void => lists.forEach(clamp);
     run();
     document.fonts?.ready.then(run).catch(() => undefined);
 
+    // Width alone is not enough: text zoom or font changes resize the list height without changing its width.
+    // Re-clamping is idempotent, so the resulting size matches the observed one and does not loop.
     let frame = 0;
-    new ResizeObserver(() => {
-      if (Math.round(lists[0].clientWidth) === lastWidth) return;
+    const observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(run);
-    }).observe(lists[0]);
+    });
+    lists.forEach(list => observer.observe(list));
   }
 }
