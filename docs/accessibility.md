@@ -15,3 +15,9 @@
 The CI workflow also audits npm and NuGet dependencies and scans repository files for secrets. Production security headers and TLS are deployment checks because the deployment environment is not yet configured.
 
 The web host sends a restrictive Content Security Policy, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy`. It suppresses the Kestrel server header. HSTS is sent only when the application is in Production, the approved `siteUrl` uses HTTPS, and the incoming request is HTTPS. TLS termination and trusted proxy configuration must be verified in IIS before release.
+
+## Constellation and skill groups
+
+The `#constellation-field` canvas is decorative and marked `aria-hidden="true"`. The skill groups and technologies it draws are server-rendered as a full semantic equivalent on `/services` and `/cv`, derived from the same CV data as the canvas. Each group name is a toggle button that highlights the whole group; each technology is a toggle button for a single technology. Only one pin is active at a time, `aria-pressed` reflects it, Escape clears it, and a `role="status"` region announces what is highlighted. `/services` explains the map in visible text: dots are technologies and lines connect technologies used in the same assignment.
+
+The header has a pause button for the background animation (WCAG 2.2.2). The choice is stored in `localStorage` (`constellation-motion`). Without a stored choice the animation is paused below 700 CSS px and runs on wider screens. Under `prefers-reduced-motion: reduce` the animation never runs and the button is hidden. While paused, hover, focus and pins still update the static map. On narrow screens the group and technology buttons are at least 44 CSS px tall.

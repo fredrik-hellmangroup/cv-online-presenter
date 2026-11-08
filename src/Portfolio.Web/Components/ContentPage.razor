@@ -65,6 +65,10 @@ else
         <a href="/cv" aria-current="@(path == "/cv" ? "page" : null)">CV</a>
         <a href="/contact" aria-current="@(path == "/contact" ? "page" : null)">Kontakt</a>
     </nav>
+    @if (page is not null && constellationJson is not null)
+    {
+        <button id="motion-toggle" class="motion-toggle" type="button" aria-pressed="false" hidden><span class="motion-toggle-icon" aria-hidden="true"></span><span class="visually-hidden">Pausa bakgrundsanimation</span></button>
+    }
     @if (page is not null)
     {
         <button id="theme-toggle" type="button" aria-pressed="true" hidden>Växla tema</button>
@@ -208,7 +212,7 @@ else
                         var technologyCount = servicesCv.SkillGroups.Sum(group => group.Skills.Count);
                         <section class="service-technologies" aria-labelledby="service-technologies-heading">
                             <h2 id="service-technologies-heading">Teknik i uppdragen</h2>
-                            <p>Klicka på en teknik så markeras den i bakgrunden, tillsammans med de tekniker den använts med. Teknikerna länkas när de förekommer i samma uppdrag.</p>
+                            <p class="constellation-legend">Bakgrunden är en karta över teknikerna: varje prick är en teknik och linjerna binder ihop tekniker som använts i samma uppdrag. Välj ett område eller en teknik nedan så lyser de upp i kartan.</p>
                             <div class="tech-panel">
                                 <div class="tech-filter">
                                     <label class="visually-hidden" for="technology-filter">Filtrera tekniker</label>
@@ -221,7 +225,7 @@ else
                                     @foreach (var group in servicesCv.SkillGroups)
                                     {
                                         <div class="skill-group" role="group" aria-label="@group.Name" data-keywords="@string.Join("|", group.Skills)">
-                                            <p class="skill-group-name">@group.Name</p>
+                                            <p class="skill-group-name"><button type="button" class="skill-group-btn" data-group="@group.Name" aria-pressed="false">@group.Name <span class="skill-group-count">@CvPresenter.TechnologyCount(group.Skills.Count)</span></button></p>
                                             <ul class="skill-chips">
                                                 @foreach (var skill in group.Skills)
                                                 {

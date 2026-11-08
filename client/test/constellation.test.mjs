@@ -17,7 +17,7 @@ import {
   exitVector,
   scatterPoint
 } from '../wwwroot/js/constellation-layout.js';
-import { shouldAnimateConstellation } from '../wwwroot/js/constellation-engine.js';
+import { resolveMotionState, shouldAnimateConstellation } from '../wwwroot/js/constellation-engine.js';
 
 const groups = [
   { name: 'Plattform', skills: ['.NET', 'C#', 'ASP.NET Core', 'SQL Server'] },
@@ -147,8 +147,17 @@ test('constellation data is parsed defensively', () => {
 });
 
 
-test('reduced motion and hidden documents keep the constellation static', () => {
-  assert.equal(shouldAnimateConstellation(false, true), true);
-  assert.equal(shouldAnimateConstellation(true, true), false);
-  assert.equal(shouldAnimateConstellation(false, false), false);
+test('motion state prioritizes reduced motion, then a saved choice, then the narrow-screen default', () => {
+  assert.equal(resolveMotionState(true, 'running', 1440), 'reduced');
+  assert.equal(resolveMotionState(false, 'running', 390), 'running');
+  assert.equal(resolveMotionState(false, 'paused', 1440), 'paused');
+  assert.equal(resolveMotionState(false, null, 699), 'paused');
+  assert.equal(resolveMotionState(false, null, 700), 'running');
+});
+
+test('only a running constellation in a visible document animates', () => {
+  assert.equal(shouldAnimateConstellation('running', true), true);
+  assert.equal(shouldAnimateConstellation('paused', true), false);
+  assert.equal(shouldAnimateConstellation('reduced', true), false);
+  assert.equal(shouldAnimateConstellation('running', false), false);
 });

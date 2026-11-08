@@ -327,6 +327,8 @@ public static class CvPresenter
         return panel;
     }
 
+    public static string TechnologyCount(int count) => count == 1 ? "1 teknik" : $"{count} tekniker";
+
     private static IElement? BuildSkillGroups(IDocument document, IReadOnlyList<SkillGroup> groups, CvHeadings names)
     {
         if (groups.Count == 0) return null;
@@ -337,9 +339,17 @@ public static class CvPresenter
         title.TextContent = names.Skills;
         var hint = document.CreateElement("span");
         hint.ClassName = "tech-hint";
-        hint.TextContent = " · klicka för att markera";
+        hint.TextContent = " · välj ett område eller en teknik för att markera den i bakgrunden";
         title.AppendChild(hint);
         container.AppendChild(title);
+
+        var status = document.CreateElement("p");
+        status.ClassName = "tech-status";
+        status.SetAttribute("data-pin-status", string.Empty);
+        status.SetAttribute("role", "status");
+        status.SetAttribute("aria-live", "polite");
+        status.SetAttribute("aria-atomic", "true");
+        container.AppendChild(status);
 
         foreach (var skillGroup in groups)
         {
@@ -351,7 +361,17 @@ public static class CvPresenter
             group.SetAttribute("data-keywords", string.Join('|', skillGroup.Skills));
             var label = document.CreateElement("p");
             label.ClassName = "skill-group-name";
-            label.TextContent = skillGroup.Name;
+            var groupButton = document.CreateElement("button");
+            groupButton.ClassName = "skill-group-btn";
+            groupButton.SetAttribute("type", "button");
+            groupButton.SetAttribute("data-group", skillGroup.Name);
+            groupButton.SetAttribute("aria-pressed", "false");
+            groupButton.AppendChild(document.CreateTextNode(skillGroup.Name + " "));
+            var groupCount = document.CreateElement("span");
+            groupCount.ClassName = "skill-group-count";
+            groupCount.TextContent = TechnologyCount(skillGroup.Skills.Count);
+            groupButton.AppendChild(groupCount);
+            label.AppendChild(groupButton);
             var chips = document.CreateElement("ul");
             chips.ClassName = "chips";
             foreach (var skill in skillGroup.Skills)
