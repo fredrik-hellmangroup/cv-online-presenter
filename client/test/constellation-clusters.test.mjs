@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, usageCounts, visibleBudget } from '../wwwroot/js/constellation-clusters.js';
+import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from '../wwwroot/js/constellation-clusters.js';
 
 const nodes = [
   { name: 'C#', group: 0 }, { name: '.NET', group: 0 }, { name: 'ASP.NET', group: 0 }, { name: 'EF Core', group: 0 },
@@ -61,4 +61,9 @@ test('cluster areas partition the usable area into distinct anchor regions', () 
   assert.equal(areas.length, 3);
   assert.ok(areas.every(area => area.left >= 10 && area.right <= 410 && area.top >= 20 && area.bottom <= 220));
   assert.notDeepEqual(areas[0], areas[1]);
+});
+
+test('paused pop-outs settle at their target or return fully to the bubble', () => {
+  assert.deepEqual(settlePopout(true, { x: 140, y: 80 }, { x: 20, y: 30 }), { x: 140, y: 80, alpha: 1 });
+  assert.deepEqual(settlePopout(false, { x: 140, y: 80 }, { x: 20, y: 30 }), { x: 20, y: 30, alpha: 0 });
 });

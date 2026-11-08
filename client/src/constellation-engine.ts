@@ -12,7 +12,7 @@ import {
   scatterPoint
 } from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
-import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, usageCounts, visibleBudget } from './constellation-clusters.js';
+import { clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from './constellation-clusters.js';
 import {
   MOTE_LINK_DISTANCE,
   createMotes,
@@ -436,6 +436,19 @@ export class ConstellationEngine implements ExperienceEngine {
       renderEdges = [...mappedEdges.values()];
     };
 
+    const settleHiddenPopouts = () => {
+      if (!bubble || introActive) return;
+      const bubblePoint = { x: bubble.x, y: bubble.y };
+      bodies.forEach((body, index) => {
+        if (visibleIndices.has(index)) return;
+        const settled = settlePopout(body.popTarget, { x: body.popX, y: body.popY }, bubblePoint);
+        body.x = settled.x;
+        body.y = settled.y;
+        body.popAlpha = settled.alpha;
+      });
+      rebuildRenderEdges();
+    };
+
     const recompute = () => {
       const keywords = hovered ?? pinned ?? inView ?? pageKeywords;
       if (query.trim()) focus = nodesMatchingQuery(nodes, query);
@@ -480,18 +493,12 @@ export class ConstellationEngine implements ExperienceEngine {
         }
       }
 
-      rebuildRenderEdges();
+      const animationRunning = shouldAnimateConstellation(state, !document.hidden) || (introActive && !document.hidden);
+      if (!animationRunning) settleHiddenPopouts();
+      else rebuildRenderEdges();
       if (frame === 0) {
-        bodies.forEach((body, index) => {
-          body.glow = targetGlow(index);
-          if (!introActive && !visibleIndices.has(index)) {
-            body.popAlpha = body.popTarget ? 1 : 0;
-            if (body.popTarget) { body.x = body.popX; body.y = body.popY; }
-            else if (bubble) { body.x = bubble.x; body.y = bubble.y; }
-          }
-        });
+        bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
-        rebuildRenderEdges();
         draw();
       }
     };
@@ -832,6 +839,7 @@ export class ConstellationEngine implements ExperienceEngine {
         if (bubble) { bubble.x = bubble.hx; bubble.y = bubble.hy; bubble.introAlpha = 1; }
       }
       if (!shouldAnimateConstellation(state, !document.hidden) && !(introActive && !document.hidden)) {
+        settleHiddenPopouts();
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
         return;

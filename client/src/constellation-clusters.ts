@@ -106,3 +106,13 @@ export const clusterAreas = (area: Area, count: number): Area[] => {
     };
   });
 };
+
+export const settlePopout = (
+  shouldPop: boolean,
+  popPoint: { readonly x: number; readonly y: number },
+  bubblePoint: { readonly x: number; readonly y: number }
+): { readonly x: number; readonly y: number; readonly alpha: number } => ({
+  x: shouldPop ? popPoint.x : bubblePoint.x,
+  y: shouldPop ? popPoint.y : bubblePoint.y,
+  alpha: shouldPop ? 1 : 0
+});
