@@ -506,6 +506,7 @@ article.wide { max-width: none; }
 .hero-tabs[data-enhanced] .hero-tab-heading { display: none; }
 .hero-tabs[data-enhanced] .hero-tab-panel + .hero-tab-panel { margin-top: 0; }
 .hero-tabs[data-enhanced] .hero-tab-panel[hidden] { display: none; }
+.cv-competence-panel { margin: 1.5rem 0 2rem; }
 .hero-tab-panel:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: .5rem; }
 @media (max-width: 63.99rem) { .page-hero { grid-template-columns: minmax(0, 1fr); } }
 
