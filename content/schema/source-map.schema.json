@@ -253,7 +253,8 @@
         "competenceGroups": {
           "type": "array",
           "minItems": 1,
-          "description": "Hand-written source-backed groups with nested competence items.",
+          "maxItems": 4,
+          "description": "Hand-written source-backed groups with nested competence items; each group is one tab, so at most four.",
           "items": {
             "$ref": "#/$defs/competenceGroup"
           }

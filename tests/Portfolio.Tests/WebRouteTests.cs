@@ -84,10 +84,10 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Contains("href=\"/cv\"", hero);
         Assert.Contains("<aside class=\"page-hero-panel\"", hero);
         Assert.Contains("data-hero-tabs", hero);
-        Assert.Equal(["Bygga", "Leverera", "Domän", "Teknik"],
+        Assert.Equal(["Bygga", "Leverera", "Domän"],
             Regex.Matches(hero, "<h2 class=\"hero-tab-heading\" data-hero-tab-label>(.*?)</h2>").Select(match => WebUtility.HtmlDecode(match.Groups[1].Value)));
         Assert.Equal(4, Regex.Matches(hero, "<strong>").Count);
-        Assert.Contains("href=\"#service-technologies-heading\">Filtrera och utforska", hero);
+        Assert.DoesNotContain("hero-chip", hero);
         Assert.Single(Regex.Matches(html, "<h1[ >]"));
         Assert.True(html.IndexOf("service-technologies-heading\">", StringComparison.Ordinal) > html.IndexOf("page-hero", StringComparison.Ordinal));
     }

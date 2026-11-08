@@ -226,6 +226,32 @@ public sealed class CvPresenterTests
     }
 
     [Fact]
+    public void TurnsCompetenceGroupsIntoTabPanelsAndKeepsTheSkillGroupsAfterThem()
+    {
+        var document = Cv.Replace(
+            "- Example technical capability",
+            "Intro text.\n\n### Build\nBuild lead.\n\n#### Architecture\n- Architecture detail\n\n### Deliver\nDeliver lead.\n\n#### Platform\n- Platform detail",
+            StringComparison.Ordinal);
+        var html = Build(document, Mapping).BeforeHistoryHtml;
+
+        Assert.Equal(2, html.Split("data-hero-tab-panel", StringSplitOptions.None).Length - 1);
+        Assert.Contains("<h3 id=\"build\" class=\"hero-tab-heading\" data-hero-tab-label=\"\">Build</h3>", html);
+        Assert.Contains("<div class=\"hero-tab-lead\"><p>Build lead.</p></div>", html);
+        Assert.Contains("<strong>Architecture</strong><div class=\"page-hero-item-text\">", html);
+        Assert.Contains("Architecture detail", html);
+        Assert.True(html.IndexOf("Intro text.", StringComparison.Ordinal) < html.IndexOf("data-hero-tabs", StringComparison.Ordinal));
+        Assert.True(html.IndexOf("data-hero-tabs", StringComparison.Ordinal) < html.IndexOf("class=\"skill-groups\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LeavesACompetenceSectionWithASingleGroupAsPlainMarkdown()
+    {
+        var document = Cv.Replace("- Example technical capability", "### Build\nBuild lead.", StringComparison.Ordinal);
+
+        Assert.DoesNotContain("data-hero-tabs", Build(document).BeforeHistoryHtml);
+    }
+
+    [Fact]
     public void FallsBackToTheStartOfTheLaterSectionsWhenThereIsNoCompetenceSection()
     {
         var document = System.Text.RegularExpressions.Regex.Replace(
