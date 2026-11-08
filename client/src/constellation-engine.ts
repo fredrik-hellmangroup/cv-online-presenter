@@ -100,8 +100,16 @@ const RETARGET_MIN_MS = 20000;
 const RETARGET_SPREAD_MS = 40000;
 const HOME_EASE = 0.005;
 
-export const shouldAnimateConstellation = (reducedMotion: boolean, documentVisible: boolean): boolean =>
-  !reducedMotion && documentVisible;
+export type MotionState = 'running' | 'paused' | 'reduced';
+
+export const resolveMotionState = (reducedMotion: boolean, saved: string | null, viewportWidth: number): MotionState => {
+  if (reducedMotion) return 'reduced';
+  if (saved === 'paused' || saved === 'running') return saved;
+  return viewportWidth < NARROW_VIEWPORT ? 'paused' : 'running';
+};
+
+export const shouldAnimateConstellation = (state: MotionState, documentVisible: boolean): boolean =>
+  state === 'running' && documentVisible;
 
 // A narrow screen has no clear space beside the text, so technology names would be drawn behind the copy.
 export const shouldDrawConstellationLabels = (viewportWidth: number): boolean => viewportWidth >= NARROW_VIEWPORT;
@@ -142,6 +150,14 @@ export class ConstellationEngine implements ExperienceEngine {
     let pulse: { members: Set<number>; until: number } | null = null;
     let nextPulse = 0;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const motionToggle = document.querySelector<HTMLButtonElement>('#motion-toggle');
+    let savedChoice: string | null = null;
+    try {
+      savedChoice = window.localStorage.getItem('constellation-motion');
+    } catch {
+      // Storage is optional.
+    }
+    let state: MotionState = 'running';
     const pointer = { x: -9999, y: -9999 };
     let bodies: Body[] = [];
     let packets: Packet[] = [];
@@ -286,7 +302,7 @@ export class ConstellationEngine implements ExperienceEngine {
       const active = focus;
       litEdges = active ? edges.filter(edge => active.has(edge.a) && active.has(edge.b)) : [];
       ambientEdges = edges.filter(edge => edge.strong);
-      if (motion.matches) {
+      if (frame === 0) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
       }
@@ -328,7 +344,7 @@ export class ConstellationEngine implements ExperienceEngine {
     };
 
     const shockwave = (event: PointerEvent) => {
-      if (motion.matches || (event.target instanceof Element && event.target.closest('a, button, input, textarea, select'))) return;
+      if (frame === 0 || (event.target instanceof Element && event.target.closest('a, button, input, textarea, select'))) return;
       for (const body of bodies) {
         const dx = body.x - event.clientX;
         const dy = body.y - event.clientY;
@@ -493,8 +509,14 @@ export class ConstellationEngine implements ExperienceEngine {
     const sync = () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      state = resolveMotionState(motion.matches, savedChoice, window.innerWidth);
+      root.dataset.constellationMotion = state;
+      if (motionToggle) {
+        motionToggle.hidden = state === 'reduced';
+        motionToggle.setAttribute('aria-pressed', String(state === 'paused'));
+      }
       refreshColour();
-      if (!shouldAnimateConstellation(motion.matches, !document.hidden)) {
+      if (!shouldAnimateConstellation(state, !document.hidden)) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         draw();
         return;
@@ -515,7 +537,7 @@ export class ConstellationEngine implements ExperienceEngine {
       recompute();
     };
 
-    window.addEventListener('resize', () => { layout(); recompute(); draw(); });
+    window.addEventListener('resize', () => { layout(); recompute(); sync(); });
     window.addEventListener('scroll', () => { obstaclesDirty = true; }, { passive: true });
     // Web fonts and late layout change where the text ends up, so measure again once they are in.
     void document.fonts?.ready.then(() => { obstaclesDirty = true; });
@@ -530,8 +552,8 @@ export class ConstellationEngine implements ExperienceEngine {
     document.addEventListener('focusin', onEnter);
     document.addEventListener('focusout', onLeave);
     document.addEventListener(SKILL_PIN_EVENT, event => {
-      const skill = (event as SkillPinEvent).detail.skill;
-      pinned = skill ? [skill] : null;
+      const pin = (event as SkillPinEvent).detail.pin;
+      pinned = pin ? [...pin.keywords] : null;
       recompute();
     });
     document.addEventListener(CV_QUERY_EVENT, event => {
@@ -539,11 +561,20 @@ export class ConstellationEngine implements ExperienceEngine {
       recompute();
     });
     document.addEventListener(EGG_REVEAL_EVENT, () => {
-      if (motion.matches) return;
+      if (frame === 0) return;
       for (let count = 0; count < MAX_PACKETS; count++) spawnPacket();
     });
     document.addEventListener('visibilitychange', sync);
     motion.addEventListener('change', sync);
+    motionToggle?.addEventListener('click', () => {
+      savedChoice = state === 'paused' ? 'running' : 'paused';
+      try {
+        window.localStorage.setItem('constellation-motion', savedChoice);
+      } catch {
+        // The selection still works for this page.
+      }
+      sync();
+    });
     new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
 
     const visible = new Map<Element, string[]>();

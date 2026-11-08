@@ -72,6 +72,36 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task ServicesAndCvRenderAccessibleConstellationGroupControls()
+    {
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv!;
+
+        foreach (var path in new[] { "/services", "/cv" })
+        {
+            var html = WebUtility.HtmlDecode(await client.GetStringAsync(path));
+            var groupButtons = Regex.Matches(html, "<button[^>]*class=\"skill-group-btn\"[^>]*>.*?</button>", RegexOptions.Singleline);
+
+            Assert.Equal(cv.SkillGroups.Count, groupButtons.Count);
+            foreach (var group in cv.SkillGroups)
+            {
+                var button = groupButtons.Cast<Match>().Single(match =>
+                    match.Value.Contains($"data-group=\"{group.Name}\"", StringComparison.Ordinal));
+                Assert.Contains("aria-pressed=\"false\"", button.Value);
+                Assert.Contains($"<span class=\"skill-group-count\">{CvPresenter.TechnologyCount(group.Skills.Count)}</span>", button.Value);
+            }
+
+            if (html.Contains("id=\"constellation-data\"", StringComparison.Ordinal))
+                Assert.Contains("id=\"motion-toggle\"", html);
+        }
+
+        var services = WebUtility.HtmlDecode(await client.GetStringAsync("/services"));
+        Assert.Contains("class=\"constellation-legend\">Bakgrunden är en karta över teknikerna: varje prick är en teknik och linjerna binder ihop tekniker som använts i samma uppdrag. Välj ett område eller en teknik nedan så lyser de upp i kartan.</p>", services);
+
+        var cvHtml = await client.GetStringAsync("/cv");
+        Assert.Contains("data-pin-status", cvHtml);
+    }
+
+    [Fact]
     public async Task ServicesStartsWithATwoColumnHeroAndAPanelOfItsSections()
     {
         var html = await client.GetStringAsync("/services");

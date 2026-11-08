@@ -110,6 +110,26 @@ button {
 }
 button:hover { border-color: var(--accent); box-shadow: 0 0 1.5rem -.25rem var(--accent); transform: translateY(-1px); }
 
+.motion-toggle {
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+.motion-toggle[hidden] { display: none; }
+.motion-toggle-icon { display: block; width: .8rem; height: 1rem; border-inline: .2rem solid currentColor; }
+.motion-toggle[aria-pressed="true"] .motion-toggle-icon {
+  width: 0;
+  height: 0;
+  border: .5rem solid transparent;
+  border-right: 0;
+  border-left: .8rem solid currentColor;
+  transform: translateX(.1rem);
+}
+
 .skip-link { position: absolute; left: 1rem; top: -5rem; z-index: 60; padding: .5rem 1rem; background: var(--surface-solid); border-radius: .5rem; }
 .skip-link:focus { top: 1rem; }
 .skip-link:focus + .site-header { margin-top: 3rem; }
@@ -334,6 +354,25 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 .skill-group { position: relative; overflow: hidden; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); backdrop-filter: blur(10px); transition: border-color .25s; }
 .skill-group:hover, .skill-group:focus-within { border-color: rgba(var(--particle-rgb), .6); }
 .skill-group-name { margin: 0 0 .6rem; font-family: var(--font-condensed); font-size: 1.35rem; font-weight: 700; color: var(--link); }
+.skill-group-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .5rem;
+  min-height: 2.75rem;
+  margin-inline-start: -.55rem;
+  padding: .2rem .55rem;
+  border: 1px solid transparent;
+  border-radius: .7rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+.skill-group-btn:hover { border-color: var(--line); background: none; box-shadow: none; transform: none; }
+.skill-group-btn[aria-pressed="true"] { border-color: var(--accent); background: rgba(var(--particle-rgb), .16); }
+.skill-group-count { font-family: var(--font-mono); font-size: .78rem; font-weight: 400; color: var(--muted); }
+.skill-group:has(.skill-group-btn[aria-pressed="true"]) { border-color: var(--accent); }
 .chips, .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
 .chips li, .tags li { max-width: none; padding: .2rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--particle-rgb), .06); font-size: .9rem; line-height: 1.5; transition: border-color .2s, background .2s, color .2s; }
 .chips li:hover { border-color: var(--accent); background: rgba(var(--particle-rgb), .18); }
@@ -426,9 +465,14 @@ nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--acce
 }
 .skill-btn[hidden], [data-tech-item][hidden] { display: none; }
 
+@media (max-width: 699.98px) {
+  .skill-btn { display: inline-flex; align-items: center; min-height: 2.75rem; }
+}
+
 .tech-hint { margin: 0; font-size: .85rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
 .tech-status { min-height: 1.6em; margin: .25rem 0 .75rem; color: var(--link); font-family: var(--font-mono); font-size: .85rem; }
-.tech-status:empty::before { content: "Ingen teknik markerad"; color: var(--muted); }
+.skill-groups > .tech-status { grid-column: 1 / -1; margin: 0; }
+.tech-status:empty::before { content: "Inget markerat"; color: var(--muted); }
 .tech-panel { margin-top: 1rem; }
 .tech-filter { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .tech-filter input {
@@ -527,7 +571,7 @@ main.home { min-height: calc(100svh - 12rem); }
 @media print {
   :root, :root[data-theme="dark"] { --page-bg: #fff; --text: #111; --muted: #444; --link: #9a3412; --line: #ccc; --surface: #fff; --surface-solid: #fff; --accent: #c2410c; --on-accent: #fff; }
   html, body { background: #fff !important; color: #111; }
-  body::before, #constellation-field, .site-header, footer, #cv-toc, #cv-search, #easter-egg, .cv-actions, .skip-link, .tech-hint { display: none !important; }
+  body::before, #constellation-field, .site-header, .motion-toggle, footer, #cv-toc, #cv-search, #easter-egg, .cv-actions, .skip-link, .tech-hint { display: none !important; }
   main { padding: 0; max-width: none; }
   .page-layout { display: block !important; }
   .assignment, .skill-group, .cv-figures > div, .practical > div { break-inside: avoid; box-shadow: none; backdrop-filter: none; background: #fff; }

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   countSkillAssignments,
-  escapePinnedSkill,
+  escapePin,
   filterTechnologies,
-  skillPinStatusText,
-  togglePinnedSkill
+  pinStatusText,
+  togglePin
 } from '../wwwroot/js/technology-filter-engine.js';
 
 const assignments = [
@@ -35,14 +35,19 @@ test('a no-match query returns an empty result state and zero count', () => {
   });
 });
 
-test('skill pin toggles on and off and Escape clears it unless CV search is open', () => {
-  assert.equal(togglePinnedSkill(null, 'Azure'), 'Azure');
-  assert.equal(togglePinnedSkill('Azure', 'Azure'), null);
-  assert.equal(togglePinnedSkill('Azure', '.NET'), '.NET');
-  assert.equal(escapePinnedSkill('Azure', 'Escape', false), null);
-  assert.equal(escapePinnedSkill('Azure', 'Escape', true), 'Azure');
-  assert.equal(escapePinnedSkill('Azure', 'Enter', false), 'Azure');
-  assert.equal(escapePinnedSkill(null, 'Escape', false), null);
+test('pins toggle by kind and name, and Escape clears unless CV search is open', () => {
+  const skill = { kind: 'skill', name: 'Azure', keywords: ['Azure'] };
+  const group = { kind: 'group', name: 'Azure', keywords: ['Azure', 'Kubernetes'] };
+  const otherSkill = { kind: 'skill', name: '.NET', keywords: ['.NET'] };
+  assert.deepEqual(togglePin(null, skill), skill);
+  assert.equal(togglePin(skill, skill), null);
+  assert.deepEqual(togglePin(skill, otherSkill), otherSkill);
+  assert.deepEqual(togglePin(skill, group), group, 'the same name in another kind is a different pin');
+  assert.deepEqual(togglePin(group, skill), skill, 'a skill pin replaces a group pin');
+  assert.equal(escapePin(skill, 'Escape', false), null);
+  assert.equal(escapePin(skill, 'Escape', true), skill);
+  assert.equal(escapePin(skill, 'Enter', false), skill);
+  assert.equal(escapePin(null, 'Escape', false), null);
 });
 
 test('assignment usage uses the same whole-word matching as the constellation', () => {
@@ -53,7 +58,12 @@ test('assignment usage uses the same whole-word matching as the constellation', 
   assert.equal(countSkillAssignments('SQL', [{ keywords: ['MySQL'] }]), 0);
 });
 
-test('pin status reports technology usage and the cleared state', () => {
-  assert.equal(skillPinStatusText('Azure', assignments), 'Markerad: Azure · används i 2 av 3 uppdrag');
-  assert.equal(skillPinStatusText(null, assignments), '');
+test('pin status reports skill usage, group keywords, and the cleared state', () => {
+  assert.equal(pinStatusText({ kind: 'skill', name: 'Azure', keywords: ['Azure'] }, assignments),
+    'Markerad: Azure \u00b7 anv\u00e4nds i 2 av 3 uppdrag');
+  assert.equal(pinStatusText({ kind: 'group', name: 'Moln', keywords: ['Azure', 'Kubernetes'] }, assignments),
+    'Markerat omr\u00e5de: Moln \u00b7 2 tekniker: Azure, Kubernetes');
+  assert.equal(pinStatusText({ kind: 'group', name: 'Data', keywords: ['SQL Server'] }, assignments),
+    'Markerat omr\u00e5de: Data \u00b7 1 teknik: SQL Server');
+  assert.equal(pinStatusText(null, assignments), '');
 });
