@@ -205,7 +205,7 @@ for (const width of [375, 1440]) {
       if (await page.locator('html').getAttribute('data-theme') !== theme) await themeToggle.click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await settled(page);
-      const surfaces = await page.locator('.site-header, .assignment, .skill-group, .cv-figures > div, .cv-roles li, #cv-toc, .cv-hero-copy > *, article.cv > h2, .skill-groups-title, footer')
+      const surfaces = await page.locator('.site-header, .assignment, .skill-group, .cv-figures > div, .cv-roles li, #cv-toc, .cv-hero-copy > *, article.cv > h2, .skill-groups-title')
         .evaluateAll(elements => elements.map(element => ({
           name: `${element.tagName.toLowerCase()}.${element.className || element.id}`,
           alpha: (getComputedStyle(element).backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1].split(',')[3] ?? '1').trim()

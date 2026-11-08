@@ -349,7 +349,10 @@ export class ConstellationEngine implements ExperienceEngine {
       context.font = `600 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
 
       const previousArea = area;
-      area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
+      const offsetTop = stickyTop();
+      // The canvas is only painted below the sticky menu, so nothing is drawn behind it.
+      canvas.style.clipPath = offsetTop > 0 ? `inset(${offsetTop}px 0 0 0)` : '';
+      area = { left: SIDE_INSET, top: offsetTop + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
       const remapPoint = (point: { x: number; y: number }) => ({
         x: previousArea.right > previousArea.left
           ? area.left + (point.x - previousArea.left) / (previousArea.right - previousArea.left) * areaWidth()
