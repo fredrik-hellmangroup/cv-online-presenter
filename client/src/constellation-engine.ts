@@ -72,8 +72,11 @@ const POINTER_RADIUS = 190;
 const MOTE_POINTER_RADIUS = 160;
 const MOTE_LIT_RADIUS = 170;
 // Technology nodes are always larger than the dust (MOTE_MAX_RADIUS) and grow further when highlighted.
-const NODE_BASE_RADIUS = 4;
-const NODE_GLOW_RADIUS = 3.6;
+// Technology nodes are as small as the ambient dust; a highlighted node grows only a little and lights up.
+const NODE_BASE_RADIUS = 2;
+const NODE_GLOW_RADIUS = 1.4;
+const LIT_GLOW = 0.6;
+const HALO_RADIUS = 18;
 // Start page only: the cursor wakes nearby nodes, clicks send out a shockwave and a random node pulses now and then.
 const WAKE_RADIUS = 220;
 const SHOCK_RADIUS = 300;
@@ -267,7 +270,7 @@ export class ConstellationEngine implements ExperienceEngine {
 
       area = { left: SIDE_INSET, top: stickyTop() + TOP_GAP, right: width - SIDE_INSET, bottom: height - BOTTOM_INSET };
       refreshObstacles(performance.now());
-      motes = createMotes(moteCount(width, height), width, height);
+      motes = createMotes(moteCount(width, height, nodes.length), width, height);
       const previous = bodies;
       const taken: { x: number; y: number }[] = [];
       bodies = nodes.map((node, index) => {
@@ -476,16 +479,16 @@ export class ConstellationEngine implements ExperienceEngine {
       context.font = '600 13px "Segoe UI", system-ui, sans-serif';
       context.textAlign = 'center';
       for (const body of bodies) {
-        if (body.glow > 0.3) {
-          const halo = context.createRadialGradient(body.x, body.y, 0, body.x, body.y, 28);
+        if (body.glow > LIT_GLOW) {
+          const halo = context.createRadialGradient(body.x, body.y, 0, body.x, body.y, HALO_RADIUS);
           halo.addColorStop(0, `rgba(${colour}, ${body.glow * 0.5})`);
           halo.addColorStop(1, `rgba(${colour}, 0)`);
           context.fillStyle = halo;
           context.beginPath();
-          context.arc(body.x, body.y, 28, 0, TAU);
+          context.arc(body.x, body.y, HALO_RADIUS, 0, TAU);
           context.fill();
         }
-        context.fillStyle = body.glow > 0.6 ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
+        context.fillStyle = body.glow > LIT_GLOW ? `rgb(${coreColour})` : `rgba(${colour}, ${0.35 + body.glow * 0.5})`;
         context.beginPath();
         context.arc(body.x, body.y, NODE_BASE_RADIUS + body.glow * NODE_GLOW_RADIUS, 0, TAU);
         context.fill();

@@ -20,8 +20,15 @@ const sequence = (...values) => {
 test('the amount of dust follows the screen area, is capped, and is calmer on narrow screens', () => {
   assert.ok(moteCount(1920, 1080) > moteCount(1280, 720));
   assert.equal(moteCount(10000, 10000), 150);
-  assert.equal(moteCount(100, 100), 20);
+  assert.equal(moteCount(100, 100), 12);
   assert.ok(moteCount(600, 1200) < Math.round((600 * 1200) / 8500));
+});
+
+test('the dust thins out as the number of technologies grows, but never disappears', () => {
+  assert.equal(moteCount(1440, 900, 24), 75);
+  assert.ok(moteCount(1440, 900, 78) < moteCount(1440, 900, 11));
+  assert.ok(moteCount(1440, 900, 11) < moteCount(1440, 900));
+  assert.equal(moteCount(375, 812, 500), 12);
 });
 
 test('motes start inside the area with a small speed and a resting brightness', () => {

@@ -12,15 +12,18 @@ export interface Mote {
 }
 
 const NARROW_VIEWPORT = 700;
-const MIN_MOTES = 20;
+const MIN_MOTES = 12;
 const MAX_MOTES = 150;
 /** One speck per this many square pixels; the constellation stays calm on small screens. */
 const AREA_PER_MOTE = 8500;
+/** The dust thins out as technologies are added: at this many technologies it is halved. */
+const TECHNOLOGIES_HALVING_DUST = 24;
 export const MOTE_LINK_DISTANCE = 135;
 
-export const moteCount = (width: number, height: number): number => {
-  const raw = Math.round((width * height) / AREA_PER_MOTE * (width < NARROW_VIEWPORT ? 0.55 : 1));
-  return Math.min(MAX_MOTES, Math.max(MIN_MOTES, raw));
+export const moteCount = (width: number, height: number, technologies = 0): number => {
+  const raw = Math.min(MAX_MOTES, (width * height) / AREA_PER_MOTE * (width < NARROW_VIEWPORT ? 0.55 : 1));
+  const share = TECHNOLOGIES_HALVING_DUST / (TECHNOLOGIES_HALVING_DUST + Math.max(0, technologies));
+  return Math.max(MIN_MOTES, Math.round(raw * share));
 };
 
 export const createMotes = (
@@ -70,8 +73,8 @@ export const repelMotes = (motes: Mote[], pointerX: number, pointerY: number, ra
   }
 };
 
-/** Largest radius a mote can reach, kept clearly below the smallest technology node (NODE_BASE_RADIUS). */
-export const MOTE_MAX_RADIUS = 2.4;
+/** Largest radius a mote can reach, kept at or below the smallest technology node (NODE_BASE_RADIUS). */
+export const MOTE_MAX_RADIUS = 2;
 
 export const moteRadius = (mote: Mote, brightness: number): number =>
   Math.min(MOTE_MAX_RADIUS, mote.size * (1 + Math.min(0.35, Math.max(0, brightness - mote.base))));
