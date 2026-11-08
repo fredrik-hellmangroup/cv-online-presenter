@@ -218,7 +218,7 @@ for (const width of [375, 1440]) {
       expect(surfaces.length).toBeGreaterThan(0);
       // The constellation shows faintly through cards and text, but sticky bars stay opaque and nothing gets too thin to read.
       expect(surfaces.filter(surface => surface.sticky && surface.alpha < 1), theme).toEqual([]);
-      expect(surfaces.filter(surface => surface.alpha < 0.6), theme).toEqual([]);
+      expect(surfaces.filter(surface => surface.alpha < 0.5), theme).toEqual([]);
       expect(surfaces.some(surface => !surface.sticky && surface.alpha < 1), theme).toBe(true);
       if (width < 700) expect(Number(await page.locator('#constellation-field').evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
     }

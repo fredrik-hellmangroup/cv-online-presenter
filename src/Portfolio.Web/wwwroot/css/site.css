@@ -88,8 +88,8 @@ body::before {
    cards and free-standing text sit on a mostly opaque surface, sticky bars are fully opaque. The surface list
    mirrors SURFACE_SELECTOR in constellation-engine.ts. */
 :root, :root[data-theme="light"] {
-  --surface: color-mix(in srgb, var(--surface-solid) 86%, transparent);
-  --veil: color-mix(in srgb, var(--page-bg) 72%, transparent);
+  --surface: color-mix(in srgb, var(--surface-solid) 78%, transparent);
+  --veil: color-mix(in srgb, var(--page-bg) 58%, transparent);
   --header-bg: var(--page-bg);
 }
 main :is(h1, h2, h3, h4, p, dl, ul, .breadcrumb, .tech-count, .page-hero-actions):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc)),
