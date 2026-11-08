@@ -282,6 +282,7 @@ test.describe('integration contract: group pinning and mobile targets', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     for (const route of ['/services', '/cv']) {
       await page.goto(route);
+      await settleAnimations(page);
       const measurements = await page.locator('.skill-group-btn, .skill-btn').evaluateAll(buttons => buttons.map(button => ({
         label: button.textContent.trim(),
         height: button.getBoundingClientRect().height
