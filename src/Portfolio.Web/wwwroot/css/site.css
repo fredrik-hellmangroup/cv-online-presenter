@@ -93,6 +93,8 @@ footer {
   background: var(--page-bg);
   box-shadow: 0 0 1.75rem 1.25rem var(--page-bg);
 }
+/* The footer is transparent: its text is a measured obstacle for the constellation instead. */
+footer { background: none; box-shadow: none; }
 
 /* A heading's surface only hugs its words, so the constellation stays visible in the empty space beside it. The
    section rule above an h2 still spans the whole column. */
