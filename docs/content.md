@@ -88,8 +88,10 @@ front-matter route is derived from its path under `content/pages/projects/`.
 On `/services`, a Markdown `#` heading and the paragraphs before the first
 `##` form the lead. If any H2 section contains H3 headings, each H2 becomes a
 tab and its H3 sections become items; text before the first H3 is the tab
-introduction. A final "Teknik" tab lists the CV's skill groups. Without
-JavaScript, the groups remain visible under their headings. If there are no
+introduction. Without
+JavaScript, the groups remain visible under their headings. At most four groups
+are allowed (the generator rejects more); the technology list is not a tab but
+sits under the panel in its own section. If there are no
 H3 headings, each H2 becomes a flat panel item instead. The optional `kicker`,
 `panelEyebrow`, and `panelTitle` front-matter fields supply the hero's labels.
 Without a suitable H1 and at least one H2 section, the page renders as ordinary

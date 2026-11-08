@@ -871,6 +871,19 @@ test('requires source evidence for configured service hero metadata', t => withF
   assert.match(result.stderr, /Services hero metadata lacks source evidence: panelTitle/);
 }));
 
+test('rejects more than four grouped service tabs', t => withFixture(t, root => {
+  configureGroupedServices(root);
+  const mappingPath = target(root, 'content/source-map.json');
+  const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+  const services = mapping.generatedPages.find(page => page.path === 'content/pages/services.md');
+  services.competenceGroups = Array.from({ length: 5 }, () => structuredClone(services.competenceGroups[0]));
+  fs.writeFileSync(mappingPath, `${JSON.stringify(mapping, null, 2)}\n`);
+
+  const result = run(root, '--validate-source');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /at most 4 competence groups/);
+}));
+
 test('rejects grouped service evidence outside its mapped group and item', t => withFixture(t, root => {
   configureGroupedServices(root);
   const mappingPath = target(root, 'content/source-map.json');

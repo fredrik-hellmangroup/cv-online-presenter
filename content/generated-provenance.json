@@ -7,7 +7,7 @@
   "cvSections": "content/cv-sections.json",
   "cvSectionsSha256": "00f189e87c76357dfa037bf7984a123a18774208dd125c123af9cf9ea58d76c2",
   "generator": "scripts/content/generate-content.mjs",
-  "generatorSha256": "e6e0a08dc8438cc86676c50cd66058a9e794a6eb0d42c10075e43e711672cb37",
+  "generatorSha256": "9fecafa7fcadb8ee7a20f2d4d333891730220e0525790f8c72aa24a2deac6ddb",
   "generatedPages": [
     "content/pages/cv.md",
     "content/pages/home.md",
@@ -32,5 +32,5 @@
     "content/pages/projects/demobanken.md": "711032c5c66937658010d9af96d75e507b4973248f79702b9a53d680d182d472",
     "content/pages/projects/demokommunen.md": "5859979672f31dc48d4b3b1db19a039232330207e99fa930b652543cdf4dd034"
   },
-  "provenanceSha256": "fb0cfe3c94a25a1bff62766ca409f6980f03984e55c0fe571ebe6017ceb08001"
+  "provenanceSha256": "4078f5f92c2e97f984bb0dc9ae132260643d20b269d67eff0b3844145ec7c7ea"
 }
