@@ -537,7 +537,7 @@ export class ConstellationEngine implements ExperienceEngine {
     const navigateToTechnologies = () => {
       const groups = document.querySelector<HTMLElement>('#service-skill-groups');
       if (!groups) {
-        window.location.assign('/services#service-technologies');
+        window.location.assign('/services#service-technologies-heading');
         return;
       }
       // The canvas is decorative; send users to the semantic list when they ask for more hidden items.
