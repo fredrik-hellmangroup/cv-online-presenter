@@ -215,6 +215,10 @@ for (const group of settings.techGroups ?? []) {
   }
 }
 const techReviewIgnored = settings.techReview?.ignored;
+const otherLimit = settings.constellation?.otherLimit;
+if (otherLimit !== undefined && (!Number.isInteger(otherLimit) || otherLimit < 0)) {
+  failures.push('content/site.json: constellation.otherLimit must be a non-negative integer');
+}
 if (settings.techReview !== undefined &&
     (!Array.isArray(techReviewIgnored) || techReviewIgnored.some(item => typeof item !== 'string' || !item.trim()))) {
   failures.push('content/site.json: techReview.ignored must be an array of non-empty strings');

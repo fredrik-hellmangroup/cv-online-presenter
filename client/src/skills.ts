@@ -1,6 +1,7 @@
 export interface SkillGroup {
   readonly name: string;
   readonly skills: readonly string[];
+  readonly isOther?: boolean;
 }
 
 export interface AssignmentKeywords {
@@ -11,6 +12,7 @@ export interface AssignmentKeywords {
 export interface ConstellationData {
   readonly groups: readonly SkillGroup[];
   readonly assignments: readonly AssignmentKeywords[];
+  readonly otherLimit?: number;
 }
 
 export interface SkillNode {
@@ -47,6 +49,31 @@ export const matchesSkill = (skill: string, keyword: string): boolean => {
 
 export const toNodes = (groups: readonly SkillGroup[]): SkillNode[] =>
   groups.flatMap((group, index) => group.skills.map(name => ({ name, group: index })));
+
+/**
+ * Keeps only the `limit` most used skills of the catch-all group so keywords outside techGroups do not
+ * swamp the constellation. Skills used in as many assignments are ranked in random order, so a group full
+ * of single-use skills shows a different sample on each visit. The chips on the page are not affected.
+ */
+export const limitOtherSkills = (
+  groups: readonly SkillGroup[],
+  assignments: readonly AssignmentKeywords[],
+  limit: number,
+  random: () => number = Math.random
+): SkillGroup[] =>
+  groups.map(group => {
+    if (!group.isOther) return group;
+    const usage = (skill: string): number => {
+      const key = skill.toLowerCase();
+      return assignments.filter(assignment => assignment.keywords.some(keyword => keyword.toLowerCase() === key)).length;
+    };
+    const kept = group.skills
+      .map(skill => ({ skill, usage: usage(skill), order: random() }))
+      .sort((left, right) => right.usage - left.usage || left.order - right.order)
+      .slice(0, Math.max(0, limit))
+      .map(entry => entry.skill);
+    return { ...group, skills: kept };
+  });
 
 export const nodesMatching = (nodes: readonly SkillNode[], keywords: readonly string[]): Set<number> => {
   const matched = new Set<number>();
@@ -106,7 +133,11 @@ export const parseConstellationData = (json: string | undefined): ConstellationD
   try {
     const value = JSON.parse(json) as Partial<ConstellationData>;
     if (!Array.isArray(value.groups) || value.groups.length === 0) return null;
-    return { groups: value.groups, assignments: Array.isArray(value.assignments) ? value.assignments : [] };
+    return {
+      groups: value.groups,
+      assignments: Array.isArray(value.assignments) ? value.assignments : [],
+      otherLimit: typeof value.otherLimit === 'number' ? value.otherLimit : undefined
+    };
   } catch {
     return null;
   }

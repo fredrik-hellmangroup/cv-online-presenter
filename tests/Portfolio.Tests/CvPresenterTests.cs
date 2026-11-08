@@ -158,6 +158,7 @@ public sealed class CvPresenterTests
         Assert.Equal(["MQTT"], view.SkillGroups[0].Skills);
         Assert.Equal([".NET", "Azure", "C#"], view.SkillGroups[1].Skills);
         Assert.Equal(["REST"], view.SkillGroups[2].Skills);
+        Assert.Equal([false, false, true], view.SkillGroups.Select(group => group.IsOther));
         Assert.Contains("data-keywords=\"MQTT\"", view.BeforeHistoryHtml);
         Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
         Assert.DoesNotContain("Unused", view.BeforeHistoryHtml);

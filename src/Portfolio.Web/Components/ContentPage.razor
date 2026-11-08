@@ -397,7 +397,12 @@ StringComparison.OrdinalIgnoreCase)
             : null;
         constellationJson = cvView is { SkillGroups.Count: > 0 }
             ? JsonSerializer.Serialize(
-                new { groups = cvView.SkillGroups, assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }) },
+                new
+                {
+                    groups = cvView.SkillGroups,
+                    assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }),
+                    otherLimit = Content.Settings.ConstellationOtherLimit
+                },
                 JsonSerializerOptions.Web)
             : null;
         var context = HttpContextAccessor.HttpContext;

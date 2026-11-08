@@ -25,6 +25,7 @@ import {
 import type { Mote } from './constellation-motes.js';
 import {
   buildEdges,
+  limitOtherSkills,
   nodesMatching,
   nodesMatchingQuery,
   parseConstellationData,
@@ -124,7 +125,10 @@ export class ConstellationEngine implements ExperienceEngine {
     const context = canvas?.getContext('2d');
     const data = parseConstellationData(document.querySelector<HTMLElement>('#constellation-data')?.dataset.json);
     if (!canvas || !context || !data) return;
-    const nodes = toNodes(data.groups);
+    const groups = data.otherLimit === undefined
+      ? data.groups
+      : limitOtherSkills(data.groups, data.assignments, data.otherLimit);
+    const nodes = toNodes(groups);
     if (nodes.length < 2) return;
 
     const edges = buildEdges(nodes, data.assignments);
