@@ -439,6 +439,7 @@ nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--acce
 .project-card .project-card-meta { margin: 0; font-family: var(--font-mono); font-size: .74rem; letter-spacing: .08em; line-height: 1.4; text-transform: uppercase; color: var(--link); }
 .project-card h2 { font-size: clamp(1.3rem, 2vw, 1.55rem); overflow-wrap: anywhere; }
 .project-card .tags { margin-top: auto; }
+.tags [data-tags-more] { border-style: dashed; color: var(--link); font-weight: 700; cursor: help; }
 .project-card-link { margin: 0; font-weight: 700; }
 .project-card-link a { color: var(--link); text-decoration: none; }
 .assignment-link { margin: 1.25rem 0 0; font-weight: 700; }

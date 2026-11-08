@@ -7,6 +7,7 @@ import { EasterEggEngine } from './easter-egg-engine.js';
 import { startExperience } from './experience.js';
 import { HeroTabsEngine } from './hero-tabs-engine.js';
 import { PrintEngine } from './print-engine.js';
+import { TagClampEngine } from './tag-clamp-engine.js';
 import { ThemeEngine } from './theme-engine.js';
 import { TechnologyFilterEngine } from './technology-filter-engine.js';
 
@@ -20,5 +21,6 @@ startExperience([
   new CvSearchEngine(),
   new CountUpEngine(),
   new CardGlowEngine(),
+  new TagClampEngine(),
   new PrintEngine()
 ]);
