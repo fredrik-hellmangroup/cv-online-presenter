@@ -1,6 +1,7 @@
 export interface SkillGroup {
   readonly name: string;
   readonly skills: readonly string[];
+  readonly isOther?: boolean;
 }
 
 export interface AssignmentKeywords {
@@ -16,6 +17,7 @@ export interface ConstellationData {
 export interface SkillNode {
   readonly name: string;
   readonly group: number;
+  readonly isOther?: boolean;
 }
 
 export interface SkillEdge {
@@ -46,7 +48,7 @@ export const matchesSkill = (skill: string, keyword: string): boolean => {
 };
 
 export const toNodes = (groups: readonly SkillGroup[]): SkillNode[] =>
-  groups.flatMap((group, index) => group.skills.map(name => ({ name, group: index })));
+  groups.flatMap((group, index) => group.skills.map(name => ({ name, group: index, isOther: group.isOther === true })));
 
 export const nodesMatching = (nodes: readonly SkillNode[], keywords: readonly string[]): Set<number> => {
   const matched = new Set<number>();
@@ -104,9 +106,28 @@ export const buildEdges = (nodes: readonly SkillNode[], assignments: readonly As
 export const parseConstellationData = (json: string | undefined): ConstellationData | null => {
   if (!json) return null;
   try {
-    const value = JSON.parse(json) as Partial<ConstellationData>;
-    if (!Array.isArray(value.groups) || value.groups.length === 0) return null;
-    return { groups: value.groups, assignments: Array.isArray(value.assignments) ? value.assignments : [] };
+    const value = JSON.parse(json) as { groups?: unknown; assignments?: unknown };
+    const rawGroups = value.groups;
+    if (!Array.isArray(rawGroups) || rawGroups.length === 0) return null;
+    const groups = rawGroups.flatMap((group): SkillGroup[] => {
+      if (!group || typeof group !== 'object') return [];
+      const candidate = group as { name?: unknown; skills?: unknown; isOther?: unknown };
+      if (typeof candidate.name !== 'string' || !Array.isArray(candidate.skills)) return [];
+      const skills = candidate.skills.filter((skill): skill is string => typeof skill === 'string');
+      const isLast = rawGroups.at(-1) === group;
+      return [{ name: candidate.name, skills, ...(candidate.isOther === true && isLast ? { isOther: true } : {}) }];
+    });
+    if (groups.length === 0) return null;
+    const assignments = Array.isArray(value.assignments)
+      ? value.assignments.flatMap((assignment): AssignmentKeywords[] => {
+        if (!assignment || typeof assignment !== 'object') return [];
+        const candidate = assignment as { title?: unknown; keywords?: unknown };
+        if (!Array.isArray(candidate.keywords)) return [];
+        return [{ title: typeof candidate.title === 'string' ? candidate.title : '',
+          keywords: candidate.keywords.filter((keyword): keyword is string => typeof keyword === 'string') }];
+      })
+      : [];
+    return { groups, assignments };
   } catch {
     return null;
   }
