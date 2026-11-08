@@ -92,6 +92,7 @@ public static class CvPresenter
         var skillGroups = DeriveSkillGroups(assignments, techGroups, names, otherSkills, out var ungroupedCount);
         var skillsContainer = BuildSkillGroups(document, skillGroups, names);
         var competence = Find(sections, names.Competence);
+        if (competence is not null) BuildCompetenceTabs(document, competence);
         if (skillsContainer is not null && competence is not null) competence.Items.Add(skillsContainer);
 
         var roles = Find(sections, names.Roles)?.Items.FirstOrDefault(item => item.LocalName == "ul")
@@ -256,6 +257,74 @@ public static class CvPresenter
             .OrderByDescending(entry => entry.Count)
             .ThenBy(entry => entry.Name, StringComparer.InvariantCultureIgnoreCase)
             .ToList();
+    }
+
+    // Two or more "###" groups in the competence section become the same tab panel as on the services page
+    // (data-hero-tabs is enhanced by the client; without scripts the groups stay stacked under their headings).
+    private static void BuildCompetenceTabs(IDocument document, Section competence)
+    {
+        var firstGroup = competence.Items.FindIndex(item => item.LocalName == "h3");
+        if (firstGroup < 0 || competence.Items.Count(item => item.LocalName == "h3") < 2) return;
+
+        var groups = new List<(IElement Heading, List<IElement> Body)>();
+        foreach (var item in competence.Items.Skip(firstGroup))
+        {
+            if (item.LocalName == "h3") groups.Add((item, []));
+            else groups[^1].Body.Add(item);
+        }
+
+        var tabs = document.CreateElement("div");
+        tabs.ClassName = "hero-tabs";
+        tabs.SetAttribute("data-hero-tabs", string.Empty);
+        foreach (var (heading, body) in groups) tabs.AppendChild(BuildCompetencePanel(document, heading, body));
+
+        var panel = document.CreateElement("div");
+        panel.ClassName = "page-hero-panel cv-competence-panel";
+        panel.AppendChild(tabs);
+
+        competence.Items.RemoveRange(firstGroup, competence.Items.Count - firstGroup);
+        competence.Items.Add(panel);
+    }
+
+    private static IElement BuildCompetencePanel(IDocument document, IElement heading, List<IElement> body)
+    {
+        var panel = document.CreateElement("section");
+        panel.ClassName = "hero-tab-panel";
+        panel.SetAttribute("data-hero-tab-panel", string.Empty);
+        heading.ClassName = "hero-tab-heading";
+        heading.SetAttribute("data-hero-tab-label", string.Empty);
+        panel.AppendChild(heading);
+
+        var firstItem = body.FindIndex(element => element.LocalName == "h4");
+        var leadCount = firstItem < 0 ? body.Count : firstItem;
+        if (leadCount > 0)
+        {
+            var lead = document.CreateElement("div");
+            lead.ClassName = "hero-tab-lead";
+            foreach (var element in body.Take(leadCount)) lead.AppendChild(element);
+            panel.AppendChild(lead);
+        }
+        if (firstItem < 0) return panel;
+
+        var list = document.CreateElement("ul");
+        list.ClassName = "page-hero-list";
+        IElement? text = null;
+        foreach (var element in body.Skip(firstItem))
+        {
+            if (element.LocalName == "h4")
+            {
+                var item = document.CreateElement("li");
+                var title = document.CreateElement("strong");
+                title.TextContent = element.TextContent.Trim();
+                text = document.CreateElement("div");
+                text.ClassName = "page-hero-item-text";
+                item.Append(title, text);
+                list.AppendChild(item);
+            }
+            else text!.AppendChild(element);
+        }
+        panel.AppendChild(list);
+        return panel;
     }
 
     private static IElement? BuildSkillGroups(IDocument document, IReadOnlyList<SkillGroup> groups, CvHeadings names)
