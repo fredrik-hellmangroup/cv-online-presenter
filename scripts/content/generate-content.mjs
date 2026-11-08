@@ -36,6 +36,7 @@ const DEFAULT_HEADINGS = Object.freeze({
   projectTechnology: 'Teknik'
 });
 let PAGE_ALLOWLIST = [];
+const MAX_COMPETENCE_GROUPS = 4;
 let root;
 let appCommitSha;
 let appVersion;
@@ -877,6 +878,9 @@ function validateMapping(mapping, supportedLocales) {
   }
   if (hasGroupedCompetencies && services.competenceGroups.length === 0) {
     fail('Services must define competence groups.');
+  }
+  if (hasGroupedCompetencies && services.competenceGroups.length > MAX_COMPETENCE_GROUPS) {
+    fail(`Services may define at most ${MAX_COMPETENCE_GROUPS} competence groups (one tab each).`);
   }
   const projects = mapping.generatedPages.find(page => page.path === 'content/pages/projects.md');
   if (!Array.isArray(projects.selectedProjects) || projects.selectedProjects.length === 0 ||

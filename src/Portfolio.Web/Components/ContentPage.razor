@@ -131,8 +131,7 @@ else
                 {
                     @if (hero is not null)
                     {
-                        var heroSkillGroups = Content.Cv is { SkillGroups.Count: > 0 } heroCv ? heroCv.SkillGroups : null;
-                        var showTechniques = heroSkillGroups is not null;
+                        var showTechniques = Content.Cv is { SkillGroups.Count: > 0 };
                         var kicker = ProjectMetadata.Text(page, "kicker");
                         var panelEyebrow = ProjectMetadata.Text(page, "panelEyebrow");
                         var panelTitle = ProjectMetadata.Text(page, "panelTitle");
@@ -181,25 +180,6 @@ else
                                                         </li>
                                                     }
                                                 </ul>
-                                            </section>
-                                        }
-                                        @if (heroSkillGroups is not null)
-                                        {
-                                            <section class="hero-tab-panel" data-hero-tab-panel>
-                                                <h2 class="hero-tab-heading" data-hero-tab-label>Teknik</h2>
-                                                @foreach (var skillGroup in heroSkillGroups)
-                                                {
-                                                    <div class="hero-chip-group">
-                                                        <p class="hero-chip-group-name">@skillGroup.Name</p>
-                                                        <ul class="hero-chips">
-                                                            @foreach (var skill in skillGroup.Skills)
-                                                            {
-                                                                <li>@skill</li>
-                                                            }
-                                                        </ul>
-                                                    </div>
-                                                }
-                                                <p class="hero-tab-more"><a href="#service-technologies-heading">Filtrera och utforska teknikerna <span aria-hidden="true">↓</span></a></p>
                                             </section>
                                         }
                                     </div>
