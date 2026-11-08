@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "verifiedAtUtc": "2026-11-07T20:23:51.5916150Z",
+  "verifiedAtUtc": "2026-11-08T09:56:55.1732411Z",
   "artifact": {
-    "sourceTag": "v0.1.3",
-    "commit": "dfc4a707643680ed369c8e361021be31190daa86",
-    "appRevision": "dfc4a707643680ed369c8e361021be31190daa86",
-    "contentRevision": "df9b59c77c3116a3052a29927408a1664d564b24",
-    "buildId": "42410635791",
-    "packageSha256": "f458745076d0c8a7c8c8721a02d20f5c316a6271cf70b7fe1b23b3d4f1ac42b7",
-    "releaseTag": "v0.1.3",
-    "assetName": "cv-online-presenter-v0.1.3.zip",
+    "sourceTag": "v0.1.4",
+    "commit": "2737c1adec37d91b50aecb2cb37023a7a9bd73e6",
+    "appRevision": "2737c1adec37d91b50aecb2cb37023a7a9bd73e6",
+    "contentRevision": "495b82355a34d6f85b4d9c774b2e252349655067",
+    "buildId": "42469150190",
+    "packageSha256": "74c454e38269358e33151dd5dbc6fc5f78dbadcd1cc0975df767201f2793ffc6",
+    "releaseTag": "v0.1.4",
+    "assetName": "cv-online-presenter-v0.1.4.zip",
     "workflow": "IIS release",
-    "runId": "42410635791",
+    "runId": "42469150190",
     "runAttempt": "1"
   },
   "evidence": {
