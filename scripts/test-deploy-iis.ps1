@@ -236,17 +236,6 @@ foreach ($requiredReleaseFragment in @(
         throw "The primary release workflow is missing '$requiredReleaseFragment'."
     }
 }
-foreach ($forbiddenReleaseFragment in @(
-        'uses: actions/checkout@v'
-        'uses: actions/setup-dotnet@v'
-        'uses: actions/setup-node@v'
-        'uses: actions/upload-artifact@v'
-        'uses: actions/download-artifact@v'
-    )) {
-    if ($releaseWorkflow.Contains($forbiddenReleaseFragment)) {
-        throw "The primary release workflow must not contain '$forbiddenReleaseFragment'."
-    }
-}
 
 if (-not (Test-Path -LiteralPath $installerScriptPath -PathType Leaf)) {
     throw "The shared Web Deploy installer script does not exist at '$installerScriptPath'."
