@@ -830,8 +830,23 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     public async Task EveryPageCarriesTheConstellationData(string path)
     {
         var html = await client.GetStringAsync(path);
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv!;
         Assert.Contains("id=\"constellation-data\"", html);
-        Assert.Contains("data-json=\"{&quot;groups&quot;", html);
+        var encodedJson = Regex.Match(html, "id=\"constellation-data\" data-json=\"(?<json>[^\"]+)\"");
+        Assert.True(encodedJson.Success, "The constellation data attribute should contain its serialized groups.");
+        using var json = JsonDocument.Parse(WebUtility.HtmlDecode(encodedJson.Groups["json"].Value));
+        var groups = json.RootElement.GetProperty("groups");
+
+        Assert.Equal(cv.ConstellationGroups.Count, groups.GetArrayLength());
+        for (var index = 0; index < cv.ConstellationGroups.Count; index++)
+        {
+            var expected = cv.ConstellationGroups[index];
+            var actual = groups[index];
+            Assert.Equal(expected.Name, actual.GetProperty("name").GetString());
+            Assert.Equal(expected.IsOther, actual.GetProperty("isOther").GetBoolean());
+            Assert.Equal(expected.Skills, actual.GetProperty("skills").EnumerateArray().Select(skill => skill.GetString()));
+        }
+        Assert.Equal(["assignments", "groups"], json.RootElement.EnumerateObject().Select(property => property.Name).Order());
     }
 
     private static WebApplicationFactory<Program> CreateReleaseFactory(string releasesRoot, string? activationToken = null) =>

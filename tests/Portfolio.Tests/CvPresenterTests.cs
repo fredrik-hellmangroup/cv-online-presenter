@@ -158,6 +158,9 @@ public sealed class CvPresenterTests
         Assert.Equal(["MQTT"], view.SkillGroups[0].Skills);
         Assert.Equal([".NET", "Azure", "C#"], view.SkillGroups[1].Skills);
         Assert.Equal(["REST"], view.SkillGroups[2].Skills);
+        Assert.False(view.SkillGroups[0].IsOther);
+        Assert.False(view.SkillGroups[1].IsOther);
+        Assert.True(view.SkillGroups[2].IsOther);
         Assert.Contains("data-keywords=\"MQTT\"", view.BeforeHistoryHtml);
         Assert.Contains("data-skill=\".NET\"", view.BeforeHistoryHtml);
         Assert.DoesNotContain("Unused", view.BeforeHistoryHtml);
@@ -184,6 +187,33 @@ public sealed class CvPresenterTests
         var group = Assert.Single(view.SkillGroups);
         Assert.Equal("Key Technologies", group.Name);
         Assert.Equal([".NET", "Azure", "C#", "MQTT", "REST"], group.Skills);
+        Assert.False(group.IsOther);
+        Assert.Equal(group, Assert.Single(view.ConstellationGroups));
+    }
+
+    [Fact]
+    public void ConstellationGetsAllNonConceptUngroupedKeywordsWhileVisibleOtherGroupStaysCapped()
+    {
+        var document = Cv.Replace(".NET, Azure, REST", ".NET, Azure, REST, Git, Perl, Ruby, SOLID", StringComparison.Ordinal)
+            .Replace("C#, MQTT", "C#, MQTT, Git, Ruby, Go", StringComparison.Ordinal);
+        var view = Build(document, Mapping, new OtherSkillsOptions(2, ["solid"], new Random(1)));
+
+        var visibleOther = Assert.Single(view.SkillGroups, group => group.IsOther);
+        var constellationOther = Assert.Single(view.ConstellationGroups, group => group.IsOther);
+        Assert.Equal(["Git", "Ruby"], visibleOther.Skills);
+        Assert.Equal(["Git", "Ruby", "Go", "Perl", "REST"], constellationOther.Skills);
+        Assert.DoesNotContain("SOLID", visibleOther.Skills);
+        Assert.DoesNotContain("SOLID", constellationOther.Skills);
+    }
+
+    [Fact]
+    public void ConstellationKeepsOtherGroupWhenVisibleLimitIsZero()
+    {
+        var view = Build(techGroups: Mapping, otherSkills: new OtherSkillsOptions(0));
+
+        Assert.DoesNotContain(view.SkillGroups, group => group.IsOther);
+        var other = Assert.Single(view.ConstellationGroups, group => group.IsOther);
+        Assert.Equal(["REST"], other.Skills);
     }
 
     [Fact]

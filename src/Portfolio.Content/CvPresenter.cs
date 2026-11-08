@@ -21,7 +21,7 @@ public sealed record CvAssignment(
 // Ties in usage are broken with Random (Random.Shared when null).
 public sealed record OtherSkillsOptions(int Limit, IReadOnlyCollection<string>? Concepts = null, Random? Random = null);
 
-public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills);
+public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills, bool IsOther = false);
 
 public sealed record CvView(
     string Name,
@@ -32,6 +32,7 @@ public sealed record CvView(
     IReadOnlyList<CvFigure> Figures,
     IReadOnlyList<CvAssignment> Assignments,
     IReadOnlyList<SkillGroup> SkillGroups,
+    IReadOnlyList<SkillGroup> ConstellationGroups,
     string BeforeHistoryHtml,
     string HistoryHeadingHtml,
     string HistoryId,
@@ -89,7 +90,7 @@ public static class CvPresenter
         var (introHtml, cards, assignments) = BuildAssignments(document, history, names, projectUrl);
         if (assignments.Count == 0) return null;
 
-        var skillGroups = DeriveSkillGroups(assignments, techGroups, names, otherSkills, out var ungroupedCount);
+        var (skillGroups, constellationGroups) = DeriveSkillGroups(assignments, techGroups, names, otherSkills, out var ungroupedCount);
         var skillsContainer = BuildSkillGroups(document, skillGroups, names);
         var competence = Find(sections, names.Competence);
         if (competence is not null) BuildCompetenceTabs(document, competence);
@@ -126,6 +127,7 @@ public static class CvPresenter
             figures,
             assignments,
             skillGroups,
+            constellationGroups,
             before,
             history.Heading!.OuterHtml,
             history.Heading.Id ?? string.Empty,
@@ -212,9 +214,9 @@ public static class CvPresenter
     }
 
     // The technology list is the union of the assignment keywords. Site settings only decide which group a keyword is
-    // listed under; most used first within a group, and keywords without a group end up last under "other", where
-    // concepts are left out and only the most used few are kept (ties are picked at random).
-    private static List<SkillGroup> DeriveSkillGroups(
+    // listed under; most used first within a group. The visible "other" group is limited, while the constellation
+    // receives all non-concept keywords that are not in a configured group.
+    private static (List<SkillGroup> SkillGroups, List<SkillGroup> ConstellationGroups) DeriveSkillGroups(
         IEnumerable<CvAssignment> assignments, IReadOnlyList<TechGroup>? mapping, CvHeadings names, OtherSkillsOptions? otherSkills, out int ungroupedCount)
     {
         var usage = new Dictionary<string, (string Name, int Count)>(StringComparer.OrdinalIgnoreCase);
@@ -235,12 +237,32 @@ public static class CvPresenter
             groups.Add(new SkillGroup(group.Name, members.Select(entry => entry.Name).ToList()));
         }
         var grouped = mapping is { Count: > 0 };
+        var allOther = remaining;
         if (grouped && otherSkills is not null) remaining = LimitOther(remaining, otherSkills);
         // Keywords without a group are not counted as technologies once the content defines groups.
         ungroupedCount = grouped ? remaining.Count : 0;
         if (remaining.Count > 0)
-            groups.Add(new SkillGroup(grouped ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList()));
-        return groups;
+            groups.Add(new SkillGroup(grouped ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList(), grouped));
+
+        var constellationGroups = groups.ToList();
+        if (grouped)
+        {
+            var concepts = (otherSkills?.Concepts ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var constellationOther = allOther
+                .Where(entry => !concepts.Contains(entry.Name))
+                .OrderByDescending(entry => entry.Count)
+                .ThenBy(entry => entry.Name, StringComparer.InvariantCultureIgnoreCase)
+                .ToList();
+            if (constellationOther.Count > 0)
+            {
+                var otherGroup = new SkillGroup(names.OtherSkills, constellationOther.Select(entry => entry.Name).ToList(), IsOther: true);
+                var existingOtherIndex = constellationGroups.FindIndex(group => group.IsOther);
+                if (existingOtherIndex >= 0) constellationGroups[existingOtherIndex] = otherGroup;
+                else constellationGroups.Add(otherGroup);
+            }
+        }
+
+        return (groups, constellationGroups);
     }
 
     private static List<(string Name, int Count)> LimitOther(List<(string Name, int Count)> remaining, OtherSkillsOptions options)
