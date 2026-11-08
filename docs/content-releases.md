@@ -110,7 +110,7 @@ configuration, requires the releases destination to equal
 `<site-name>/App_Data/content-releases`, and packages only `content/site.json`
 and `content/pages/`. The release ID is the UTC timestamp
 `yyyyMMdd-HHmmss`, a hyphen, and the first seven lowercase characters of the
-content commit SHA. `scripts/deploy-beebyte-iis.ps1 -ContentRelease` performs
+content commit SHA. `scripts/deploy-iis.ps1 -ContentRelease` performs
 an additive Web Deploy sync into a new release folder; it does not deploy the
 app, write `web.config`, take the site offline, or delete existing releases.
 The script pins the Web Deploy server certificate using

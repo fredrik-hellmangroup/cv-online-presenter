@@ -1,8 +1,8 @@
-# Beebyte rollback runbook
+# IIS rollback runbook
 
 Last updated: 2026-11-03
 
-Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. No local-filesystem/app-pool rollback script is used on the shared Beebyte host because it requires access to the local filesystem and app pool, which Beebyte does not provide.
+Production rollback is a manual redeployment of an earlier immutable GitHub Release package through the same production workflow, plus one bounded automatic recovery attempt if a candidate sync or post-sync verification fails. No local-filesystem/app-pool rollback script is used because the deployment target is reached only through Web Deploy, without local filesystem or app-pool access.
 
 ```mermaid
 flowchart LR
@@ -26,7 +26,7 @@ flowchart LR
 5. The workflow checks the tag is reachable from `main`, verifies the downloaded bytes against the GitHub asset digest, verifies the embedded metadata, and validates the prior LKG asset before sync.
 6. `/health`, exact live `/build-metadata.json`, and the active root marker check must pass. The successful manual rollback is then recorded as the actual live LKG using a non-force state-branch update.
 
-Do not rebuild an old source tag when its release package exists. Never run FTPS automatically after an MSDeploy failure. The FTPS helper is break-glass only, for when WMSvc itself is unavailable. If you use it, record the exception and verify health, exact metadata, and offline-marker absence after restoration.
+Do not rebuild an old source tag when its release package exists.
 
 On a candidate sync, health, metadata, or marker-verification failure, the workflow makes exactly one sync to the prior LKG package and verifies health, exact metadata, and marker absence. It still reports the candidate run as failed. If restoration fails, both the original and recovery errors are reported and there is no retry. Do not manually remove a marker through unsupported APIs. Persistent HTTP 503 is operator/provider escalation; no app-pool restart is done by the workflows. An immutable redeploy may not recover every post-deployment IIS failure.
 

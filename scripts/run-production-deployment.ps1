@@ -89,7 +89,7 @@ function Invoke-DeploySync {
     $githubToken = $env:GITHUB_TOKEN
     Remove-Item Env:GH_TOKEN, Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
     try {
-        & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1') `
+        & powershell.exe -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deploy-iis.ps1') `
             -SourcePath $PublishDirectory `
             -DeployContentPath $env:MSDEPLOY_CONTENT_PATH `
             -DeployServerUrl $env:MSDEPLOY_SERVER_URL `

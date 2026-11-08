@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$deployScriptPath = Join-Path $PSScriptRoot 'deploy-beebyte-iis.ps1'
+$deployScriptPath = Join-Path $PSScriptRoot 'deploy-iis.ps1'
 $offlinePagePath = Join-Path $repositoryRoot 'deployment\app_offline.htm'
 $workflowPath = Join-Path $repositoryRoot '.github\workflows\manual-production-recovery.yml'
 $releaseWorkflowPath = Join-Path $repositoryRoot '.github\workflows\release.yml'
@@ -174,9 +174,6 @@ foreach ($requiredWorkflowFragment in @(
 if ($workflow.Contains('choco install')) {
     throw 'The production deploy job must not execute an unverified Chocolatey package.'
 }
-if ($workflow.Contains('DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}')) {
-    throw 'MSDeploy must not reuse the FTPS-only DEPLOY_CONTENT_PATH value.'
-}
 if ($workflow -match '(?s)\$arguments\s*=\s*@\s*\(') {
     throw 'The manual workflow must not pass production-runner arguments through a positional array splat.'
 }
@@ -210,7 +207,7 @@ if (-not $workflow.Contains('if ($env:RECONCILE_PENDING -eq ''true'') { $argumen
 $productionRunnerPath = Join-Path $PSScriptRoot 'run-production-deployment.ps1'
 $productionRunner = [IO.File]::ReadAllText($productionRunnerPath)
 foreach ($requiredRunnerFragment in @(
-        'deploy-beebyte-iis.ps1'
+        'deploy-iis.ps1'
         'verify-build-metadata.ps1'
         'health-check.ps1'
         'production-state'
@@ -240,9 +237,6 @@ foreach ($requiredReleaseFragment in @(
     }
 }
 foreach ($forbiddenReleaseFragment in @(
-        'deploy-beebyte-ftp.ps1'
-        'DEPLOY_CONTENT_PATH: ${{ vars.DEPLOY_CONTENT_PATH }}'
-        'Deploy release over explicit FTPS'
         'uses: actions/checkout@v'
         'uses: actions/setup-dotnet@v'
         'uses: actions/setup-node@v'

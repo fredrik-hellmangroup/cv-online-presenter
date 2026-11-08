@@ -179,7 +179,7 @@ jobs:
         env:
           DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
         run: |
-          .\app\scripts\deploy-beebyte-iis.ps1 `
+          .\app\scripts\deploy-iis.ps1 `
             -ContentRelease `
             -SourcePath 'release' `
             -DeployContentPath ("{0}/{1}" -f $env:MSDEPLOY_CONTENT_RELEASES_PATH.TrimEnd('/', '\'), $env:RELEASE_ID) `

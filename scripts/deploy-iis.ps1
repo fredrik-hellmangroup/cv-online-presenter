@@ -342,7 +342,7 @@ else {
     }
 }
 if ([string]::IsNullOrWhiteSpace($deployContentPath)) {
-    throw 'DEPLOY_CONTENT_PATH is required for MSDeploy.'
+    throw 'MSDEPLOY_CONTENT_PATH is required for MSDeploy.'
 }
 if ([string]::IsNullOrWhiteSpace($deploySiteName)) {
     throw 'MSDEPLOY_SITE_NAME is required.'
