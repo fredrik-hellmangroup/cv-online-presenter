@@ -214,6 +214,18 @@ for (const width of [375, 1440]) {
       expect(surfaces.filter(surface => Number(surface.alpha) < 1), theme).toEqual([]);
       if (width < 700) expect(Number(await page.locator('#constellation-field').evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
     }
+    if (width >= 700) {
+      const headings = await page.locator('article.cv > h2').evaluateAll(elements => elements.map(element => ({
+        width: element.getBoundingClientRect().width,
+        column: element.parentElement.getBoundingClientRect().width,
+        rule: parseFloat(getComputedStyle(element, '::before').width)
+      })));
+      expect(headings.length).toBeGreaterThan(0);
+      for (const heading of headings) {
+        expect(heading.width, 'the heading surface hugs its words').toBeLessThan(heading.column);
+        expect(heading.rule, 'the section rule still spans the column').toBeCloseTo(heading.column, 0);
+      }
+    }
   });
 }
 

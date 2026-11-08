@@ -94,6 +94,23 @@ footer {
   box-shadow: 0 0 1.75rem 1.25rem var(--page-bg);
 }
 
+/* A heading's surface only hugs its words, so the constellation stays visible in the empty space beside it. The
+   section rule above an h2 still spans the whole column. */
+main :is(h1, h2, h3, h4):not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *) {
+  width: fit-content;
+  max-width: 100%;
+}
+main :has(> h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *)) { container-type: inline-size; }
+main h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *) { position: relative; border-top: 0; }
+main h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100cqi;
+  border-top: 1px solid var(--line);
+}
+
 /* Narrow screens (matches NARROW_VIEWPORT in constellation-engine.ts): the constellation is subdued as well. */
 @media (max-width: 699.98px) {
   #constellation-field { opacity: .55; }
@@ -150,7 +167,7 @@ article { max-width: 56rem; min-width: 0; }
 
 /* Start page: a quiet title so the constellation behind it is the focus. */
 main.home { min-height: calc(100svh - 11rem); display: grid; align-content: center; }
-main.home h1 { font-size: clamp(2.75rem, 8vw, 5.5rem); margin-bottom: 1.25rem; }
+main.home h1 { font-size: clamp(2.75rem, 8vw, 5.5rem); margin-inline: auto; margin-bottom: 1.25rem; }
 main.home article:not(.cv) > h1 + p {
   margin: 1rem auto 0;
   font-family: var(--font-display);
@@ -171,7 +188,7 @@ main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, tr
 :root:has(main.home) nav { justify-content: center; }
 /* Sub pages: centered column and hero (title, accent rule, lead), left-aligned body text for readability. */
 main:not(.home) article:not(.cv) { margin-inline: auto; }
-main:not(.home) article:not(.cv) > h1 { text-align: center; }
+main:not(.home) article:not(.cv) > h1 { margin-inline: auto; text-align: center; }
 main:not(.home) article:not(.cv) > h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
 main:not(.home) article:not(.cv) > h1 + p { margin-inline: auto; text-align: center; }
 main:not(.home) .contact-card { margin-inline: auto; }
