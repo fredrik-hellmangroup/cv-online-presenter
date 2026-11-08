@@ -395,9 +395,19 @@ StringComparison.OrdinalIgnoreCase)
         pdfUrl = cv is not null && WebHost.WebRootFileProvider.GetFileInfo("downloads/cv.pdf").Exists
             ? VersionedAsset("/downloads/cv.pdf")
             : null;
-        constellationJson = cvView is { SkillGroups.Count: > 0 }
+        var concepts = (Content.Settings.TechConcepts ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var constellationGroups = cvView?.SkillGroups
+            .Select(group => group.IsOther ? group with { Skills = group.Skills.Where(skill => !concepts.Contains(skill)).ToList() } : group)
+            .Where(group => group.Skills.Count > 0)
+            .ToList();
+        constellationJson = constellationGroups is { Count: > 0 }
             ? JsonSerializer.Serialize(
-                new { groups = cvView.SkillGroups, assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }) },
+                new
+                {
+                    groups = constellationGroups,
+                    assignments = cvView!.Assignments.Select(item => new { item.Title, item.Keywords }),
+                    otherLimit = Content.Settings.ConstellationOtherLimit
+                },
                 JsonSerializerOptions.Web)
             : null;
         var context = HttpContextAccessor.HttpContext;

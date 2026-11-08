@@ -474,6 +474,9 @@ button.button-link { font: inherit; font-weight: 700; cursor: pointer; }
 /* Two-column page hero: headline and lead on the left, a panel with short items on the right. */
 article.wide { max-width: none; }
 .page-hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(18rem, 1fr); gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
+/* Tabs change the panel height; top alignment keeps the headline from moving when the tab changes. */
+.page-hero:has(.hero-tabs) { align-items: start; }
+@media (min-width: 64rem) { .page-hero:has(.hero-tabs) .page-hero-copy { padding-top: 3.5rem; } }
 .page-hero-kicker { margin: 0 0 1rem; font-family: var(--font-mono); font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--link); }
 .page-hero h1 { margin-bottom: 1.25rem; font-size: clamp(2.8rem, 6.5vw, 5.5rem); line-height: .92; }
 .page-hero-lead p { max-width: 38ch; margin: 0 0 1.75rem; font-size: clamp(1.1rem, 2vw, 1.4rem); line-height: 1.5; color: var(--muted); }

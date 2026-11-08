@@ -81,6 +81,36 @@ test('rejects malformed or duplicated techReview.ignored in site.json', () => wi
   fs.writeFileSync(siteFile, JSON.stringify({ ...site, techReview: { ignored: ['SOLID'] } }));
   assert.equal(run(root).status, 0);
 }));
+test('rejects malformed, duplicated or overlapping techReview.concepts in site.json', () => withFixture(root => {
+  const siteFile = target(root, 'content/site.json');
+  const site = JSON.parse(fs.readFileSync(siteFile, 'utf8'));
+  const cases = [
+    [{ concepts: 'SOLID' }, /concepts must be an array of non-empty strings/],
+    [{ concepts: ['SOLID', ' '] }, /concepts must be an array of non-empty strings/],
+    [{ concepts: ['SOLID', 'solid'] }, /concepts lists 'solid' more than once/],
+    [{ concepts: ['SOLID'], ignored: ['solid'] }, /'SOLID' is in both techReview\.concepts and techReview\.ignored/]
+  ];
+  for (const [techReview, message] of cases) {
+    fs.writeFileSync(siteFile, JSON.stringify({ ...site, techReview }));
+    const result = run(root);
+    assert.notEqual(result.status, 0, JSON.stringify(techReview));
+    assert.match(result.stderr, message);
+  }
+  fs.writeFileSync(siteFile, JSON.stringify({ ...site, techReview: { concepts: ['SOLID'], ignored: ['Git'] } }));
+  assert.equal(run(root).status, 0);
+}));
+test('rejects an invalid constellation.otherLimit in site.json', () => withFixture(root => {
+  const siteFile = target(root, 'content/site.json');
+  const site = JSON.parse(fs.readFileSync(siteFile, 'utf8'));
+  for (const otherLimit of [-1, 2.5, '9']) {
+    fs.writeFileSync(siteFile, JSON.stringify({ ...site, constellation: { otherLimit } }));
+    const result = run(root);
+    assert.notEqual(result.status, 0, String(otherLimit));
+    assert.match(result.stderr, /constellation\.otherLimit must be a non-negative integer/);
+  }
+  fs.writeFileSync(siteFile, JSON.stringify({ ...site, constellation: { otherLimit: 9 } }));
+  assert.equal(run(root).status, 0);
+}));
 test('rejects array and object values for required title and description strings', () => withFixture(root => {
   const cases = [
     ['title', 'title: [Invalid]'],

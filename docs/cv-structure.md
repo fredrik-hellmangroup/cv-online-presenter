@@ -22,7 +22,7 @@ The Swedish heading names are defaults in `CvHeadings`; pass another `CvHeadings
 
 There is no technology list to maintain in the CV Markdown. The skill buttons (`button.skill-btn`) on `/cv` and `/services`, the nodes of the background constellation and the *nyckelteknologier* figure are all derived from the `#### Nyckelord` of the assignments. Duplicates are merged without regard to case, and within a group the keywords used in the most assignments come first.
 
-The optional `techGroups` array in `content/site.json` only decides which group a keyword is listed under. Groups appear in the order given, and keywords that are in no group are listed last under *Övrigt* (`CvHeadings.OtherSkills`); items that no assignment uses are ignored. Without `techGroups` all keywords form one group. When groups are defined, *Övrigt* is not counted in the *nyckelteknologier* figure. Keywords you have reviewed and deliberately left out can be listed in `"techReview": { "ignored": [...] }` in the same file; only `npm run content:tech:report` reads it (see [source-map.md](./source-map.md#technology-coverage-report)).
+The optional `techGroups` array in `content/site.json` only decides which group a keyword is listed under. Groups appear in the order given, and keywords that are in no group are listed last under *Övrigt* (`CvHeadings.OtherSkills`); items that no assignment uses are ignored. Without `techGroups` all keywords form one group. When groups are defined, *Övrigt* is not counted in the *nyckelteknologier* figure, and the background constellation draws only its `constellation.otherLimit` most used keywords (default 9, `0` draws none; ties are picked at random on each page load, the chips are unaffected). Keywords in `"techReview": { "concepts": [...] }` (methods and domains such as *SOLID* or *Agila arbetssätt*) are never drawn in the constellation, but still appear as chips. Keywords you have reviewed and deliberately left out can be listed in `"techReview": { "ignored": [...] }` in the same file; only `npm run content:tech:report` reads `ignored` (see [source-map.md](./source-map.md#technology-coverage-report)).
 
 ```json
 "techGroups": [
@@ -49,7 +49,7 @@ The hero has a **Skriv ut** button (revealed by JavaScript) and a print styleshe
 
 ## Background data
 
-Every page carries `#constellation-data` (a hidden element with a JSON `data-json` attribute holding the skill groups and the keywords per assignment), so the constellation also appears on other pages. The `ConstellationEngine` matches keywords to technologies by whole words (`SQL` matches `SQL Server`, `Azure` matches `Azure DevOps`).
+Every page carries `#constellation-data` (a hidden element with a JSON `data-json` attribute holding the skill groups, the keywords per assignment and the `otherLimit` for the *Övrigt* group), so the constellation also appears on other pages. The `ConstellationEngine` matches keywords to technologies by whole words (`SQL` matches `SQL Server`, `Azure` matches `Azure DevOps`).
 
 Behind the technologies there is ambient dust (`constellation-motes.ts`): unlabelled specks that drift, twinkle and link up faintly, with an occasional brighter star. The amount follows the screen area (calmer on narrow screens), the dust is pushed away by the cursor, and it brightens near the cursor and near highlighted technologies. It holds still with reduced motion, so a profile with few technologies still has a lively background.
 

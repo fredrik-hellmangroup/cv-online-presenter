@@ -14,7 +14,12 @@ public sealed record SiteIdentity(
     string SiteName,
     string? SiteUrl,
     string? CompanyName = null,
-    IReadOnlyList<TechGroup>? TechGroups = null);
+    IReadOnlyList<TechGroup>? TechGroups = null,
+    int ConstellationOtherLimit = SiteIdentity.DefaultConstellationOtherLimit,
+    IReadOnlyList<string>? TechConcepts = null)
+{
+    public const int DefaultConstellationOtherLimit = 9;
+}
 
 public sealed record ContentSnapshot(
     string Version,
@@ -80,8 +85,24 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
             source.Append('\n').Append(document.SourcePath).Append('\n').Append(document.Markdown).Append('\n')
                 .Append(JsonSerializer.Serialize(document.Metadata));
         var version = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString()))).ToLowerInvariant();
-        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName, NormalizeTechGroups(settings.TechGroups));
+        var identity = new SiteIdentity(settings.SupportedLocales.ToImmutableArray(), settings.ContactEmail, settings.SiteName, NormalizeSiteUrl(settings.SiteUrl), settings.CompanyName, NormalizeTechGroups(settings.TechGroups), NormalizeOtherLimit(settings.Constellation), NormalizeConcepts(settings.TechReview));
         return new(version, identity, immutableDocuments, sections);
+    }
+
+    private static int NormalizeOtherLimit(ConstellationSettings? settings)
+    {
+        var limit = settings?.OtherLimit ?? SiteIdentity.DefaultConstellationOtherLimit;
+        if (limit < 0) throw new InvalidOperationException("constellation.otherLimit in site.json must not be negative.");
+        return limit;
+    }
+
+    private static IReadOnlyList<string>? NormalizeConcepts(TechReviewSettings? settings)
+    {
+        var concepts = settings?.Concepts?.Select(item => item?.Trim() ?? string.Empty).ToArray();
+        if (concepts is null || concepts.Length == 0) return null;
+        if (concepts.Any(item => item.Length == 0))
+            throw new InvalidOperationException("techReview.concepts in site.json must only list non-empty names.");
+        return concepts;
     }
 
     private static IReadOnlyList<TechGroup>? NormalizeTechGroups(TechGroup[]? groups)
@@ -125,7 +146,12 @@ public sealed class ContentSnapshotLoader(IReadOnlyCollection<string>? requiredP
     }
 
     private sealed record SiteIdentitySettings(
-        string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null, TechGroup[]? TechGroups = null);
+        string[] SupportedLocales, string? ContactEmail, string SiteName, string? SiteUrl, string? CompanyName = null, TechGroup[]? TechGroups = null,
+        ConstellationSettings? Constellation = null, TechReviewSettings? TechReview = null);
+
+    private sealed record ConstellationSettings(int? OtherLimit = null);
+
+    private sealed record TechReviewSettings(string[]? Concepts = null);
 }
 
 public sealed record ContentReleaseState(string? ContentReleaseId, ContentSnapshot Snapshot);

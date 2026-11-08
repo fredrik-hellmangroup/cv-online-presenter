@@ -253,6 +253,85 @@ public sealed class ContentSnapshotTests
         }
     }
 
+    [Theory]
+    [InlineData("", 9)]
+    [InlineData(",\"constellation\":{\"otherLimit\":4}", 4)]
+    [InlineData(",\"constellation\":{\"otherLimit\":0}", 0)]
+    public async Task LoadAsyncReadsTheConstellationOtherLimit(string setting, int expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-otherlimit-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                $"{{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\"{setting}}}");
+
+            var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
+
+            Assert.Equal(expected, snapshot.Identity.ConstellationOtherLimit);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsANegativeConstellationOtherLimit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-otherlimit-invalid-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"constellation\":{\"otherLimit\":-1}}");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new ContentSnapshotLoader().LoadAsync(pages));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncReadsTechConceptsFromSiteSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-concepts-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techReview\":{\"concepts\":[\" SOLID \",\"SAFe\"]}}");
+
+            var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
+
+            Assert.Equal(["SOLID", "SAFe"], snapshot.Identity.TechConcepts);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsABlankTechConcept()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-concepts-invalid-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techReview\":{\"concepts\":[\"SOLID\",\" \"]}}");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new ContentSnapshotLoader().LoadAsync(pages));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static string CreatePages(string parent, string siteName)
     {
         var pages = Path.Combine(parent, "pages");

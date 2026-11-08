@@ -215,6 +215,24 @@ for (const group of settings.techGroups ?? []) {
   }
 }
 const techReviewIgnored = settings.techReview?.ignored;
+const techReviewConcepts = settings.techReview?.concepts;
+if (techReviewConcepts !== undefined &&
+    (!Array.isArray(techReviewConcepts) || techReviewConcepts.some(item => typeof item !== 'string' || !item.trim()))) {
+  failures.push('content/site.json: techReview.concepts must be an array of non-empty strings');
+} else {
+  const seenConcepts = new Set();
+  const ignoredKeys = new Set((Array.isArray(techReviewIgnored) ? techReviewIgnored : []).map(item => String(item).trim().toLowerCase()));
+  for (const item of techReviewConcepts ?? []) {
+    const key = item.trim().toLowerCase();
+    if (seenConcepts.has(key)) failures.push(`content/site.json: techReview.concepts lists '${item}' more than once`);
+    if (ignoredKeys.has(key)) failures.push(`content/site.json: '${item}' is in both techReview.concepts and techReview.ignored`);
+    seenConcepts.add(key);
+  }
+}
+const otherLimit = settings.constellation?.otherLimit;
+if (otherLimit !== undefined && (!Number.isInteger(otherLimit) || otherLimit < 0)) {
+  failures.push('content/site.json: constellation.otherLimit must be a non-negative integer');
+}
 if (settings.techReview !== undefined &&
     (!Array.isArray(techReviewIgnored) || techReviewIgnored.some(item => typeof item !== 'string' || !item.trim()))) {
   failures.push('content/site.json: techReview.ignored must be an array of non-empty strings');

@@ -17,7 +17,8 @@ public sealed record CvAssignment(
     IReadOnlyList<string> Keywords,
     string? Url = null);
 
-public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills);
+// IsOther marks the catch-all group of keywords that no techGroups group lists.
+public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills, bool IsOther = false);
 
 public sealed record CvView(
     string Name,
@@ -230,7 +231,10 @@ public static class CvPresenter
         // Keywords without a group are not counted as technologies once the content defines groups.
         ungroupedCount = mapping is { Count: > 0 } ? remaining.Count : 0;
         if (remaining.Count > 0)
-            groups.Add(new SkillGroup(mapping is { Count: > 0 } ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList()));
+        {
+            var grouped = mapping is { Count: > 0 };
+            groups.Add(new SkillGroup(grouped ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList(), grouped));
+        }
         return groups;
     }
 
