@@ -303,7 +303,7 @@ test('editorial home, services and project pages expose clear content and links'
   if (await groupedServices.count()) {
     const panelCount = await groupedServices.locator('[data-hero-tab-panel]').count();
     expect(panelCount).toBeGreaterThan(0);
-    if (syntheticDemo) expect(panelCount).toBe(4);
+    if (syntheticDemo) expect(panelCount).toBe(3);
     await expect(page.getByRole('tab')).toHaveCount(panelCount);
     await expect(page.getByRole('tab', { selected: true })).toHaveCount(1);
     await expect(page.getByRole('tabpanel')).toBeVisible();

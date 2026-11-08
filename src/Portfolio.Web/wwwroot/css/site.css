@@ -498,11 +498,6 @@ article.wide { max-width: none; }
 .hero-tabs .page-hero-list li:first-child { border-top: 0; }
 .hero-tabs .page-hero-list li:last-child { padding-bottom: 0; }
 .hero-tabs .page-hero-list strong { font-size: 1.35rem; }
-.hero-chip-group + .hero-chip-group { margin-top: .85rem; }
-.hero-chip-group-name { margin: 0 0 .35rem; font-size: .85rem; font-weight: 700; }
-.hero-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; padding: 0; list-style: none; }
-.hero-chips li { max-width: none; padding: .15rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--particle-rgb), .06); font-size: .85rem; line-height: 1.5; }
-.hero-tab-more { margin: 1rem 0 0; font-size: .9rem; }
 .hero-tablist { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: 1rem; padding: .25rem; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--surface-solid); }
 .hero-tab { flex: 1 1 auto; min-width: 0; padding: .5rem .75rem; font-size: .9rem; font-weight: 700; white-space: nowrap; color: var(--muted); background: none; border-color: transparent; transition: background .2s, color .2s; }
 .hero-tab:hover:not([aria-selected="true"]) { color: var(--text); border-color: transparent; box-shadow: none; transform: none; }
