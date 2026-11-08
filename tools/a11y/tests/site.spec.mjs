@@ -208,10 +208,18 @@ for (const width of [375, 1440]) {
       const surfaces = await page.locator('.site-header, .assignment, .skill-group, .cv-figures > div, .cv-roles li, #cv-toc, .cv-hero-copy > *, article.cv > h2, .skill-groups-title')
         .evaluateAll(elements => elements.map(element => ({
           name: `${element.tagName.toLowerCase()}.${element.className || element.id}`,
-          alpha: (getComputedStyle(element).backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1].split(',')[3] ?? '1').trim()
+          sticky: element.matches('.site-header') || (element.matches('#cv-toc') && window.innerWidth < 700),
+          alpha: (() => {
+            const colour = getComputedStyle(element).backgroundColor;
+            const alpha = colour.match(/\/\s*([\d.]+%?)\s*\)$/)?.[1] ?? colour.match(/rgba\([^)]*,\s*([\d.]+)\s*\)$/)?.[1] ?? '1';
+            return alpha.endsWith('%') ? Number.parseFloat(alpha) / 100 : Number(alpha);
+          })()
         })));
       expect(surfaces.length).toBeGreaterThan(0);
-      expect(surfaces.filter(surface => Number(surface.alpha) < 1), theme).toEqual([]);
+      // The constellation shows faintly through cards and text, but sticky bars stay opaque and nothing gets too thin to read.
+      expect(surfaces.filter(surface => surface.sticky && surface.alpha < 1), theme).toEqual([]);
+      expect(surfaces.filter(surface => surface.alpha < 0.5), theme).toEqual([]);
+      expect(surfaces.some(surface => !surface.sticky && surface.alpha < 1), theme).toBe(true);
       if (width < 700) expect(Number(await page.locator('#constellation-field').evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
     }
     if (width >= 700) {
