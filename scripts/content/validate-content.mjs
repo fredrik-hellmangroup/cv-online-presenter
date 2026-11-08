@@ -229,9 +229,9 @@ if (techReviewConcepts !== undefined &&
     seenConcepts.add(key);
   }
 }
-const otherLimit = settings.constellation?.otherLimit;
+const otherLimit = settings.otherSkills?.limit;
 if (otherLimit !== undefined && (!Number.isInteger(otherLimit) || otherLimit < 0)) {
-  failures.push('content/site.json: constellation.otherLimit must be a non-negative integer');
+  failures.push('content/site.json: otherSkills.limit must be a non-negative integer');
 }
 if (settings.techReview !== undefined &&
     (!Array.isArray(techReviewIgnored) || techReviewIgnored.some(item => typeof item !== 'string' || !item.trim()))) {

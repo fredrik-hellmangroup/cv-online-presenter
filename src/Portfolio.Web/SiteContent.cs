@@ -1,3 +1,4 @@
+using System.Globalization;
 using Portfolio.Content;
 using Portfolio.Experience;
 using Portfolio.Publishing;
@@ -45,7 +46,8 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
                 if (cachedCvVersion == snapshot.Version) return cachedCv;
             }
             var document = FindByPath("/cv");
-            var view = document is null ? null : CvPresenter.Build(Render(document), null, ProjectUrlFor, snapshot.Identity.TechGroups);
+            var view = document is null ? null : CvPresenter.Build(
+                Render(document), null, ProjectUrlFor, snapshot.Identity.TechGroups, OtherSkillsFor(snapshot));
             lock (CvLock)
             {
                 cachedCvVersion = snapshot.Version;
@@ -54,6 +56,13 @@ public sealed class SiteContent(ContentSnapshotStore store, IHttpContextAccessor
             return view;
         }
     }
+
+    // Ties among the "other" technologies are broken at random, seeded by the content version so that every server
+    // shows the same sample until the next content release.
+    private static OtherSkillsOptions OtherSkillsFor(ContentSnapshot snapshot) => new(
+        snapshot.Identity.OtherSkillsLimit,
+        snapshot.Identity.TechConcepts,
+        new Random(int.Parse(snapshot.Version.AsSpan(0, 8), NumberStyles.HexNumber, CultureInfo.InvariantCulture)));
 
     // A CV assignment links to the published project with the same title, or to the one that names it in its
     // optional "assignment" front matter field (for when the project is titled differently from the CV).

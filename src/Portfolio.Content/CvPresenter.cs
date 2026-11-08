@@ -17,8 +17,11 @@ public sealed record CvAssignment(
     IReadOnlyList<string> Keywords,
     string? Url = null);
 
-// IsOther marks the catch-all group of keywords that no techGroups group lists.
-public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills, bool IsOther = false);
+// How the catch-all group of keywords outside techGroups is trimmed: concepts are left out, then at most Limit remain.
+// Ties in usage are broken with Random (Random.Shared when null).
+public sealed record OtherSkillsOptions(int Limit, IReadOnlyCollection<string>? Concepts = null, Random? Random = null);
+
+public sealed record SkillGroup(string Name, IReadOnlyList<string> Skills);
 
 public sealed record CvView(
     string Name,
@@ -66,7 +69,8 @@ public static class CvPresenter
         @"över\s+(?<years>\d+)\s+års", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     public static CvView? Build(
-        string renderedHtml, CvHeadings? headings = null, Func<string, string?>? projectUrl = null, IReadOnlyList<TechGroup>? techGroups = null)
+        string renderedHtml, CvHeadings? headings = null, Func<string, string?>? projectUrl = null, IReadOnlyList<TechGroup>? techGroups = null,
+        OtherSkillsOptions? otherSkills = null)
     {
         var names = headings ?? new CvHeadings();
         using var document = new HtmlParser().ParseDocument(renderedHtml);
@@ -85,7 +89,7 @@ public static class CvPresenter
         var (introHtml, cards, assignments) = BuildAssignments(document, history, names, projectUrl);
         if (assignments.Count == 0) return null;
 
-        var skillGroups = DeriveSkillGroups(assignments, techGroups, names, out var ungroupedCount);
+        var skillGroups = DeriveSkillGroups(assignments, techGroups, names, otherSkills, out var ungroupedCount);
         var skillsContainer = BuildSkillGroups(document, skillGroups, names);
         var competence = Find(sections, names.Competence);
         if (skillsContainer is not null && competence is not null) competence.Items.Add(skillsContainer);
@@ -207,9 +211,10 @@ public static class CvPresenter
     }
 
     // The technology list is the union of the assignment keywords. Site settings only decide which group a keyword is
-    // listed under; most used first within a group, and keywords without a group end up last under "other".
+    // listed under; most used first within a group, and keywords without a group end up last under "other", where
+    // concepts are left out and only the most used few are kept (ties are picked at random).
     private static List<SkillGroup> DeriveSkillGroups(
-        IEnumerable<CvAssignment> assignments, IReadOnlyList<TechGroup>? mapping, CvHeadings names, out int ungroupedCount)
+        IEnumerable<CvAssignment> assignments, IReadOnlyList<TechGroup>? mapping, CvHeadings names, OtherSkillsOptions? otherSkills, out int ungroupedCount)
     {
         var usage = new Dictionary<string, (string Name, int Count)>(StringComparer.OrdinalIgnoreCase);
         foreach (var assignment in assignments)
@@ -228,14 +233,29 @@ public static class CvPresenter
             remaining.RemoveAll(members.Contains);
             groups.Add(new SkillGroup(group.Name, members.Select(entry => entry.Name).ToList()));
         }
+        var grouped = mapping is { Count: > 0 };
+        if (grouped && otherSkills is not null) remaining = LimitOther(remaining, otherSkills);
         // Keywords without a group are not counted as technologies once the content defines groups.
-        ungroupedCount = mapping is { Count: > 0 } ? remaining.Count : 0;
+        ungroupedCount = grouped ? remaining.Count : 0;
         if (remaining.Count > 0)
-        {
-            var grouped = mapping is { Count: > 0 };
-            groups.Add(new SkillGroup(grouped ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList(), grouped));
-        }
+            groups.Add(new SkillGroup(grouped ? names.OtherSkills : names.Skills, remaining.Select(entry => entry.Name).ToList()));
         return groups;
+    }
+
+    private static List<(string Name, int Count)> LimitOther(List<(string Name, int Count)> remaining, OtherSkillsOptions options)
+    {
+        var concepts = (options.Concepts ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var random = options.Random ?? Random.Shared;
+        return remaining
+            .Where(entry => !concepts.Contains(entry.Name))
+            .Select(entry => (Entry: entry, Tie: random.Next()))
+            .OrderByDescending(candidate => candidate.Entry.Count)
+            .ThenBy(candidate => candidate.Tie)
+            .Take(Math.Max(0, options.Limit))
+            .Select(candidate => candidate.Entry)
+            .OrderByDescending(entry => entry.Count)
+            .ThenBy(entry => entry.Name, StringComparer.InvariantCultureIgnoreCase)
+            .ToList();
     }
 
     private static IElement? BuildSkillGroups(IDocument document, IReadOnlyList<SkillGroup> groups, CvHeadings names)
