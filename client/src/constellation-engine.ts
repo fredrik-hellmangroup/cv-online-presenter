@@ -378,6 +378,7 @@ export class ConstellationEngine implements ExperienceEngine {
 
       const budget = visibleBudget({ width: areaWidth(), height: areaHeight() }, nodes.length, width < NARROW_VIEWPORT ? 112 : 130, fontSize * 2.3);
       const selected = selectVisible(nodes, usage, budget);
+      const previouslyVisible = visibleIndices;
       visibleIndices = new Set(selected);
       hiddenSortedByUsage = nodes.map((_, index) => index).filter(index => !visibleIndices.has(index))
         .sort((a, b) => usage[b] - usage[a] || a - b);
@@ -397,7 +398,13 @@ export class ConstellationEngine implements ExperienceEngine {
         introX: bubbleOrigin.x, introY: bubbleOrigin.y, introAlpha: previousBubble ? previousBubble.introAlpha : animateIntro ? 0 : 1
       };
       bodies.forEach((body, index) => {
-        if (!visibleIndices.has(index) && body.popAlpha === 0 && bubble) {
+        if (previous.length > 0 && visibleIndices.has(index) && !previouslyVisible.has(index)) {
+          body.x = body.hx;
+          body.y = body.hy;
+          body.popAlpha = 0;
+          body.popTarget = false;
+          body.introAlpha = 1;
+        } else if (!visibleIndices.has(index) && body.popAlpha === 0 && bubble) {
           body.x = bubble.x;
           body.y = bubble.y;
         }
