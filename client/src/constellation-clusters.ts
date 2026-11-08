@@ -67,6 +67,99 @@ export const poppedOut = (
   return { shown, remaining: matches.length - shown.length };
 };
 
+export const BUBBLE_COLLAPSE_DELAY_MS = 4000;
+export const COLLAPSE_STAGGER_MS = 150;
+
+export interface RevealState {
+  readonly batches: readonly (readonly number[])[];
+  readonly seen: readonly number[];
+  readonly held: readonly number[];
+}
+
+export const createRevealState = (): RevealState => ({ batches: [], seen: [], held: [] });
+
+export const revealedIndices = (state: RevealState): number[] =>
+  [...new Set([...state.batches.flat(), ...state.held])];
+
+export const reconcileRevealState = (state: RevealState, hiddenRanking: readonly number[]): RevealState => {
+  const hidden = new Set(hiddenRanking);
+  const seen = state.seen.filter(index => hidden.has(index));
+  const seenSet = new Set(seen);
+  return {
+    batches: state.batches.map(batch => batch.filter(index => hidden.has(index) && seenSet.has(index)))
+      .filter(batch => batch.length > 0),
+    seen,
+    held: state.held.filter(index => hidden.has(index))
+  };
+};
+
+export const revealNextBatch = (
+  state: RevealState,
+  hiddenRanking: readonly number[],
+  batchSize: number,
+  maxVisible: number,
+  protectedIndices: ReadonlySet<number> = new Set()
+): RevealState => {
+  const reconciled = reconcileRevealState(state, hiddenRanking);
+  const seen = new Set(reconciled.seen);
+  const held = new Set(reconciled.held);
+  const next = hiddenRanking.filter(index => !seen.has(index) && !held.has(index))
+    .slice(0, Math.max(0, Math.floor(batchSize)));
+  if (next.length === 0) return reconciled;
+
+  const batches = reconciled.batches.map(batch => [...batch]);
+  batches.push(next);
+  const capacity = Math.max(next.length, Math.floor(maxVisible));
+  const activeCount = () => new Set([...batches.flat(), ...held, ...protectedIndices]).size;
+  while (batches.length > 1 && activeCount() > capacity) batches.shift();
+  return {
+    batches,
+    seen: [...seen, ...next],
+    held: reconciled.held
+  };
+};
+
+export const unrevealedCount = (state: RevealState, hiddenRanking: readonly number[]): number => {
+  const seen = new Set(state.seen);
+  return hiddenRanking.filter(index => !seen.has(index)).length;
+};
+
+export const isRevealCycleComplete = (state: RevealState, hiddenRanking: readonly number[]): boolean =>
+  hiddenRanking.length > 0 && unrevealedCount(state, hiddenRanking) === 0;
+
+export const collapseRevealOrder = (
+  state: RevealState,
+  highlightedIndices: ReadonlySet<number>
+): number[] => revealedIndices(state).reverse().filter(index => !highlightedIndices.has(index));
+
+export const returnRevealedItem = (state: RevealState, index: number): RevealState => ({
+  batches: state.batches.map(batch => batch.filter(item => item !== index)).filter(batch => batch.length > 0),
+  seen: state.seen.filter(item => item !== index),
+  held: state.held.filter(item => item !== index)
+});
+
+export const collapseRevealState = (
+  state: RevealState,
+  highlightedIndices: ReadonlySet<number>
+): RevealState => ({
+  batches: [],
+  seen: [],
+  held: revealedIndices(state).filter(index => highlightedIndices.has(index))
+});
+
+export const retainHighlightedReveals = (
+  state: RevealState,
+  highlightedIndices: ReadonlySet<number>
+): RevealState => ({
+  ...state,
+  held: state.held.filter(index => highlightedIndices.has(index))
+});
+
+export const bubbleCollapseDeadline = (now: number): number => now + BUBBLE_COLLAPSE_DELAY_MS;
+
+export const isBubbleCollapseDue = (deadline: number | null, now: number): boolean =>
+  deadline !== null && now >= deadline;
+
 export const easeOutCubic = (progress: number): number => {
   const t = Math.min(1, Math.max(0, progress));
   return 1 - (1 - t) ** 3;

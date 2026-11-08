@@ -13,7 +13,30 @@ import {
   scatterPoint
 } from './constellation-layout.js';
 import type { Area } from './constellation-layout.js';
-import { assignClusterGroups, clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from './constellation-clusters.js';
+import {
+  assignClusterGroups,
+  bubbleCollapseDeadline,
+  BUBBLE_COLLAPSE_DELAY_MS,
+  COLLAPSE_STAGGER_MS,
+  clusterAreas,
+  collapseRevealOrder,
+  collapseRevealState,
+  createRevealState,
+  introPosition,
+  introProgress,
+  isBubbleCollapseDue,
+  isRevealCycleComplete,
+  poppedOut,
+  reconcileRevealState,
+  retainHighlightedReveals,
+  revealNextBatch,
+  returnRevealedItem,
+  revealedIndices,
+  selectVisible,
+  settlePopout,
+  usageCounts,
+  visibleBudget
+} from './constellation-clusters.js';
 import {
   MOTE_LINK_DISTANCE,
   createMotes,
@@ -79,9 +102,20 @@ interface Bubble {
   hy: number;
   glow: number;
   labelHalf: number;
+  vx: number;
+  vy: number;
+  phase: number;
   introX: number;
   introY: number;
   introAlpha: number;
+}
+
+interface Drifter {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  phase: number;
 }
 
 interface RenderEdge {
@@ -212,7 +246,15 @@ export class ConstellationEngine implements ExperienceEngine {
     let renderEdges: RenderEdge[] = [];
     let bubble: Bubble | null = null;
     let popIndices = new Set<number>();
-    let temporaryPop = false;
+    let focusedPopIndices = new Set<number>();
+    let revealState = createRevealState();
+    let popoutBudget = 6;
+    let collapseTimer: number | null = null;
+    let collapseDeadline: number | null = null;
+    let collapseStepTimer: number | null = null;
+    let collapseQueue: number[] = [];
+    let collapsingIndices = new Set<number>();
+    let collapseSequenceActive = false;
     let moreMatches = 0;
     let bubbleHasMatches = false;
     let introActive = false;
@@ -245,6 +287,18 @@ export class ConstellationEngine implements ExperienceEngine {
     let frameTime = 0;
     // Ambient dust is dim, so it is lifted a little on the light theme.
     let moteBoost = 1;
+
+    const bubbleLabel = () => {
+      const count = isRevealCycleComplete(revealState, hiddenSortedByUsage)
+        ? 0
+        : Math.max(0, hiddenSortedByUsage.length - popIndices.size - collapsingIndices.size);
+      return moreMatches > 0 ? `${otherName} (+${count}) · +${moreMatches} fler` : `${otherName} (+${count})`;
+    };
+    const clearBubbleCollapseTimer = () => {
+      if (collapseTimer !== null) window.clearTimeout(collapseTimer);
+      collapseTimer = null;
+      collapseDeadline = null;
+    };
 
     const refreshColour = () => {
       const style = getComputedStyle(root);
@@ -294,6 +348,63 @@ export class ConstellationEngine implements ExperienceEngine {
       cluster.right - cluster.left >= half * 2 + WOBBLE * 2 && cluster.bottom - cluster.top >= LABEL_HEIGHT + WOBBLE * 2
         ? cluster
         : area;
+
+    const driftNode = (
+      node: Drifter,
+      homeX: number,
+      homeY: number,
+      half: number,
+      region: Area,
+      delta: number,
+      time: number,
+      pointerInfluence = true,
+      labelOffset = 12,
+      labelCollisionIndex?: number
+    ) => {
+      const targetX = homeX
+        + Math.sin(time / 1700 + node.phase) * WOBBLE * 1.8
+        + Math.cos(time / 4300 + node.phase * 1.7) * 14
+        + Math.sin(time / 7200) * 16;
+      const targetY = homeY
+        + Math.cos(time / 2100 + node.phase) * WOBBLE * 1.8
+        + Math.sin(time / 5100 + node.phase * 1.3) * 12
+        + Math.cos(time / 8300) * 12;
+      let forceX = (targetX - node.x) * 0.02;
+      let forceY = (targetY - node.y) * 0.02;
+      const exit = exitVector(node.x, node.y - PROBE_OFFSET, obstacles);
+      if (exit) {
+        forceX += exit.dx * OBSTACLE_PUSH;
+        forceY += exit.dy * OBSTACLE_PUSH;
+      }
+      if (pointerInfluence) {
+        const dx = node.x - pointer.x;
+        const dy = node.y - pointer.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < POINTER_RADIUS && distance > 0.1) {
+          forceX += (dx / distance) * (POINTER_RADIUS - distance) * 0.012;
+          forceY += (dy / distance) * (POINTER_RADIUS - distance) * 0.012;
+        }
+      }
+      if (labelCollisionIndex !== undefined) {
+        const body = bodies[labelCollisionIndex];
+        for (let index = 0; index < bodies.length; index++) {
+          if (index === labelCollisionIndex) continue;
+          const other = bodies[index];
+          if (!visibleIndices.has(index) && other.popAlpha === 0 && !other.popTarget) continue;
+          const overlapX = body.half + other.half + 4 - Math.abs(node.x - other.x);
+          const overlapY = LABEL_HEIGHT + 4 - Math.abs(node.y - other.y);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+          const directionX = Math.sign(node.x - other.x) || (body.phase < other.phase ? -1 : 1);
+          const directionY = Math.sign(node.y - other.y) || (body.phase < other.phase ? -1 : 1);
+          if (overlapX < overlapY) forceX += directionX * (overlapX + 2) * 0.8;
+          else forceY += directionY * (overlapY + 2) * 0.8;
+        }
+      }
+      node.vx = (node.vx + forceX) * 0.86;
+      node.vy = (node.vy + forceY) * 0.86;
+      node.x = clampRange(node.x + node.vx * delta, region.left + half, region.right - half);
+      node.y = clampRange(node.y + node.vy * delta, region.top + LABEL_HEIGHT + labelOffset - 12, region.bottom);
+    };
 
     const homeOf = (body: Pick<Body, 'u' | 'v' | 'half' | 'cluster'>): { hx: number; hy: number } => {
       const region = fittingRegion(body.cluster, body.half);
@@ -367,6 +478,7 @@ export class ConstellationEngine implements ExperienceEngine {
       const previouslyVisible = visibleIndices;
       const budget = visibleBudget({ width: areaWidth(), height: areaHeight() }, nodes.length,
         width < NARROW_VIEWPORT ? 112 : 130, fontSize * 2.3);
+      popoutBudget = budget;
       const selected = selectVisible(nodes, usage, budget);
       visibleIndices = new Set(selected);
       const clusterGroups = assignClusterGroups(nodes, selected, data.groups.length);
@@ -376,6 +488,7 @@ export class ConstellationEngine implements ExperienceEngine {
       const origins = clusterOrigins(data.groups.length);
       hiddenSortedByUsage = nodes.map((_, index) => index).filter(index => !visibleIndices.has(index))
         .sort((a, b) => usage[b] - usage[a] || a - b);
+      revealState = reconcileRevealState(revealState, hiddenSortedByUsage);
       const previousBubble = bubble;
       const bubbleLabelWidth = Math.max(
         context.measureText(`${otherName} (+${hiddenSortedByUsage.length})`).width,
@@ -393,7 +506,8 @@ export class ConstellationEngine implements ExperienceEngine {
       bubble = hiddenSortedByUsage.length === 0 ? null : {
         x: previousBubble ? remapPoint(previousBubble).x : animateIntro ? bubbleOrigin.x : bubbleX,
         y: previousBubble ? remapPoint(previousBubble).y : animateIntro ? bubbleOrigin.y : bubbleY,
-        hx: bubbleX, hy: bubbleY, glow: 0, labelHalf: bubbleHalf,
+        hx: bubbleX, hy: bubbleY, glow: previousBubble?.glow ?? 0, labelHalf: bubbleHalf,
+        vx: previousBubble?.vx ?? 0, vy: previousBubble?.vy ?? 0, phase: previousBubble?.phase ?? Math.random() * TAU,
         introX: bubbleOrigin.x, introY: bubbleOrigin.y,
         introAlpha: previousBubble ? previousBubble.introAlpha : animateIntro ? 0 : 1
       };
@@ -485,7 +599,7 @@ export class ConstellationEngine implements ExperienceEngine {
     };
 
     const settleHiddenPopouts = () => {
-      if (!bubble || introActive) return;
+      if (!bubble) return;
       const bubblePoint = { x: bubble.x, y: bubble.y };
       bodies.forEach((body, index) => {
         if (visibleIndices.has(index)) return;
@@ -506,21 +620,24 @@ export class ConstellationEngine implements ExperienceEngine {
       else focus = null;
       if (focus?.size === 0) focus = null;
 
+      revealState = retainHighlightedReveals(revealState, focus ?? new Set());
+      for (const index of collapsingIndices) {
+        if (focus?.has(index)) collapsingIndices.delete(index);
+      }
       const active = focus;
       litEdges = active ? edges.filter(edge => active.has(edge.a) && active.has(edge.b)) : [];
       ambientEdges = edges.filter(edge => edge.strong);
       const limit = width < NARROW_VIEWPORT ? POPOUT_MOBILE : POPOUT_DESKTOP;
       const focusedPops = focus ? poppedOut(hiddenSortedByUsage, focus, limit) : { shown: [], remaining: 0 };
       moreMatches = focusedPops.remaining;
-      popIndices = new Set(focusedPops.shown);
-      if (temporaryPop) {
-        for (const index of hiddenSortedByUsage) {
-          if (popIndices.size >= limit) break;
-          popIndices.add(index);
-        }
-      }
+      focusedPopIndices = new Set(focusedPops.shown);
+      popIndices = new Set(focusedPopIndices);
+      revealedIndices(revealState).forEach(index => {
+        if (!collapsingIndices.has(index)) popIndices.add(index);
+      });
       bubbleHasMatches = !!bubble && !!focus && hiddenSortedByUsage.some(index => focus?.has(index));
       if (bubble && bubbleHasMatches) bubble.glow = Math.max(bubble.glow, 0.65);
+      const manualPopIndices = new Set(revealedIndices(revealState));
       const popTaken = bodies.flatMap((body, index) => visibleIndices.has(index) ? [{ x: body.x, y: body.y }] : []);
       const popTakenLabels = bodies.flatMap((body, index) => visibleIndices.has(index)
         ? [labelRectAt({ x: body.x, y: body.y }, body.half)]
@@ -528,34 +645,119 @@ export class ConstellationEngine implements ExperienceEngine {
       if (bubble) popTakenLabels.push(labelRectAt({ x: bubble.x, y: bubble.y - 15 }, bubble.labelHalf));
       for (const index of hiddenSortedByUsage) {
         const body = bodies[index];
+        const wasPopTarget = body.popTarget;
         const shouldPop = popIndices.has(index);
-        if (shouldPop && !body.popTarget && body.popAlpha === 0 && bubble) {
+        if (shouldPop && !wasPopTarget && body.popAlpha === 0 && bubble) {
           body.x = bubble.x;
           body.y = bubble.y;
         }
+        if (!shouldPop && body.popAlpha > 0) {
+          const current = { x: body.x, y: body.y };
+          popTaken.push(current);
+          popTakenLabels.push(labelRectAt(current, body.half));
+        }
         body.popTarget = shouldPop;
+        if (shouldPop && introActive) body.introAlpha = bubble?.introAlpha ?? 1;
         if (shouldPop && bubble) {
-          const left = Math.max(area.left + body.half, bubble.x - POP_RADIUS);
-          const right = Math.min(area.right - body.half, bubble.x + POP_RADIUS);
-          const top = Math.max(area.top + LABEL_HEIGHT, bubble.y - POP_RADIUS);
-          const bottom = Math.min(area.bottom, bubble.y + POP_RADIUS);
-          const region: Area = { left, top, right: Math.max(left, right), bottom: Math.max(top, bottom) };
-          const point = scatterPoint(region, body.half, obstacles, popTaken, Math.random, 44, 36, popTakenLabels);
+          if (wasPopTarget) {
+            const target = { x: body.popX, y: body.popY };
+            popTaken.push(target);
+            popTakenLabels.push(labelRectAt(target, body.half));
+            if (body.popAlpha < 1) {
+              const current = { x: body.x, y: body.y };
+              popTaken.push(current);
+              popTakenLabels.push(labelRectAt(current, body.half));
+            }
+            continue;
+          }
+          const region = manualPopIndices.has(index)
+            ? fittingRegion(area, body.half)
+            : {
+                left: Math.max(area.left + body.half, bubble.x - POP_RADIUS),
+                top: Math.max(area.top + LABEL_HEIGHT, bubble.y - POP_RADIUS),
+                right: Math.max(area.left + body.half, Math.min(area.right - body.half, bubble.x + POP_RADIUS)),
+                bottom: Math.max(area.top + LABEL_HEIGHT, Math.min(area.bottom, bubble.y + POP_RADIUS))
+              };
+          const isManualPop = manualPopIndices.has(index);
+          const point = scatterPoint(region, body.half, obstacles, popTaken, Math.random,
+            isManualPop ? 110 : 44, isManualPop ? 120 : 36, popTakenLabels);
           body.popX = point.x;
           body.popY = point.y;
           popTaken.push(point);
           popTakenLabels.push(labelRectAt(point, body.half));
         }
       }
-
-      const animationRunning = shouldAnimateConstellation(state, !document.hidden) || (introActive && !document.hidden);
+      const animationRunning = shouldAnimateConstellation(state, !document.hidden);
       if (!animationRunning) settleHiddenPopouts();
       else rebuildRenderEdges();
       if (frame === 0) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
-        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : 0;
         draw();
       }
+    };
+
+    const cancelStaggeredCollapse = (): boolean => {
+      const wasCollapsing = collapseSequenceActive || collapseQueue.length > 0 || collapsingIndices.size > 0;
+      if (collapseStepTimer !== null) window.clearTimeout(collapseStepTimer);
+      collapseStepTimer = null;
+      collapseQueue = [];
+      collapsingIndices.clear();
+      collapseSequenceActive = false;
+      return wasCollapsing;
+    };
+
+    const finishCollapseSequence = () => {
+      if (!collapseSequenceActive || collapseQueue.length > 0 || collapsingIndices.size > 0) return;
+      collapseSequenceActive = false;
+      revealState = collapseRevealState(revealState, focus ?? new Set());
+      recompute();
+    };
+
+    const finishCollapseImmediately = () => {
+      if (collapseStepTimer !== null) window.clearTimeout(collapseStepTimer);
+      collapseStepTimer = null;
+      collapseQueue = [];
+      collapsingIndices.clear();
+      collapseSequenceActive = false;
+      revealState = collapseRevealState(revealState, focus ?? new Set());
+      recompute();
+    };
+
+    const startNextCollapseStep = () => {
+      if (!collapseSequenceActive) return;
+      const index = collapseQueue.shift();
+      if (index === undefined) {
+        finishCollapseSequence();
+        return;
+      }
+      if (!focus?.has(index)) {
+        collapsingIndices.add(index);
+        recompute();
+      }
+      if (collapseQueue.length > 0) {
+        collapseStepTimer = window.setTimeout(startNextCollapseStep, COLLAPSE_STAGGER_MS);
+      } else {
+        collapseStepTimer = null;
+        finishCollapseSequence();
+      }
+    };
+
+    const scheduleBubbleCollapse = () => {
+      clearBubbleCollapseTimer();
+      collapseDeadline = bubbleCollapseDeadline(performance.now());
+      collapseTimer = window.setTimeout(() => {
+        if (!isBubbleCollapseDue(collapseDeadline, performance.now())) return;
+        collapseTimer = null;
+        collapseDeadline = null;
+        collapseSequenceActive = true;
+        collapseQueue = collapseRevealOrder(revealState, new Set([...(focus ?? []), ...collapsingIndices]));
+        if (!shouldAnimateConstellation(state, !document.hidden)) {
+          finishCollapseImmediately();
+          return;
+        }
+        startNextCollapseStep();
+      }, BUBBLE_COLLAPSE_DELAY_MS);
     };
 
     const spawnPacket = () => {
@@ -596,38 +798,23 @@ export class ConstellationEngine implements ExperienceEngine {
     const isInteractiveTarget = (target: EventTarget | null): boolean =>
       target instanceof Element && target.closest('a, button, input, textarea, select, [contenteditable="true"]') !== null;
 
-    const navigateToTechnologies = () => {
-      const groups = document.querySelector<HTMLElement>('#service-skill-groups');
-      if (!groups) {
-        window.location.assign('/services#service-technologies-heading');
-        return;
-      }
-      // The canvas is decorative; send users to the semantic list when they ask for more hidden items.
-      groups.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      [...groups.querySelectorAll<HTMLButtonElement>('button[data-group]')]
-        .find(button => button.dataset.group === otherName)?.click();
-    };
-
+    // The canvas stays aria-hidden; hit-test its bubble without adding a focusable control.
     const onPointerDown = (event: PointerEvent) => {
       if (isInteractiveTarget(event.target)) return;
       if (bubble) {
-        const hiddenCount = hiddenSortedByUsage.length - popIndices.size;
-        const label = moreMatches > 0
-          ? `${otherName} (+${hiddenCount}) · +${moreMatches} fler`
-          : `${otherName} (+${hiddenCount})`;
         context.font = `600 ${constellationLabelFontSize(width)}px "Segoe UI", system-ui, sans-serif`;
-        const labelWidth = context.measureText(label).width / 2 + 8;
+        const labelWidth = context.measureText(bubbleLabel()).width / 2 + 8;
         const onDot = Math.hypot(event.clientX - bubble.x, event.clientY - bubble.y) <= BUBBLE_RADIUS + 9;
         const onLabel = Math.abs(event.clientX - bubble.x) <= labelWidth
           && event.clientY >= bubble.y - 30 && event.clientY <= bubble.y - 7;
         if (onDot || onLabel) {
-          const hasMore = moreMatches > 0 || hiddenSortedByUsage.length > popIndices.size;
-          if ((onLabel && moreMatches > 0) || (temporaryPop && hasMore)) {
-            navigateToTechnologies();
-          } else {
-            temporaryPop = !temporaryPop;
-            recompute();
-          }
+          const canceledCollapse = cancelStaggeredCollapse();
+          clearBubbleCollapseTimer();
+          const previousSeen = revealState.seen.length;
+          const reserved = new Set([...focusedPopIndices, ...collapsingIndices]);
+          revealState = revealNextBatch(revealState, hiddenSortedByUsage, 3, popoutBudget, reserved);
+          if (canceledCollapse || revealState.seen.length !== previousSeen) recompute();
+          scheduleBubbleCollapse();
           return;
         }
       }
@@ -672,6 +859,10 @@ export class ConstellationEngine implements ExperienceEngine {
         if (time >= introStart + INTRO_DURATION_MS + data.groups.length * INTRO_CLUSTER_STAGGER_MS) finishIntro();
       }
 
+      if (bubble && !introActive && shouldAnimateConstellation(state, !document.hidden)) {
+        driftNode(bubble, bubble.hx, bubble.hy, bubble.labelHalf, fittingRegion(area, bubble.labelHalf), delta, time, false, 15);
+      }
+
       bodies.forEach((body, index) => {
         const wasPoppedOut = body.popAlpha > 0;
         if (visibleIndices.has(index) && !introActive && shouldAnimateConstellation(state, !document.hidden)) {
@@ -687,57 +878,47 @@ export class ConstellationEngine implements ExperienceEngine {
           body.u += (body.tu - body.u) * HOME_EASE * delta;
           body.v += (body.tv - body.v) * HOME_EASE * delta;
           Object.assign(body, homeOf(body));
-          const targetX = body.hx
-            + Math.sin(time / 1700 + body.phase) * WOBBLE * 1.8
-            + Math.cos(time / 4300 + body.phase * 1.7) * 14
-            + Math.sin(time / 7200) * 16;
-          const targetY = body.hy
-            + Math.cos(time / 2100 + body.phase) * WOBBLE * 1.8
-            + Math.sin(time / 5100 + body.phase * 1.3) * 12
-            + Math.cos(time / 8300) * 12;
-          let forceX = (targetX - body.x) * 0.02;
-          let forceY = (targetY - body.y) * 0.02;
-          const exit = exitVector(body.x, body.y - PROBE_OFFSET, obstacles);
-          if (exit) {
-            forceX += exit.dx * OBSTACLE_PUSH;
-            forceY += exit.dy * OBSTACLE_PUSH;
-          }
-          const dx = body.x - pointer.x;
-          const dy = body.y - pointer.y;
-          const distance = Math.hypot(dx, dy);
-          if (distance < POINTER_RADIUS && distance > 0.1) {
-            forceX += (dx / distance) * (POINTER_RADIUS - distance) * 0.012;
-            forceY += (dy / distance) * (POINTER_RADIUS - distance) * 0.012;
-          }
-          body.vx = (body.vx + forceX) * 0.86;
-          body.vy = (body.vy + forceY) * 0.86;
           const movementRegion = fittingRegion(body.cluster, body.half);
-          body.x = clampRange(body.x + body.vx * delta, movementRegion.left + body.half, movementRegion.right - body.half);
-          body.y = clampRange(body.y + body.vy * delta, movementRegion.top + LABEL_HEIGHT, movementRegion.bottom);
-        } else if (body.popAlpha > 0 || body.popTarget) {
+          driftNode(body, body.hx, body.hy, body.half, movementRegion, delta, time);
+        } else if (shouldAnimateConstellation(state, !document.hidden) && (body.popAlpha > 0 || body.popTarget)) {
           if (introActive && body.popTarget) body.introAlpha = bubble?.introAlpha ?? 1;
-          const targetX = body.popTarget ? body.popX : bubble?.x ?? body.x;
-          const targetY = body.popTarget ? body.popY : bubble?.y ?? body.y;
-          const amount = Math.min(1, (body.popTarget ? 0.075 : 0.12) * delta);
-          body.popAlpha = clampRange(body.popAlpha + (body.popTarget ? amount : -amount), 0, 1);
-          const forceX = (targetX - body.x) * 0.035;
-          const forceY = (targetY - body.y) * 0.035;
-          body.vx = (body.vx + forceX) * 0.82;
-          body.vy = (body.vy + forceY) * 0.82;
-          body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
-          body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
+          if (body.popTarget && body.popAlpha >= 1 && !introActive) {
+            driftNode(body, body.popX, body.popY, body.half, fittingRegion(area, body.half), delta, time, true, 12, index);
+          } else {
+            const targetX = body.popTarget ? body.popX : bubble?.x ?? body.x;
+            const targetY = body.popTarget ? body.popY : bubble?.y ?? body.y;
+            const amount = Math.min(1, (body.popTarget ? 0.075 : 0.075) * delta);
+            body.popAlpha = clampRange(body.popAlpha + (body.popTarget ? amount : -amount), 0, 1);
+            const forceX = (targetX - body.x) * 0.035;
+            const forceY = (targetY - body.y) * 0.035;
+            body.vx = (body.vx + forceX) * 0.82;
+            body.vy = (body.vy + forceY) * 0.82;
+            body.x = clampRange(body.x + body.vx * delta, area.left + body.half, area.right - body.half);
+            body.y = clampRange(body.y + body.vy * delta, area.top + LABEL_HEIGHT, area.bottom);
+          }
           if (wasPoppedOut !== (body.popAlpha > 0)) edgeRoutesChanged = true;
+          if (!body.popTarget && body.popAlpha === 0 && collapsingIndices.delete(index)) {
+            if (bubble) {
+              body.x = bubble.x;
+              body.y = bubble.y;
+            }
+            body.vx = 0;
+            body.vy = 0;
+            revealState = returnRevealedItem(revealState, index);
+            popIndices.delete(index);
+            finishCollapseSequence();
+          }
         }
         body.glow += (targetGlow(index) - body.glow) * Math.min(1, 0.08 * delta);
       });
       if (bubble) {
-        const target = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        const target = bubbleHasMatches ? 1 : 0;
         bubble.glow += (target - bubble.glow) * Math.min(1, 0.08 * delta);
       }
       if (!shouldAnimateConstellation(state, !document.hidden) && !introActive) {
         settleHiddenPopouts();
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
-        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : 0;
       }
       if (edgeRoutesChanged) rebuildRenderEdges();
       if (Math.random() < (litEdges.length > 0 ? 0.18 : 0.05) * delta) spawnPacket();
@@ -841,7 +1022,8 @@ export class ConstellationEngine implements ExperienceEngine {
       }
 
       if (bubble && bubble.introAlpha > 0) {
-        const alpha = bubble.introAlpha;
+        const emptyAlpha = isRevealCycleComplete(revealState, hiddenSortedByUsage) ? 0.34 : 1;
+        const alpha = bubble.introAlpha * emptyAlpha;
         const glow = bubble.glow * alpha;
         if (glow > 0.05) {
           const halo = context.createRadialGradient(bubble.x, bubble.y, BUBBLE_RADIUS, bubble.x, bubble.y, HALO_RADIUS + 4);
@@ -861,12 +1043,8 @@ export class ConstellationEngine implements ExperienceEngine {
         context.beginPath();
         context.arc(bubble.x, bubble.y, BUBBLE_RADIUS + glow, 0, TAU);
         context.fill();
-        const hiddenCount = hiddenSortedByUsage.length - popIndices.size;
-        const label = moreMatches > 0
-          ? `${otherName} (+${hiddenCount}) · +${moreMatches} fler`
-          : `${otherName} (+${hiddenCount})`;
         context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + 0.45 + glow * 0.3) * alpha})`;
-        context.fillText(label, bubble.x, bubble.y - 15);
+        context.fillText(bubbleLabel(), bubble.x, bubble.y - 15);
       }
     };
 
@@ -898,10 +1076,12 @@ export class ConstellationEngine implements ExperienceEngine {
       }
       refreshColour();
       if (settleTransitions) finishIntro();
+      if (!shouldAnimateConstellation(state, !document.hidden) && (collapseSequenceActive || collapsingIndices.size > 0))
+        finishCollapseImmediately();
       if (!shouldAnimateConstellation(state, !document.hidden) && !(introActive && !document.hidden)) {
         settleHiddenPopouts();
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
-        if (bubble) bubble.glow = bubbleHasMatches ? 1 : temporaryPop ? 0.75 : 0;
+        if (bubble) bubble.glow = bubbleHasMatches ? 1 : 0;
         draw();
         return;
       }

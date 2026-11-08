@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assignClusterGroups, clusterAreas, introPosition, introProgress, poppedOut, selectVisible, settlePopout, usageCounts, visibleBudget } from '../wwwroot/js/constellation-clusters.js';
+import { assignClusterGroups, bubbleCollapseDeadline, clusterAreas, collapseRevealOrder, collapseRevealState, createRevealState, introPosition, introProgress, isBubbleCollapseDue, isRevealCycleComplete, poppedOut, reconcileRevealState, retainHighlightedReveals, revealNextBatch, returnRevealedItem, revealedIndices, selectVisible, settlePopout, unrevealedCount, usageCounts, visibleBudget, BUBBLE_COLLAPSE_DELAY_MS, COLLAPSE_STAGGER_MS } from '../wwwroot/js/constellation-clusters.js';
 
 const nodes = [
   { name: 'C#', group: 0 }, { name: '.NET', group: 0 }, { name: 'ASP.NET', group: 0 }, { name: 'EF Core', group: 0 },
@@ -48,6 +48,71 @@ test('category floor is disabled when categories exceed half the visible budget'
 
 test('pop-out selects the highest-usage focused hidden nodes and counts the rest', () => {
   assert.deepEqual(poppedOut([4, 2, 7, 1], new Set([1, 2, 4]), 2), { shown: [4, 2], remaining: 1 });
+});
+
+test('bubble reveals the next three technologies by usage order', () => {
+  const ranking = [9, 3, 7, 1, 4];
+  const first = revealNextBatch(createRevealState(), ranking, 3, 6);
+  assert.deepEqual(revealedIndices(first), [9, 3, 7]);
+  assert.equal(unrevealedCount(first, ranking), 2);
+  const second = revealNextBatch(first, ranking, 3, 6);
+  assert.deepEqual(revealedIndices(second), [9, 3, 7, 1, 4]);
+  assert.equal(isRevealCycleComplete(second, ranking), true);
+});
+
+test('bubble rotates the oldest batch when another batch exceeds its pop-out budget', () => {
+  const ranking = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  let state = createRevealState();
+  state = revealNextBatch(state, ranking, 3, 6);
+  state = revealNextBatch(state, ranking, 3, 6);
+  assert.deepEqual(state.batches, [[0, 1, 2], [3, 4, 5]]);
+  state = revealNextBatch(state, ranking, 3, 6);
+  assert.deepEqual(state.batches, [[3, 4, 5], [6, 7, 8]]);
+  assert.deepEqual(state.seen, ranking);
+  assert.deepEqual(revealedIndices(state), [3, 4, 5, 6, 7, 8]);
+  assert.equal(isRevealCycleComplete(state, ranking), true);
+});
+
+test('focus-only pop-outs reserve budget without keeping rotated manual batches visible', () => {
+  const ranking = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  let state = createRevealState();
+  state = revealNextBatch(state, ranking, 3, 6);
+  state = revealNextBatch(state, ranking, 3, 6);
+  state = revealNextBatch(state, ranking, 3, 6, new Set([9]));
+  assert.deepEqual(state.batches, [[6, 7, 8]]);
+  assert.deepEqual(revealedIndices(state), [6, 7, 8]);
+});
+
+test('bubble inactivity deadline resets to four seconds and collapse returns newest items first', () => {
+  assert.equal(BUBBLE_COLLAPSE_DELAY_MS, 4000);
+  assert.equal(COLLAPSE_STAGGER_MS, 150);
+  assert.equal(bubbleCollapseDeadline(1000), 5000);
+  const resetDeadline = bubbleCollapseDeadline(2500);
+  assert.equal(resetDeadline, 6500);
+  assert.equal(isBubbleCollapseDue(resetDeadline, 6499), false);
+  assert.equal(isBubbleCollapseDue(resetDeadline, 6500), true);
+
+  const ranking = [0, 1, 2, 3, 4, 5];
+  let state = revealNextBatch(createRevealState(), ranking, 3, 6);
+  state = revealNextBatch(state, ranking, 3, 6);
+  assert.deepEqual(collapseRevealOrder(state, new Set()), [5, 4, 3, 2, 1, 0]);
+  const next = returnRevealedItem(state, 5);
+  assert.deepEqual(revealedIndices(next), [0, 1, 2, 3, 4]);
+  assert.deepEqual(next.seen, [0, 1, 2, 3, 4]);
+
+  const held = collapseRevealState(state, new Set([1, 4]));
+  assert.deepEqual(held.batches, []);
+  assert.deepEqual(held.seen, []);
+  assert.deepEqual(held.held, [1, 4]);
+  assert.deepEqual(collapseRevealOrder(state, new Set([1, 4])), [5, 3, 2, 0]);
+  assert.deepEqual(retainHighlightedReveals(held, new Set([4])), { ...held, held: [4] });
+});
+
+test('reveal state reconciles to the current hidden technologies', () => {
+  const state = revealNextBatch(createRevealState(), [0, 1, 2, 3], 3, 6);
+  const resized = reconcileRevealState(state, [0, 2, 3]);
+  assert.deepEqual(resized.batches, [[0, 2]]);
+  assert.deepEqual(resized.seen, [0, 2]);
 });
 
 test('intro easing and position reach the home point smoothly', () => {
