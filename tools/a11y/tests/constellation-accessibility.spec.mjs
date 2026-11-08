@@ -59,7 +59,7 @@ test.describe('demo-content constellation accessibility regressions', () => {
       await page.goto(route);
       const expected = await readConstellationData(page);
       const actual = await page.locator('.skill-group').evaluateAll(groups => groups.map(group => ({
-        name: group.querySelector('.skill-group-name')?.textContent.trim() ?? group.getAttribute('aria-label'),
+        name: group.getAttribute('aria-label')?.trim() ?? group.querySelector('.skill-group-name')?.textContent.trim(),
         skills: [...group.querySelectorAll('[data-skill]')].map(button => button.getAttribute('data-skill'))
       })));
       expect(actual, route).toEqual(expected.groups.map(group => ({ name: group.name, skills: group.skills })));
@@ -76,7 +76,7 @@ test.describe('demo-content constellation accessibility regressions', () => {
       await page.goto(route);
       const data = await readConstellationData(page);
       const actual = await page.locator('.skill-group').evaluateAll(groups => groups.map(group => ({
-        name: group.querySelector('.skill-group-name')?.textContent.trim() ?? group.getAttribute('aria-label'),
+        name: group.getAttribute('aria-label')?.trim() ?? group.querySelector('.skill-group-name')?.textContent.trim(),
         skills: [...group.querySelectorAll('[data-skill]')].map(button => button.getAttribute('data-skill'))
       })));
       expect(actual, `${route} without JavaScript`).toEqual(data.groups.map(group => ({ name: group.name, skills: group.skills })));
@@ -239,12 +239,12 @@ test.describe('integration contract: group pinning and mobile targets', () => {
       await page.goto(route);
       const groups = page.locator('.skill-group');
       const markup = await groups.evaluateAll(items => items.map(item => ({
-        name: item.querySelector('.skill-group-name')?.textContent.trim(),
+        name: item.getAttribute('aria-label')?.trim() ?? item.querySelector('.skill-group-name')?.textContent.trim(),
         buttons: [...item.querySelectorAll('button.skill-group-btn[data-group]')].map(button => button.getAttribute('data-group'))
       })));
       expect(markup.every(item => item.buttons.length === 1 && item.buttons[0] === item.name), JSON.stringify(markup)).toBe(true);
       const group = groups.first();
-      const groupName = await group.locator('.skill-group-name').innerText();
+      const groupName = (await group.getAttribute('aria-label'))?.trim() ?? (await group.locator('.skill-group-name').innerText()).trim();
       const button = group.locator('button.skill-group-btn[data-group]');
       const skills = await group.locator('[data-skill]').evaluateAll(items => items.map(item => item.getAttribute('data-skill')));
       await expect(button).toHaveCount(1);
