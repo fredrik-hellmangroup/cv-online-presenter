@@ -294,6 +294,44 @@ public sealed class ContentSnapshotTests
         }
     }
 
+    [Fact]
+    public async Task LoadAsyncReadsTechConceptsFromSiteSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-concepts-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techReview\":{\"concepts\":[\" SOLID \",\"SAFe\"]}}");
+
+            var snapshot = await new ContentSnapshotLoader().LoadAsync(pages);
+
+            Assert.Equal(["SOLID", "SAFe"], snapshot.Identity.TechConcepts);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsABlankTechConcept()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "portfolio-snapshot-concepts-invalid-" + Guid.NewGuid().ToString("N"));
+        var pages = CreatePages(root, "Synthetic");
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "site.json"),
+                "{\"supportedLocales\":[\"sv-SE\"],\"siteName\":\"Synthetic\",\"techReview\":{\"concepts\":[\"SOLID\",\" \"]}}");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new ContentSnapshotLoader().LoadAsync(pages));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private static string CreatePages(string parent, string siteName)
     {
         var pages = Path.Combine(parent, "pages");

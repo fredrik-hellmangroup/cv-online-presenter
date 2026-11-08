@@ -83,7 +83,7 @@ export function loadTechCoverageInput(root) {
   return {
     keywords,
     techGroups: site.techGroups ?? [],
-    ignored: site.techReview?.ignored ?? [],
+    ignored: [...(site.techReview?.ignored ?? []), ...(site.techReview?.concepts ?? [])],
     hasTechGroups: Array.isArray(site.techGroups) && site.techGroups.length > 0
   };
 }
@@ -95,16 +95,16 @@ export function formatReport(result, keywordCount) {
     for (const { keyword, assignments } of result.unmapped) {
       lines.push(`  - ${keyword} (${assignments} ${assignments === 1 ? 'assignment' : 'assignments'})`);
     }
-    lines.push('  Add each one to a techGroups group, or to techReview.ignored, in content/site.json to accept that it is left out.');
+    lines.push('  Add each one to a techGroups group, or to techReview.ignored or techReview.concepts, in content/site.json to accept that it is left out.');
   }
   for (const names of result.sameTechnology) {
     lines.push(`WARN: possibly the same technology under different names: ${names.join(' / ')}. Pick one spelling.`);
   }
   for (const item of result.mappedAndIgnored) {
-    lines.push(`WARN: '${item}' is in both techGroups and techReview.ignored; remove it from techReview.ignored.`);
+    lines.push(`WARN: '${item}' is in both techGroups and techReview; remove it from techReview.ignored or techReview.concepts.`);
   }
   for (const item of result.staleIgnored) {
-    lines.push(`INFO: '${item}' is in techReview.ignored but no assignment uses it any more.`);
+    lines.push(`INFO: '${item}' is in techReview but no assignment uses it any more.`);
   }
   if (lines.length === 0) lines.push(`Tech coverage OK: all ${keywordCount} assignment keywords are mapped or reviewed.`);
   return lines.join('\n');

@@ -46,14 +46,14 @@ test('flags spelling variants of one technology and entries listed as both mappe
   assert.match(formatReport(result, 1), /same technology/u);
 });
 
-function writeContentRoot(ignored) {
+function writeContentRoot(ignored, concepts = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tech-review-'));
   fs.mkdirSync(path.join(root, 'content', 'sources'), { recursive: true });
   fs.writeFileSync(path.join(root, 'content', 'sources', 'master-cv.md'), cv);
   fs.writeFileSync(path.join(root, 'content', 'source-map.json'),
     JSON.stringify({ source: 'content/sources/master-cv.md' }));
   fs.writeFileSync(path.join(root, 'content', 'site.json'),
-    JSON.stringify({ techGroups: [{ name: 'Core', items: ['.NET', 'SQL Server', 'Azure'] }], techReview: { ignored } }));
+    JSON.stringify({ techGroups: [{ name: 'Core', items: ['.NET', 'SQL Server', 'Azure'] }], techReview: { ignored, concepts } }));
   return root;
 }
 
@@ -73,4 +73,14 @@ test('--strict fails only while unreviewed keywords remain', () => {
   const reviewed = run(['SOLID', 'Perl', 'Go', 'Microsoft Azure'], '--strict');
   assert.equal(reviewed.status, 1, 'Microsoft Azure also overlaps the mapped Azure');
   assert.match(reviewed.stdout, /Microsoft Azure \/ Azure|Azure \/ Microsoft Azure/u);
+});
+
+test('techReview.concepts count as reviewed keywords', () => {
+  const root = writeContentRoot(['Perl', 'Go', 'Microsoft Azure'], ['SOLID']);
+  try {
+    const result = spawnSync(process.execPath, [script, '--root', root], { encoding: 'utf8' });
+    assert.doesNotMatch(result.stdout, /neither in site\.json techGroups nor reviewed/u);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
