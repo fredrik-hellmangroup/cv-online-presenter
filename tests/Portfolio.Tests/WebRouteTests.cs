@@ -824,6 +824,61 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             builder.UseSetting("Content:PagesRoot", pagesRoot));
     }
 
+    [Fact]
+    public async Task ConstellationDataIsRenderedWhenOtherSkillsLimitHidesVisibleGroups()
+    {
+        var tempContentRoot = Path.Combine(Path.GetTempPath(), $"cv-constellation-{Guid.NewGuid():N}");
+        var pagesRoot = Path.Combine(tempContentRoot, "pages");
+        Directory.CreateDirectory(pagesRoot);
+
+        try
+        {
+            var fixturePagesRoot = Path.Combine(AppContext.BaseDirectory, "synthetic-presentation", "content", "pages");
+            foreach (var source in Directory.EnumerateFiles(fixturePagesRoot, "*", SearchOption.AllDirectories))
+            {
+                var destination = Path.Combine(pagesRoot, Path.GetRelativePath(fixturePagesRoot, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination);
+            }
+
+            var settings = new
+            {
+                supportedLocales = new[] { "sv-SE" },
+                contactEmail = "alex@example.invalid",
+                siteName = "Alex Exempel",
+                companyName = "Exempel Konsult AB",
+                siteUrl = "https://example.invalid",
+                techGroups = new[] { new { name = "Unused mapping", items = new[] { "Not assigned" } } },
+                otherSkills = new { limit = 0 },
+                techReview = new
+                {
+                    concepts = new[] { "TypeScript", "Node.js", "PostgreSQL", "API", "JavaScript", "HTML", "CSS", "SQLite", "Python", "GeoJSON" }
+                }
+            };
+            await File.WriteAllTextAsync(Path.Combine(tempContentRoot, "site.json"), JsonSerializer.Serialize(settings));
+
+            using var syntheticFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+                builder.UseSetting("Content:PagesRoot", pagesRoot));
+            using var syntheticClient = syntheticFactory.CreateClient();
+            var cv = syntheticFactory.Services.GetRequiredService<SiteContent>().Cv!;
+            var html = await syntheticClient.GetStringAsync("/");
+
+            Assert.Empty(cv.SkillGroups);
+            var other = Assert.Single(cv.ConstellationGroups, group => group.IsOther);
+            Assert.Equal(["REST"], other.Skills);
+            var encodedJson = Regex.Match(html, "id=\"constellation-data\" data-json=\"(?<json>[^\"]+)\"");
+            Assert.True(encodedJson.Success, "Constellation data should be emitted even when the visible skill groups are empty.");
+            using var json = JsonDocument.Parse(WebUtility.HtmlDecode(encodedJson.Groups["json"].Value));
+            var serializedOther = Assert.Single(json.RootElement.GetProperty("groups").EnumerateArray());
+            Assert.True(serializedOther.GetProperty("isOther").GetBoolean());
+            Assert.Equal(["REST"], serializedOther.GetProperty("skills").EnumerateArray().Select(skill => skill.GetString()));
+        }
+        finally
+        {
+            if (Directory.Exists(tempContentRoot)) Directory.Delete(tempContentRoot, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("/")]
     [InlineData("/cv")]

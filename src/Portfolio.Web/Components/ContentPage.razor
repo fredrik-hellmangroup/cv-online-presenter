@@ -379,7 +379,7 @@ StringComparison.OrdinalIgnoreCase)
         pdfUrl = cv is not null && WebHost.WebRootFileProvider.GetFileInfo("downloads/cv.pdf").Exists
             ? VersionedAsset("/downloads/cv.pdf")
             : null;
-        constellationJson = cvView is { SkillGroups.Count: > 0 }
+        constellationJson = cvView is { ConstellationGroups.Count: > 0 }
             ? JsonSerializer.Serialize(
                 new { groups = cvView.ConstellationGroups, assignments = cvView.Assignments.Select(item => new { item.Title, item.Keywords }) },
                 JsonSerializerOptions.Web)
