@@ -24,6 +24,7 @@ export interface SkillEdge {
   readonly a: number;
   readonly b: number;
   readonly strong: boolean;
+  readonly weight?: number;
 }
 
 const MAX_STRONG_EDGES = 70;
@@ -72,25 +73,36 @@ export const nodesMatchingQuery = (nodes: readonly SkillNode[], query: string): 
  * Strong edges join technologies that were used together in at least two assignments.
  * Weak edges chain neighbours inside a group so every node stays connected.
  */
-export const buildEdges = (nodes: readonly SkillNode[], assignments: readonly AssignmentKeywords[]): SkillEdge[] => {
-  const pairCounts = new Map<string, number>();
+const countCooccurrences = (
+  nodes: readonly SkillNode[],
+  assignments: readonly AssignmentKeywords[]
+): Map<string, number> => {
+  const counts = new Map<string, number>();
   for (const assignment of assignments) {
     const matched = [...nodesMatching(nodes, assignment.keywords)].sort((a, b) => a - b);
     for (let i = 0; i < matched.length; i++) {
       for (let j = i + 1; j < matched.length; j++) {
         const key = `${matched[i]}:${matched[j]}`;
-        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
       }
     }
   }
+  return counts;
+};
 
+export interface ConstellationGraph {
+  readonly edges: SkillEdge[];
+  readonly anchorCandidates: SkillEdge[];
+}
+
+const buildRenderedEdges = (nodes: readonly SkillNode[], pairCounts: ReadonlyMap<string, number>): SkillEdge[] => {
   const strong = [...pairCounts.entries()]
     .filter(([, count]) => count >= 2)
     .sort((left, right) => right[1] - left[1])
     .slice(0, MAX_STRONG_EDGES)
-    .map(([key]) => {
+    .map(([key, weight]) => {
       const [a, b] = key.split(':').map(Number);
-      return { a, b, strong: true } satisfies SkillEdge;
+      return { a, b, strong: true, weight } satisfies SkillEdge;
     });
 
   const seen = new Set(strong.map(edge => `${edge.a}:${edge.b}`));
@@ -102,6 +114,31 @@ export const buildEdges = (nodes: readonly SkillNode[], assignments: readonly As
   }
   return [...strong, ...weak];
 };
+
+const buildAnchorCandidatesFromCounts = (pairCounts: ReadonlyMap<string, number>): SkillEdge[] =>
+  [...pairCounts.entries()].map(([key, weight]) => {
+    const [a, b] = key.split(':').map(Number);
+    return { a, b, strong: weight >= 2, weight };
+  });
+
+export const buildConstellationGraph = (
+  nodes: readonly SkillNode[],
+  assignments: readonly AssignmentKeywords[]
+): ConstellationGraph => {
+  const pairCounts = countCooccurrences(nodes, assignments);
+  return {
+    edges: buildRenderedEdges(nodes, pairCounts),
+    anchorCandidates: buildAnchorCandidatesFromCounts(pairCounts)
+  };
+};
+
+export const buildAnchorCandidates = (
+  nodes: readonly SkillNode[],
+  assignments: readonly AssignmentKeywords[]
+): SkillEdge[] => buildAnchorCandidatesFromCounts(countCooccurrences(nodes, assignments));
+
+export const buildEdges = (nodes: readonly SkillNode[], assignments: readonly AssignmentKeywords[]): SkillEdge[] =>
+  buildRenderedEdges(nodes, countCooccurrences(nodes, assignments));
 
 export const parseConstellationData = (json: string | undefined): ConstellationData | null => {
   if (!json) return null;

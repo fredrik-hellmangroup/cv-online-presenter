@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildAnchorCandidates,
   buildEdges,
   matchesSkill,
   nodesMatching,
@@ -54,6 +55,19 @@ test('nodes are flattened in group order and matched by keyword or query', () =>
   assert.deepEqual([...nodesMatching(nodes, ['SQL', 'Kubernetes'])], [3, 6]);
   assert.deepEqual([...nodesMatchingQuery(nodes, 'azure')], [4, 5]);
   assert.equal(nodesMatchingQuery(nodes, '  ').size, 0);
+});
+
+test('anchor candidates retain co-occurrence counts for strongest-partner selection', () => {
+  const nodes = toNodes([{ name: 'Tech', skills: ['A', 'B', 'C'] }]);
+  const candidates = buildAnchorCandidates(nodes, [
+    { title: '1', keywords: ['A', 'B'] },
+    { title: '2', keywords: ['A', 'B'] },
+    { title: '3', keywords: ['A', 'C'] }
+  ]);
+  assert.deepEqual(candidates.find(edge => edge.a === 0 && edge.b === 1),
+    { a: 0, b: 1, strong: true, weight: 2 });
+  assert.deepEqual(candidates.find(edge => edge.a === 0 && edge.b === 2),
+    { a: 0, b: 2, strong: false, weight: 1 });
 });
 
 test('technologies used together in two assignments get a strong edge', () => {

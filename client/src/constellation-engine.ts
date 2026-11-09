@@ -54,14 +54,14 @@ import {
 } from './constellation-motes.js';
 import type { Mote } from './constellation-motes.js';
 import {
-  buildEdges,
+  buildConstellationGraph,
   nodesMatching,
   nodesMatchingQuery,
   parseConstellationData,
   toNodes
 } from './skills.js';
 import type { SkillEdge, SkillNode } from './skills.js';
-import { constellationEdgeStyle, routeConstellationEdges } from './constellation-edges.js';
+import { constellationAnchorAlphaFloor, constellationEdgeStyle, routeConstellationEdges } from './constellation-edges.js';
 import { CONSTELLATION_SEED_KEY, resolveConstellationSession, seededRandom } from './constellation-session.js';
 import type { RoutedConstellationEdge } from './constellation-edges.js';
 import type { ConstellationSession } from './constellation-session.js';
@@ -247,7 +247,7 @@ export class ConstellationEngine implements ExperienceEngine {
     const nodes = toNodes(data.groups);
     if (nodes.length < 2) return;
 
-    const edges = buildEdges(nodes, data.assignments);
+    const { edges, anchorCandidates } = buildConstellationGraph(nodes, data.assignments);
     const usage = usageCounts(nodes, data.assignments);
     const otherGroup = data.groups.find(group => group.isOther === true);
     const otherName = otherGroup?.name ?? 'Övrigt';
@@ -279,6 +279,7 @@ export class ConstellationEngine implements ExperienceEngine {
     let visibleIndices = new Set<number>();
     let hiddenSortedByUsage: number[] = [];
     let renderEdges: RoutedConstellationEdge[] = [];
+    const visibleTechEdgeAlphas: number[] = [];
     let bubble: Bubble | null = null;
     let popIndices = new Set<number>();
     let focusedPopIndices = new Set<number>();
@@ -743,7 +744,9 @@ export class ConstellationEngine implements ExperienceEngine {
       bodies.forEach((body, index) => {
         if (body.popTarget || body.popAlpha > 0) popped.add(index);
       });
-      renderEdges = routeConstellationEdges(edges, nodes, bodies, visibleIndices, popped, bubble !== null, bubble ?? undefined);
+      renderEdges = routeConstellationEdges(
+        edges, nodes, bodies, visibleIndices, popped, bubble !== null, bubble ?? undefined, anchorCandidates
+      );
     };
 
     const finishIntro = () => {
@@ -1179,6 +1182,25 @@ export class ConstellationEngine implements ExperienceEngine {
         if (index < 0) return bubble ? { x: bubble.x, y: bubble.y, glow: bubble.glow } : null;
         return { x: bodies[index].x, y: bodies[index].y, glow: bodies[index].glow };
       };
+      visibleTechEdgeAlphas.length = 0;
+      for (const edge of renderEdges) {
+        if (edge.a < 0 || edge.b < 0) continue;
+        const from = bodies[edge.a];
+        const to = bodies[edge.b];
+        if (!from || !to || from.x < 0 || from.x > width || from.y < 0 || from.y > height
+          || to.x < 0 || to.x > width || to.y < 0 || to.y > height) continue;
+        const alphaFade = Math.min(from.introAlpha, to.introAlpha);
+        if (alphaFade <= 0) continue;
+        const lit = Math.min(from.glow, to.glow);
+        visibleTechEdgeAlphas.push(constellationEdgeStyle(edge, lit).alpha * alphaFade);
+      }
+      visibleTechEdgeAlphas.sort((a, b) => a - b);
+      const middle = Math.floor(visibleTechEdgeAlphas.length / 2);
+      const medianAlpha = visibleTechEdgeAlphas.length === 0 ? 0
+        : visibleTechEdgeAlphas.length % 2 === 0
+          ? (visibleTechEdgeAlphas[middle - 1] + visibleTechEdgeAlphas[middle]) / 2
+          : visibleTechEdgeAlphas[middle];
+      const anchorFloor = constellationAnchorAlphaFloor(medianAlpha, root.dataset.theme === 'light');
       for (const edge of renderEdges) {
         const from = endpoint(edge.a);
         const to = endpoint(edge.b);
@@ -1187,7 +1209,7 @@ export class ConstellationEngine implements ExperienceEngine {
         const fromIntro = edge.a < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.a].introAlpha;
         const toIntro = edge.b < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.b].introAlpha;
         const alphaFade = Math.min(fromIntro, toIntro);
-        const style = constellationEdgeStyle(edge, lit);
+        const style = constellationEdgeStyle(edge, lit, anchorFloor);
         context.strokeStyle = `rgba(${colour}, ${style.alpha * alphaFade})`;
         context.lineWidth = style.width;
         context.beginPath();
