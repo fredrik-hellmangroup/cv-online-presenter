@@ -49,6 +49,11 @@ for (const route of routes) {
       }));
       expect(dimensions.content, `${route} overflows at ${width}px`).toBeLessThanOrEqual(dimensions.viewport);
     }
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto(route);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const enlarged = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(enlarged, `${route} overflows with 200% text at 1024px`).toBeLessThanOrEqual(0);
   });
 
   test(`${route} theme toggle works and both themes pass contrast audits`, async ({ page }) => {
@@ -189,6 +194,40 @@ test('/cv constellation background respects reduced motion', async ({ page }) =>
     return !changedDuringObservation && observationSamples >= 6;
   }, { intervals: [100], timeout: 1_500 }).toBe(true);
 });
+
+for (const width of [375, 1440]) {
+  test(`/cv puts text on opaque surfaces in both themes at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width < 700 ? 812 : 900 });
+    await page.goto('/cv');
+    const themeToggle = page.getByRole('button', { name: 'Växla tema' });
+    await expect(themeToggle).toBeVisible();
+    for (const theme of ['dark', 'light']) {
+      if (await page.locator('html').getAttribute('data-theme') !== theme) await themeToggle.click();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await settled(page);
+      const surfaces = await page.locator('.site-header, .assignment, .skill-group, .cv-figures > div, .cv-roles li, #cv-toc, .cv-hero-copy > *, article.cv > h2, .skill-groups-title, footer')
+        .evaluateAll(elements => elements.map(element => ({
+          name: `${element.tagName.toLowerCase()}.${element.className || element.id}`,
+          alpha: (getComputedStyle(element).backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1].split(',')[3] ?? '1').trim()
+        })));
+      expect(surfaces.length).toBeGreaterThan(0);
+      expect(surfaces.filter(surface => Number(surface.alpha) < 1), theme).toEqual([]);
+      if (width < 700) expect(Number(await page.locator('#constellation-field').evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
+    }
+    if (width >= 700) {
+      const headings = await page.locator('article.cv > h2').evaluateAll(elements => elements.map(element => ({
+        width: element.getBoundingClientRect().width,
+        column: element.parentElement.getBoundingClientRect().width,
+        rule: parseFloat(getComputedStyle(element, '::before').width)
+      })));
+      expect(headings.length).toBeGreaterThan(0);
+      for (const heading of headings) {
+        expect(heading.width, 'the heading surface hugs its words').toBeLessThan(heading.column);
+        expect(heading.rule, 'the section rule still spans the column').toBeCloseTo(heading.column, 0);
+      }
+    }
+  });
+}
 
 test('/cv constellation reacts to hovering an assignment and runs without errors', async ({ page, browserName }) => {
   if (browserName !== 'chromium') test.skip();

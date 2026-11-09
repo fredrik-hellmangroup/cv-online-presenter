@@ -65,8 +65,8 @@ const MAX_PIXEL_RATIO = 1.5;
 const MAX_PACKETS = 40;
 const AMBIENT_GLOW = 0.38;
 const DIM_GLOW = 0.07;
+// Keep in sync with the narrow-screen media query in site.css.
 const NARROW_VIEWPORT = 700;
-const NARROW_LABEL_ALPHA = 0.34;
 const POINTER_RADIUS = 190;
 // Ambient dust reacts to the cursor and to highlighted technologies within these distances.
 const MOTE_POINTER_RADIUS = 160;
@@ -102,6 +102,9 @@ const HOME_EASE = 0.005;
 
 export const shouldAnimateConstellation = (reducedMotion: boolean, documentVisible: boolean): boolean =>
   !reducedMotion && documentVisible;
+
+// A narrow screen has no clear space beside the text, so technology names would be drawn behind the copy.
+export const shouldDrawConstellationLabels = (viewportWidth: number): boolean => viewportWidth >= NARROW_VIEWPORT;
 
 const keywordsOf = (target: EventTarget | null): string[] | null => {
   const element = target instanceof Element ? target.closest('[data-keywords], [data-skill]') : null;
@@ -424,8 +427,7 @@ export class ConstellationEngine implements ExperienceEngine {
 
     const draw = () => {
       context.clearRect(0, 0, width, height);
-      // Behind the content of a narrow screen the labels need a little more strength than on a wide one to be read.
-      const restingLabelAlpha = isNarrow() ? Math.max(labelAlpha, NARROW_LABEL_ALPHA) : labelAlpha;
+      const drawLabels = shouldDrawConstellationLabels(width);
       drawMotes();
 
       for (const edge of edges) {
@@ -473,7 +475,8 @@ export class ConstellationEngine implements ExperienceEngine {
         context.beginPath();
         context.arc(body.x, body.y, NODE_BASE_RADIUS + body.glow * NODE_GLOW_RADIUS, 0, TAU);
         context.fill();
-        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, restingLabelAlpha + body.glow * 0.8)})`;
+        if (!drawLabels) continue;
+        context.fillStyle = `rgba(${labelColour}, ${Math.min(1, labelAlpha + body.glow * 0.8)})`;
         context.fillText(body.name, body.x, body.y - 12);
       }
     };

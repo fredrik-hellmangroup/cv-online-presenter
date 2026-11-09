@@ -84,6 +84,38 @@ body::before {
   pointer-events: none;
 }
 
+/* The constellation moves behind the copy, so no text may sit on translucent glass: every card and sticky bar is
+   opaque, and free-standing text gets a soft page-coloured surface (WCAG 1.4.3). The surface list mirrors
+   SURFACE_SELECTOR in constellation-engine.ts. */
+:root, :root[data-theme="light"] { --surface: var(--surface-solid); --header-bg: var(--page-bg); }
+main :is(h1, h2, h3, h4, p, dl, ul, .breadcrumb, .tech-count, .page-hero-actions):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc)),
+footer {
+  background: var(--page-bg);
+  box-shadow: 0 0 1.75rem 1.25rem var(--page-bg);
+}
+
+/* A heading's surface only hugs its words, so the constellation stays visible in the empty space beside it. The
+   section rule above an h2 still spans the whole column. */
+main :is(h1, h2, h3, h4):not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *) {
+  width: fit-content;
+  max-width: 100%;
+}
+main :has(> h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *)) { container-type: inline-size; }
+main h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *) { position: relative; border-top: 0; }
+main h2:not(.visually-hidden):not(:is(.project-card, .assignment, .skill-group, .contact-card, .git-graph, .cv-figures > div, .page-hero-panel, .practical > div, .project-facts > div, .project-detail > section, .service-cv-cta, .cv-toc) *)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100cqi;
+  border-top: 1px solid var(--line);
+}
+
+/* Narrow screens (matches NARROW_VIEWPORT in constellation-engine.ts): the constellation is subdued as well. */
+@media (max-width: 699.98px) {
+  #constellation-field { opacity: .55; }
+}
+
 header, main, footer { position: relative; z-index: 1; width: min(100% - 2rem, 72rem); margin-inline: auto; }
 
 a { color: var(--link); text-underline-offset: .2em; }
@@ -115,6 +147,8 @@ button:hover { border-color: var(--accent); box-shadow: 0 0 1.5rem -.25rem var(-
   gap: .75rem 1.5rem;
   padding-block: 1.25rem;
   border-top: .2rem solid var(--season-accent);
+  background: var(--header-bg);
+  box-shadow: 0 0 1.75rem 1.25rem var(--header-bg);
 }
 .brand-wrap { display: flex; align-items: center; gap: .75rem; }
 .brand { display: inline-flex; align-items: center; min-width: 1.5rem; min-height: 1.5rem; font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; text-decoration: none; color: var(--text); }
@@ -133,7 +167,7 @@ article { max-width: 56rem; min-width: 0; }
 
 /* Start page: a quiet title so the constellation behind it is the focus. */
 main.home { min-height: calc(100svh - 11rem); display: grid; align-content: center; }
-main.home h1 { font-size: clamp(2.75rem, 8vw, 5.5rem); margin-bottom: 1.25rem; }
+main.home h1 { font-size: clamp(2.75rem, 8vw, 5.5rem); margin-inline: auto; margin-bottom: 1.25rem; }
 main.home article:not(.cv) > h1 + p {
   margin: 1rem auto 0;
   font-family: var(--font-display);
@@ -154,7 +188,7 @@ main.home h1::after { margin-inline: auto; background: linear-gradient(90deg, tr
 :root:has(main.home) nav { justify-content: center; }
 /* Sub pages: centered column and hero (title, accent rule, lead), left-aligned body text for readability. */
 main:not(.home) article:not(.cv) { margin-inline: auto; }
-main:not(.home) article:not(.cv) > h1 { text-align: center; }
+main:not(.home) article:not(.cv) > h1 { margin-inline: auto; text-align: center; }
 main:not(.home) article:not(.cv) > h1::after { margin-inline: auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
 main:not(.home) article:not(.cv) > h1 + p { margin-inline: auto; text-align: center; }
 main:not(.home) .contact-card { margin-inline: auto; }
@@ -249,7 +283,7 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 .easter-egg p { margin: 0; }
 
 @media (min-width: 64rem) {
-  .site-header { position: sticky; top: 0; z-index: 20; width: 100%; padding-inline: max(1rem, calc((100% - 72rem) / 2)); background: var(--header-bg); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .site-header { position: sticky; top: 0; z-index: 20; width: 100%; padding-inline: max(1rem, calc((100% - 72rem) / 2)); background: var(--header-bg); box-shadow: none; backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
   .page-layout:has(#cv-toc:not([hidden])) { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: 4rem; }
   .cv-toc { position: sticky; top: 7rem; align-self: start; padding: 1rem 1rem 1rem .5rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); backdrop-filter: blur(10px); }
 }
@@ -322,7 +356,7 @@ footer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding
 .cv-figures > div { display: flex; flex-direction: column; }
 
 /* ---------- Skill chips ---------- */
-.skill-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-block: 1.5rem; }
+.skill-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; margin-block: 1.5rem; }
 .skill-groups-title { grid-column: 1 / -1; margin: 0; font-family: var(--font-mono); font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .skill-group { position: relative; overflow: hidden; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 1.1rem; background: var(--surface); backdrop-filter: blur(10px); transition: border-color .25s; }
 .skill-group:hover, .skill-group:focus-within { border-color: rgba(var(--particle-rgb), .6); }
@@ -522,6 +556,7 @@ main.home { min-height: calc(100svh - 12rem); }
   html, body { background: #fff !important; color: #111; }
   body::before, #constellation-field, .site-header, footer, #cv-toc, #cv-search, #easter-egg, .cv-actions, .skip-link, .tech-hint { display: none !important; }
   main { padding: 0; max-width: none; }
+  main * { box-shadow: none !important; }
   .page-layout { display: block !important; }
   .assignment, .skill-group, .cv-figures > div, .practical > div { break-inside: avoid; box-shadow: none; backdrop-filter: none; background: #fff; }
   .assignment { padding: .7rem 1rem; margin: .5rem 0; width: auto; }
