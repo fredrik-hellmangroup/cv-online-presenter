@@ -21,6 +21,7 @@ export type LabelRect = Area;
 export const LABEL_HEIGHT = 26;
 export const LABEL_PADDING = 10;
 export const WOBBLE = 9;
+export const BUBBLE_DOT_CLEARANCE = 28;
 /** A node counts as covered when this point, just above its dot, is inside a text block or a card. */
 export const PROBE_OFFSET = 6;
 
@@ -39,16 +40,17 @@ export const effectiveObstacles = (rects: readonly Area[], allowedOverlap: numbe
   });
 
 /** The shortest move that takes a point out of the rectangle it is inside, or null when it is in none. */
-export const exitVector = (x: number, y: number, rects: readonly Area[]): Vector | null => {
+export const exitVector = (x: number, y: number, rects: readonly Area[], padding = 0): Vector | null => {
   let best: Vector | null = null;
   let bestDistance = Infinity;
   for (const rect of rects) {
-    if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) continue;
+    if (x <= rect.left - padding || x >= rect.right + padding
+      || y <= rect.top - padding || y >= rect.bottom + padding) continue;
     const options: Vector[] = [
-      { dx: rect.left - x, dy: 0 },
-      { dx: rect.right - x, dy: 0 },
-      { dx: 0, dy: rect.top - y },
-      { dx: 0, dy: rect.bottom - y }
+      { dx: rect.left - padding - x, dy: 0 },
+      { dx: rect.right + padding - x, dy: 0 },
+      { dx: 0, dy: rect.top - padding - y },
+      { dx: 0, dy: rect.bottom + padding - y }
     ];
     for (const option of options) {
       const distance = Math.abs(option.dx) + Math.abs(option.dy);
@@ -71,6 +73,153 @@ export const labelRectAt = (point: Point, half: number, height = LABEL_HEIGHT): 
 export const labelOverlapArea = (first: LabelRect, second: LabelRect): number =>
   Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
   * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+
+/** Finds the shortest translation that takes a label rectangle out of every obstacle. */
+export const labelExitVector = (
+  point: Point,
+  half: number,
+  labelOffset: number,
+  rects: readonly Area[],
+  gap = 4
+): Vector | null => {
+  const label = labelRectAt({ x: point.x, y: point.y - labelOffset }, half);
+  let best: Vector | null = null;
+  let bestDistance = Infinity;
+  for (const rect of rects) {
+    if (labelOverlapArea(label, rect) === 0) continue;
+    const left = rect.left - gap - label.right;
+    const right = rect.right + gap - label.left;
+    const top = rect.top - gap - label.bottom;
+    const bottom = rect.bottom + gap - label.top;
+    const leftDistance = Math.abs(left);
+    if (leftDistance < bestDistance) { best = { dx: left, dy: 0 }; bestDistance = leftDistance; }
+    const rightDistance = Math.abs(right);
+    if (rightDistance < bestDistance) { best = { dx: right, dy: 0 }; bestDistance = rightDistance; }
+    const topDistance = Math.abs(top);
+    if (topDistance < bestDistance) { best = { dx: 0, dy: top }; bestDistance = topDistance; }
+    const bottomDistance = Math.abs(bottom);
+    if (bottomDistance < bestDistance) { best = { dx: 0, dy: bottom }; bestDistance = bottomDistance; }
+  }
+  return best;
+};
+
+export interface OrbitSlot extends Point {
+  readonly radius: number;
+}
+
+const ORBIT_INNER_RADIUS = 38;
+const ORBIT_RADIAL_STEP = 50;
+const ORBIT_RADIUS_GAP = 12;
+const ORBIT_LABEL_GAP = 2;
+const ORBIT_ANGLE_COUNT = 24;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const MAX_ORBIT_SLOTS = 12;
+const MAX_MOBILE_ORBIT_SLOTS = 6;
+
+/** Finds outward-spreading, on-screen label slots around a floating cluster anchor. */
+export const orbitSlots = (
+  area: Area,
+  center: Point,
+  halfWidths: readonly number[],
+  obstacles: readonly Area[],
+  occupiedLabels: readonly LabelRect[],
+  maxRadius = (area.bottom - area.top) * 1.1
+): OrbitSlot[] => {
+  const taken = [...occupiedLabels];
+  const slots: OrbitSlot[] = [];
+  let previousRadius = 0;
+  const radiusLimit = Math.max(0, maxRadius);
+
+  const slotLimit = area.right - area.left < 700 ? MAX_MOBILE_ORBIT_SLOTS : MAX_ORBIT_SLOTS;
+  for (let index = 0; index < Math.min(halfWidths.length, slotLimit); index++) {
+    const half = halfWidths[index];
+    const minimumRadius = Math.max(
+      ORBIT_INNER_RADIUS + ORBIT_RADIAL_STEP * Math.sqrt(index),
+      previousRadius + ORBIT_RADIUS_GAP
+    );
+    let selected: OrbitSlot | null = null;
+
+    for (let radius = minimumRadius; radius <= radiusLimit && !selected; radius += ORBIT_RADIUS_GAP) {
+      for (let attempt = 0; attempt < ORBIT_ANGLE_COUNT; attempt++) {
+        const angle = index * GOLDEN_ANGLE + attempt * Math.PI * 2 / ORBIT_ANGLE_COUNT;
+        const x = center.x + Math.cos(angle) * radius;
+        const y = center.y + Math.sin(angle) * radius;
+        if (x - half < area.left || x + half > area.right
+          || y - LABEL_HEIGHT < area.top || y > area.bottom
+          || exitVector(x, y - PROBE_OFFSET, obstacles) !== null) continue;
+
+        const label = {
+          left: x - half - ORBIT_LABEL_GAP,
+          top: y - LABEL_HEIGHT - ORBIT_LABEL_GAP,
+          right: x + half + ORBIT_LABEL_GAP,
+          bottom: y + ORBIT_LABEL_GAP
+        };
+        if (obstacles.some(obstacle => labelOverlapArea(label, obstacle) > 0)
+          || taken.some(other => labelOverlapArea(label, other) > 0)) continue;
+        selected = { x, y, radius };
+        break;
+      }
+    }
+
+    if (!selected) break;
+    slots.push(selected);
+    taken.push(labelRectAt(selected, half));
+    previousRadius = selected.radius;
+  }
+  return slots;
+};
+
+/** Finds a collision-free label point for the floating bubble, below the page header. */
+export const scatterBubblePoint = (
+  area: Area,
+  half: number,
+  headerBottom: number,
+  obstacles: readonly Area[],
+  occupiedLabels: readonly LabelRect[],
+  occupiedPoints: readonly Point[],
+  orbitHalfWidths: readonly number[],
+  random: () => number = Math.random,
+  tries = 200
+): Point => {
+  const left = Math.min(area.right - half, area.left + half + WOBBLE);
+  const right = Math.max(left, area.right - half - WOBBLE);
+  const top = Math.max(area.top + LABEL_HEIGHT + WOBBLE, headerBottom + LABEL_HEIGHT + 2);
+  const bottom = Math.max(top, area.bottom - 15);
+  let best: Point = { x: left, y: top };
+  let bestScore = -Infinity;
+  let bestValid = false;
+  const revealWidths = orbitHalfWidths.slice(0, 12);
+  const maximumCapacity = revealWidths.length;
+
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const point = {
+      x: left + random() * (right - left),
+      y: top + random() * (bottom - top)
+    };
+    const label = labelRectAt(point, half);
+    let overlap = 0;
+    for (const obstacle of obstacles) overlap += labelOverlapArea(label, obstacle);
+    for (const other of occupiedLabels) overlap += labelOverlapArea(label, other);
+    const dotY = point.y + 15;
+    const dotClearance = BUBBLE_DOT_CLEARANCE;
+    const nodeDotClearance = 12;
+    const dotBlocked = obstacles.some(obstacle =>
+      point.x + dotClearance > obstacle.left && point.x - dotClearance < obstacle.right
+      && dotY + dotClearance > obstacle.top && dotY - dotClearance < obstacle.bottom
+    ) || occupiedPoints.some(other => Math.hypot(point.x - other.x, dotY - other.y) < nodeDotClearance);
+    const valid = !dotBlocked && overlap === 0;
+    if (!valid && bestValid) continue;
+    const capacity = orbitSlots(area, { x: point.x, y: dotY }, revealWidths, obstacles, [...occupiedLabels, label]).length;
+    const score = (valid ? 1_000_000 : 0) + capacity * 1000 - overlap;
+    if (score > bestScore) {
+      best = point;
+      bestScore = score;
+      bestValid = valid;
+      if (valid && capacity === maximumCapacity) return point;
+    }
+  }
+  return best;
+};
 
 /**
  * Picks a random position for a node: inside the area (the node, its label and its drift stay inside),
@@ -101,6 +250,7 @@ export const scatterPoint = (
     const nearest = taken.reduce((shortest, point) => Math.min(shortest, Math.hypot(point.x - x, point.y - y)), Infinity);
     const label = { left: x - half, top: y - LABEL_HEIGHT, right: x + half, bottom: y };
     let overlap = 0;
+    for (const obstacle of obstacles) overlap += labelOverlapArea(label, obstacle);
     for (const other of takenLabels) {
       const overlapWidth = Math.max(0, Math.min(label.right, other.right) - Math.max(label.left, other.left));
       const overlapHeight = Math.max(0, Math.min(label.bottom, other.bottom) - Math.max(label.top, other.top));

@@ -23,7 +23,7 @@ test('usage counts each assignment once for every matching technology', () => {
 test('visible budget scales with usable label area and stays bounded', () => {
   assert.equal(visibleBudget({ width: 0, height: 0 }, 30), 6);
   assert.equal(visibleBudget({ width: 1392, height: 709 }, 103, 130, 30), 36);
-  assert.equal(visibleBudget({ width: 342, height: 656 }, 103, 112, 25.3), 11);
+  assert.equal(visibleBudget({ width: 342, height: 656 }, 103, 150, 25.3), 8);
   assert.equal(visibleBudget({ width: 5000, height: 3000 }, 11), 11);
   assert.equal(visibleBudget({ width: 5000, height: 3000 }, 0), 0);
 });
@@ -151,4 +151,15 @@ test('visible Övrigt nodes are assigned across the least-loaded regular cluster
   ];
   const assignments = assignClusterGroups(grouped, [0, 1, 3, 4], 3);
   assert.deepEqual(assignments.slice(3), [0, 1]);
+});
+
+
+test('a reveal batch never exceeds the number of available orbit slots', () => {
+  const ranking = [0, 1, 2, 3, 4, 5];
+  const narrow = revealNextBatch(createRevealState(), ranking, 3, 2);
+  assert.deepEqual(revealedIndices(narrow), [0, 1]);
+  const limited = revealNextBatch(createRevealState(), ranking, 3, 4);
+  assert.deepEqual(revealedIndices(limited), [0, 1, 2]);
+  const rotated = revealNextBatch(limited, ranking, 3, 4);
+  assert.deepEqual(revealedIndices(rotated), [3, 4, 5]);
 });

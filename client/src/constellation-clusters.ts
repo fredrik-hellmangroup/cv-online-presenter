@@ -103,13 +103,15 @@ export const revealNextBatch = (
   const reconciled = reconcileRevealState(state, hiddenRanking);
   const seen = new Set(reconciled.seen);
   const held = new Set(reconciled.held);
+  const capacity = Math.max(0, Math.floor(maxVisible));
+  const reservedCount = new Set([...held, ...protectedIndices]).size;
+  const available = Math.max(0, capacity - reservedCount);
   const next = hiddenRanking.filter(index => !seen.has(index) && !held.has(index))
-    .slice(0, Math.max(0, Math.floor(batchSize)));
+    .slice(0, Math.min(Math.max(0, Math.floor(batchSize)), available));
   if (next.length === 0) return reconciled;
 
   const batches = reconciled.batches.map(batch => [...batch]);
   batches.push(next);
-  const capacity = Math.max(next.length, Math.floor(maxVisible));
   const activeCount = () => new Set([...batches.flat(), ...held, ...protectedIndices]).size;
   while (batches.length > 1 && activeCount() > capacity) batches.shift();
   return {
