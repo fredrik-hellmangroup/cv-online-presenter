@@ -12,6 +12,7 @@ import {
   exitVector,
   labelRectAt,
   labelExitVector,
+  orbitCandidateWidths,
   orbitSlots,
   scatterBubblePoint,
   scatterPoint
@@ -800,9 +801,9 @@ export class ConstellationEngine implements ExperienceEngine {
         : []);
       if (bubble) baseOrbitLabels.push(labelRectAt({ x: bubble.x, y: bubble.y - 15 }, bubble.labelHalf));
       const capacity = bubble
-        ? orbitSlots(area, bubble, hiddenSortedByUsage.map(index => bodies[index].half), obstacles, baseOrbitLabels).length
+        ? orbitSlots(area, bubble, orbitCandidateWidths(area, hiddenSortedByUsage.map(index => bodies[index].half)), obstacles, baseOrbitLabels).length
         : 0;
-      popoutBudget = Math.min(hiddenSortedByUsage.length, capacity);
+      popoutBudget = Math.min(hiddenSortedByUsage.length, Math.max(Math.min(3, hiddenSortedByUsage.length), capacity));
       const limit = Math.min(width < NARROW_VIEWPORT ? POPOUT_MOBILE : POPOUT_DESKTOP, popoutBudget);
       const focusedPops = focus ? poppedOut(hiddenSortedByUsage, focus, limit) : { shown: [], remaining: 0 };
       moreMatches = focusedPops.remaining;
@@ -823,18 +824,20 @@ export class ConstellationEngine implements ExperienceEngine {
             orbitLabels.push(labelRectAt({ x: body.x, y: body.y }, body.half));
         }
       }
+      const orbitOrder = [...candidatePopIndices].sort((a, b) => bodies[b].half - bodies[a].half);
       const slots = bubble
-        ? orbitSlots(area, bubble, candidatePopIndices.map(index => bodies[index].half), obstacles, orbitLabels)
+        ? orbitSlots(area, bubble, orbitOrder.map(index => bodies[index].half), obstacles, orbitLabels)
         : [];
-      const activePopIndices = candidatePopIndices.slice(0, slots.length);
-      const activeSet = new Set(activePopIndices);
-      for (const index of candidatePopIndices.slice(slots.length)) {
+      const placedIndices = orbitOrder.slice(0, slots.length);
+      const activeSet = new Set(placedIndices);
+      for (const index of candidatePopIndices) {
+        if (activeSet.has(index)) continue;
         if (focusedPopIndices.has(index)) moreMatches++;
         else revealState = returnRevealedItem(revealState, index);
       }
       focusedPopIndices = new Set([...focusedPopIndices].filter(index => activeSet.has(index)));
       popIndices = activeSet;
-      const slotForNode = new Map(activePopIndices.map((index, slot) => [index, slots[slot]]));
+      const slotForNode = new Map(placedIndices.map((index, slot) => [index, slots[slot]]));
       for (const index of hiddenSortedByUsage) {
         const body = bodies[index];
         const shouldPop = activeSet.has(index);

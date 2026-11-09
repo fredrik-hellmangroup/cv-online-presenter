@@ -108,13 +108,19 @@ export interface OrbitSlot extends Point {
 }
 
 const ORBIT_INNER_RADIUS = 38;
-const ORBIT_RADIAL_STEP = 50;
-const ORBIT_RADIUS_GAP = 12;
+const ORBIT_RADIAL_STEP = 30;
+const ORBIT_RADIUS_GAP = 8;
 const ORBIT_LABEL_GAP = 2;
-const ORBIT_ANGLE_COUNT = 24;
+const ORBIT_ANGLE_COUNT = 36;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const MAX_ORBIT_SLOTS = 12;
 const MAX_MOBILE_ORBIT_SLOTS = 6;
+
+/** Orders labels widest-first and limits work to the viewport's orbit-slot budget. */
+export const orbitCandidateWidths = (area: Area, halfWidths: readonly number[]): number[] => {
+  const slotLimit = area.right - area.left < 700 ? MAX_MOBILE_ORBIT_SLOTS : MAX_ORBIT_SLOTS;
+  return [...halfWidths].sort((a, b) => b - a).slice(0, slotLimit);
+};
 
 /** Finds outward-spreading, on-screen label slots around a floating cluster anchor. */
 export const orbitSlots = (
@@ -188,7 +194,9 @@ export const scatterBubblePoint = (
   let best: Point = { x: left, y: top };
   let bestScore = -Infinity;
   let bestValid = false;
-  const revealWidths = orbitHalfWidths.slice(0, 12);
+  const firstBatchWidths = orbitCandidateWidths(area, orbitHalfWidths.slice(0, 3));
+  const maximumBatchCapacity = firstBatchWidths.length;
+  const revealWidths = orbitCandidateWidths(area, orbitHalfWidths);
   const maximumCapacity = revealWidths.length;
 
   for (let attempt = 0; attempt < tries; attempt++) {
@@ -209,13 +217,16 @@ export const scatterBubblePoint = (
     ) || occupiedPoints.some(other => Math.hypot(point.x - other.x, dotY - other.y) < nodeDotClearance);
     const valid = !dotBlocked && overlap === 0;
     if (!valid && bestValid) continue;
-    const capacity = orbitSlots(area, { x: point.x, y: dotY }, revealWidths, obstacles, [...occupiedLabels, label]).length;
-    const score = (valid ? 1_000_000 : 0) + capacity * 1000 - overlap;
+    const orbitCenter = { x: point.x, y: dotY };
+    const labels = [...occupiedLabels, label];
+    const batchCapacity = orbitSlots(area, orbitCenter, firstBatchWidths, obstacles, labels).length;
+    const capacity = orbitSlots(area, orbitCenter, revealWidths, obstacles, labels).length;
+    const score = (valid ? 1_000_000 : 0) + batchCapacity * 100_000 + capacity * 1000 - overlap;
     if (score > bestScore) {
       best = point;
       bestScore = score;
       bestValid = valid;
-      if (valid && capacity === maximumCapacity) return point;
+      if (valid && batchCapacity === maximumBatchCapacity) return point;
     }
   }
   return best;

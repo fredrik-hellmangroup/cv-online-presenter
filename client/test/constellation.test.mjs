@@ -19,6 +19,7 @@ import {
   labelOverlapArea,
   labelRectAt,
   labelExitVector,
+  orbitCandidateWidths,
   orbitSlots,
   scatterPoint,
   scatterBubblePoint
@@ -222,6 +223,14 @@ test('scattering keeps a dense set of labels collision-free when the area has ro
 });
 
 
+test('orbit candidate widths match reveal order and viewport slot limits', () => {
+  const widths = Array.from({ length: 20 }, (_, index) => index + 1);
+  assert.deepEqual(orbitCandidateWidths({ left: 0, top: 0, right: 1440, bottom: 900 }, widths),
+    [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9]);
+  assert.deepEqual(orbitCandidateWidths({ left: 0, top: 0, right: 390, bottom: 800 }, widths),
+    [20, 19, 18, 17, 16, 15]);
+});
+
 test('orbit slots derive a bounded reveal capacity and expand outward without label collisions', () => {
   const desktop = orbitSlots(
     { left: 0, top: 0, right: 1392, bottom: 709 },
@@ -270,7 +279,7 @@ test('bubble placement clears visible labels and click targets below the header'
   };
 
   const occupiedPoints = [{ x: 200, y: 250 }];
-  const orbitHalfWidths = Array.from({ length: 4 }, () => 40);
+  const orbitHalfWidths = [40, 55, 45, 120];
   const point = scatterBubblePoint(area, 63, 176, obstacles, occupied, occupiedPoints, orbitHalfWidths, random);
   const label = labelRectAt(point, 63);
   assert.ok(point.y - LABEL_HEIGHT > 176, 'the label stays below the header');
@@ -284,7 +293,10 @@ test('bubble placement clears visible labels and click targets below the header'
     dot.left < obstacle.right && dot.right > obstacle.left && dot.top < obstacle.bottom && dot.bottom > obstacle.top
   ), false, 'the bubble dot stays clear of click targets while drifting');
   assert.ok(Math.hypot(point.x - occupiedPoints[0].x, point.y + 15 - occupiedPoints[0].y) >= 12);
-  const capacity = orbitSlots(area, { x: point.x, y: point.y + 15 }, orbitHalfWidths, obstacles, [...occupied, label]).length;
+  const orbitLabels = [...occupied, label];
+  const batchSlots = orbitSlots(area, { x: point.x, y: point.y + 15 }, [55, 45, 40], obstacles, orbitLabels);
+  assert.equal(batchSlots.length, 3, 'bubble placement prioritizes space for the next usage-ranked batch');
+  const capacity = orbitSlots(area, { x: point.x, y: point.y + 15 }, orbitHalfWidths, obstacles, orbitLabels).length;
   assert.ok(capacity >= 3, `bubble location should provide at least three orbit slots, got ${capacity}`);
 });
 
