@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildAnchorCandidates,
   buildEdges,
   matchesSkill,
   nodesMatching,
@@ -9,15 +10,28 @@ import {
   toNodes
 } from '../wwwroot/js/skills.js';
 import {
+  BUBBLE_DOT_CLEARANCE,
   LABEL_HEIGHT,
   PROBE_OFFSET,
   WOBBLE,
   clampRange,
   effectiveObstacles,
   exitVector,
-  scatterPoint
+  labelOverlapArea,
+  labelRectAt,
+  labelExitVector,
+  orbitCandidateWidths,
+  orbitSlots,
+  scatterPoint,
+  scatterBubblePoint
 } from '../wwwroot/js/constellation-layout.js';
-import { shouldAnimateConstellation, shouldDrawConstellationLabels } from '../wwwroot/js/constellation-engine.js';
+import {
+  bubbleClickDisposition,
+  resolveMotionState,
+  shouldAnimateConstellation,
+  shouldSettleConstellationTransitions,
+  constellationLabelFontSize
+} from '../wwwroot/js/constellation-engine.js';
 
 const groups = [
   { name: 'Plattform', skills: ['.NET', 'C#', 'ASP.NET Core', 'SQL Server'] },
@@ -41,6 +55,19 @@ test('nodes are flattened in group order and matched by keyword or query', () =>
   assert.deepEqual([...nodesMatching(nodes, ['SQL', 'Kubernetes'])], [3, 6]);
   assert.deepEqual([...nodesMatchingQuery(nodes, 'azure')], [4, 5]);
   assert.equal(nodesMatchingQuery(nodes, '  ').size, 0);
+});
+
+test('anchor candidates retain co-occurrence counts for strongest-partner selection', () => {
+  const nodes = toNodes([{ name: 'Tech', skills: ['A', 'B', 'C'] }]);
+  const candidates = buildAnchorCandidates(nodes, [
+    { title: '1', keywords: ['A', 'B'] },
+    { title: '2', keywords: ['A', 'B'] },
+    { title: '3', keywords: ['A', 'C'] }
+  ]);
+  assert.deepEqual(candidates.find(edge => edge.a === 0 && edge.b === 1),
+    { a: 0, b: 1, strong: true, weight: 2 });
+  assert.deepEqual(candidates.find(edge => edge.a === 0 && edge.b === 2),
+    { a: 0, b: 2, strong: false, weight: 1 });
 });
 
 test('technologies used together in two assignments get a strong edge', () => {
@@ -144,16 +171,167 @@ test('constellation data is parsed defensively', () => {
   const parsed = parseConstellationData(JSON.stringify({ groups, assignments: [{ title: 'A', keywords: ['x'] }] }));
   assert.equal(parsed?.groups.length, 2);
   assert.equal(parsed?.assignments.length, 1);
+  const withOther = parseConstellationData(JSON.stringify({
+    groups: [...groups, { name: 'Övrigt', skills: ['Unsorted'], isOther: true }],
+    assignments: [{ title: 'A', keywords: ['x', null] }, null]
+  }));
+  assert.equal(withOther?.groups.at(-1)?.isOther, true);
+  assert.equal(withOther?.groups[0]?.isOther, undefined);
+  assert.deepEqual(withOther?.assignments, [{ title: 'A', keywords: ['x'] }]);
+  assert.equal(parseConstellationData(JSON.stringify({ groups: [{ name: 7, skills: ['x'] }] })), null);
 });
 
 
-test('reduced motion and hidden documents keep the constellation static', () => {
-  assert.equal(shouldAnimateConstellation(false, true), true);
-  assert.equal(shouldAnimateConstellation(true, true), false);
-  assert.equal(shouldAnimateConstellation(false, false), false);
+test('bubble interaction suppresses click-through but reveals only on a completed pointer click', () => {
+  assert.deepEqual(bubbleClickDisposition(false, 1, true), { suppress: true, reveal: false });
+  assert.deepEqual(bubbleClickDisposition(true, 0, true), { suppress: false, reveal: false });
+  assert.deepEqual(bubbleClickDisposition(true, 1, false), { suppress: true, reveal: false });
+  assert.deepEqual(bubbleClickDisposition(true, 1, true), { suppress: true, reveal: true });
 });
 
-test('technology labels are only drawn where there is room beside the text', () => {
-  for (const width of [320, 375, 390, 428, 699]) assert.equal(shouldDrawConstellationLabels(width), false, `${width}px`);
-  for (const width of [700, 768, 1440]) assert.equal(shouldDrawConstellationLabels(width), true, `${width}px`);
+test('motion state prioritizes reduced motion, then a saved choice, then the narrow-screen default', () => {
+  assert.equal(resolveMotionState(true, 'running', 1440), 'reduced');
+  assert.equal(resolveMotionState(false, 'running', 390), 'running');
+  assert.equal(resolveMotionState(false, 'paused', 1440), 'paused');
+  assert.equal(resolveMotionState(false, null, 699), 'paused');
+  assert.equal(resolveMotionState(false, null, 700), 'running');
+});
+
+test('motion transitions settle except for the initial paused state', () => {
+  assert.equal(shouldSettleConstellationTransitions('paused', true), false);
+  assert.equal(shouldSettleConstellationTransitions('paused', false), true);
+  assert.equal(shouldSettleConstellationTransitions('reduced', true), true);
+  assert.equal(shouldSettleConstellationTransitions('running', false), false);
+});
+
+test('only a running constellation in a visible document animates', () => {
+  assert.equal(shouldAnimateConstellation('running', true), true);
+  assert.equal(shouldAnimateConstellation('paused', true), false);
+  assert.equal(shouldAnimateConstellation('reduced', true), false);
+  assert.equal(shouldAnimateConstellation('running', false), false);
+});
+
+test('technology labels use a compact mobile font and remain enabled at every width', () => {
+  for (const width of [320, 375, 390, 428, 699]) assert.equal(constellationLabelFontSize(width), 11, `${width}px`);
+  for (const width of [700, 768, 1440]) assert.equal(constellationLabelFontSize(width), 13, `${width}px`);
+});
+
+
+test('scattering avoids overlapping occupied label rectangles when space is available', () => {
+  const occupied = [labelRectAt({ x: 200, y: 180 }, 50)];
+  const point = scatterPoint({ left: 20, top: 20, right: 380, bottom: 380 }, 45, [], [], seeded(123), 0, 100, occupied);
+  assert.equal(labelOverlapArea(labelRectAt(point, 45), occupied[0]), 0);
+});
+
+
+test('scattering keeps a dense set of labels collision-free when the area has room', () => {
+  const area = { left: 20, top: 20, right: 780, bottom: 580 };
+  const occupied = [];
+  for (let index = 0; index < 18; index++) {
+    const half = 28 + index % 4 * 8;
+    const point = scatterPoint(area, half, [], [], seeded(index + 31), 0, 500, occupied);
+    const label = labelRectAt(point, half);
+    assert.ok(occupied.every(other => labelOverlapArea(label, other) === 0), `label ${index} overlaps`);
+    occupied.push(label);
+  }
+});
+
+
+test('orbit candidate widths match reveal order and viewport slot limits', () => {
+  const widths = Array.from({ length: 20 }, (_, index) => index + 1);
+  assert.deepEqual(orbitCandidateWidths({ left: 0, top: 0, right: 1440, bottom: 900 }, widths),
+    [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9]);
+  assert.deepEqual(orbitCandidateWidths({ left: 0, top: 0, right: 390, bottom: 800 }, widths),
+    [20, 19, 18, 17, 16, 15]);
+});
+
+test('orbit slots derive a bounded reveal capacity and expand outward without label collisions', () => {
+  const desktop = orbitSlots(
+    { left: 0, top: 0, right: 1392, bottom: 709 },
+    { x: 1360, y: 697 },
+    Array.from({ length: 30 }, () => 55),
+    [],
+    [labelRectAt({ x: 1360, y: 682 }, 45)]
+  );
+  const mobile = orbitSlots(
+    { left: 0, top: 0, right: 342, bottom: 656 },
+    { x: 310, y: 644 },
+    Array.from({ length: 30 }, () => 50),
+    [],
+    [labelRectAt({ x: 310, y: 629 }, 44)]
+  );
+  assert.ok(desktop.length >= 9 && desktop.length <= 12, `desktop capacity ${desktop.length}`);
+  assert.ok(mobile.length >= 4 && mobile.length <= 6, `mobile capacity ${mobile.length}`);
+  for (const [slots, half, bubblePoint, bubbleHalf] of [
+    [desktop, 55, { x: 1360, y: 682 }, 45],
+    [mobile, 50, { x: 310, y: 629 }, 44]
+  ]) {
+    assert.ok(slots.every((slot, index) => index === 0 || slot.radius > slots[index - 1].radius));
+    for (let first = 0; first < slots.length; first++) {
+      const a = labelRectAt(slots[first], half);
+      assert.equal(labelOverlapArea(a, labelRectAt(bubblePoint, bubbleHalf)), 0);
+      for (let second = first + 1; second < slots.length; second++) {
+        assert.equal(labelOverlapArea(a, labelRectAt(slots[second], half)), 0);
+      }
+    }
+  }
+});
+
+
+test('bubble placement clears visible labels and click targets below the header', () => {
+  const area = { left: 24, top: 16, right: 366, bottom: 712 };
+  const obstacles = [
+    { left: 0, top: 0, right: 390, bottom: 176 },
+    { left: 16, top: 307, right: 181, bottom: 358 },
+    { left: 193, top: 307, right: 333, bottom: 358 }
+  ];
+  const occupied = [labelRectAt({ x: 220, y: 540 }, 65)];
+  let seed = 123456;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+
+  const occupiedPoints = [{ x: 200, y: 250 }];
+  const orbitHalfWidths = [40, 55, 45, 120];
+  const point = scatterBubblePoint(area, 63, 176, obstacles, occupied, occupiedPoints, orbitHalfWidths, random);
+  const label = labelRectAt(point, 63);
+  assert.ok(point.y - LABEL_HEIGHT > 176, 'the label stays below the header');
+  assert.equal(obstacles.some(obstacle => labelOverlapArea(label, obstacle) > 0), false);
+  assert.equal(occupied.some(other => labelOverlapArea(label, other) > 0), false);
+  const dot = {
+    left: point.x - BUBBLE_DOT_CLEARANCE, right: point.x + BUBBLE_DOT_CLEARANCE,
+    top: point.y + 15 - BUBBLE_DOT_CLEARANCE, bottom: point.y + 15 + BUBBLE_DOT_CLEARANCE
+  };
+  assert.equal(obstacles.some(obstacle =>
+    dot.left < obstacle.right && dot.right > obstacle.left && dot.top < obstacle.bottom && dot.bottom > obstacle.top
+  ), false, 'the bubble dot stays clear of click targets while drifting');
+  assert.ok(Math.hypot(point.x - occupiedPoints[0].x, point.y + 15 - occupiedPoints[0].y) >= 12);
+  const orbitLabels = [...occupied, label];
+  const batchSlots = orbitSlots(area, { x: point.x, y: point.y + 15 }, [55, 45, 40], obstacles, orbitLabels);
+  assert.equal(batchSlots.length, 3, 'bubble placement prioritizes space for the next usage-ranked batch');
+  const capacity = orbitSlots(area, { x: point.x, y: point.y + 15 }, orbitHalfWidths, obstacles, orbitLabels).length;
+  assert.ok(capacity >= 3, `bubble location should provide at least three orbit slots, got ${capacity}`);
+});
+
+test('bubble drift gets a shortest exit vector when its label overlaps an obstacle', () => {
+  const obstacle = { left: 100, top: 100, right: 200, bottom: 200 };
+  const point = { x: 150, y: 190 };
+  const exit = labelExitVector(point, 30, 15, [obstacle]);
+  assert.ok(exit);
+  assert.equal(labelOverlapArea(labelRectAt({ x: point.x + exit.dx, y: point.y + exit.dy - 15 }, 30), obstacle), 0);
+  assert.equal(labelExitVector({ x: 50, y: 50 }, 30, 15, [obstacle]), null);
+});
+
+
+test('padded obstacle checks keep the floating bubble away from click targets while drifting', () => {
+  const obstacle = { left: 100, top: 100, right: 200, bottom: 200 };
+  assert.equal(exitVector(215, 150, [obstacle]), null);
+  const exit = exitVector(215, 150, [obstacle], BUBBLE_DOT_CLEARANCE);
+  assert.ok(exit);
+  const next = { x: 215 + exit.dx, y: 150 + exit.dy };
+  assert.equal(next.x > obstacle.left - BUBBLE_DOT_CLEARANCE
+    && next.x < obstacle.right + BUBBLE_DOT_CLEARANCE
+    && next.y > obstacle.top - BUBBLE_DOT_CLEARANCE
+    && next.y < obstacle.bottom + BUBBLE_DOT_CLEARANCE, false);
 });

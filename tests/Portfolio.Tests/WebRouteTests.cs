@@ -72,6 +72,36 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task ServicesAndCvRenderAccessibleConstellationGroupControls()
+    {
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv!;
+
+        foreach (var path in new[] { "/services", "/cv" })
+        {
+            var html = WebUtility.HtmlDecode(await client.GetStringAsync(path));
+            var groupButtons = Regex.Matches(html, "<button[^>]*class=\"skill-group-btn\"[^>]*>.*?</button>", RegexOptions.Singleline);
+
+            Assert.Equal(cv.SkillGroups.Count, groupButtons.Count);
+            foreach (var group in cv.SkillGroups)
+            {
+                var button = groupButtons.Cast<Match>().Single(match =>
+                    match.Value.Contains($"data-group=\"{group.Name}\"", StringComparison.Ordinal));
+                Assert.Contains("aria-pressed=\"false\"", button.Value);
+                Assert.Contains($"<span class=\"skill-group-count\">{CvPresenter.TechnologyCount(group.Skills.Count)}</span>", button.Value);
+            }
+
+            if (html.Contains("id=\"constellation-data\"", StringComparison.Ordinal))
+                Assert.Contains("id=\"motion-toggle\"", html);
+        }
+
+        var services = WebUtility.HtmlDecode(await client.GetStringAsync("/services"));
+        Assert.Contains("class=\"constellation-legend\">Bakgrunden är en karta över teknikerna: varje prick är en teknik och linjerna binder ihop tekniker som använts i samma uppdrag. Välj ett område eller en teknik nedan så lyser de upp i kartan.</p>", services);
+
+        var cvHtml = await client.GetStringAsync("/cv");
+        Assert.Contains("data-pin-status", cvHtml);
+    }
+
+    [Fact]
     public async Task ServicesStartsWithATwoColumnHeroAndAPanelOfItsSections()
     {
         var html = await client.GetStringAsync("/services");
@@ -794,14 +824,84 @@ public sealed class WebRouteTests : IClassFixture<WebApplicationFactory<Program>
             builder.UseSetting("Content:PagesRoot", pagesRoot));
     }
 
+    [Fact]
+    public async Task ConstellationDataIsRenderedWhenOtherSkillsLimitHidesVisibleGroups()
+    {
+        var tempContentRoot = Path.Combine(Path.GetTempPath(), $"cv-constellation-{Guid.NewGuid():N}");
+        var pagesRoot = Path.Combine(tempContentRoot, "pages");
+        Directory.CreateDirectory(pagesRoot);
+
+        try
+        {
+            var fixturePagesRoot = Path.Combine(AppContext.BaseDirectory, "synthetic-presentation", "content", "pages");
+            foreach (var source in Directory.EnumerateFiles(fixturePagesRoot, "*", SearchOption.AllDirectories))
+            {
+                var destination = Path.Combine(pagesRoot, Path.GetRelativePath(fixturePagesRoot, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination);
+            }
+
+            var settings = new
+            {
+                supportedLocales = new[] { "sv-SE" },
+                contactEmail = "alex@example.invalid",
+                siteName = "Alex Exempel",
+                companyName = "Exempel Konsult AB",
+                siteUrl = "https://example.invalid",
+                techGroups = new[] { new { name = "Unused mapping", items = new[] { "Not assigned" } } },
+                otherSkills = new { limit = 0 },
+                techReview = new
+                {
+                    concepts = new[] { "TypeScript", "Node.js", "PostgreSQL", "API", "JavaScript", "HTML", "CSS", "SQLite", "Python", "GeoJSON" }
+                }
+            };
+            await File.WriteAllTextAsync(Path.Combine(tempContentRoot, "site.json"), JsonSerializer.Serialize(settings));
+
+            using var syntheticFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+                builder.UseSetting("Content:PagesRoot", pagesRoot));
+            using var syntheticClient = syntheticFactory.CreateClient();
+            var cv = syntheticFactory.Services.GetRequiredService<SiteContent>().Cv!;
+            var html = await syntheticClient.GetStringAsync("/");
+
+            Assert.Empty(cv.SkillGroups);
+            var other = Assert.Single(cv.ConstellationGroups, group => group.IsOther);
+            Assert.Equal(["REST"], other.Skills);
+            var encodedJson = Regex.Match(html, "id=\"constellation-data\" data-json=\"(?<json>[^\"]+)\"");
+            Assert.True(encodedJson.Success, "Constellation data should be emitted even when the visible skill groups are empty.");
+            using var json = JsonDocument.Parse(WebUtility.HtmlDecode(encodedJson.Groups["json"].Value));
+            var serializedOther = Assert.Single(json.RootElement.GetProperty("groups").EnumerateArray());
+            Assert.True(serializedOther.GetProperty("isOther").GetBoolean());
+            Assert.Equal(["REST"], serializedOther.GetProperty("skills").EnumerateArray().Select(skill => skill.GetString()));
+        }
+        finally
+        {
+            if (Directory.Exists(tempContentRoot)) Directory.Delete(tempContentRoot, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("/")]
     [InlineData("/cv")]
     public async Task EveryPageCarriesTheConstellationData(string path)
     {
         var html = await client.GetStringAsync(path);
+        var cv = factory.Services.GetRequiredService<SiteContent>().Cv!;
         Assert.Contains("id=\"constellation-data\"", html);
-        Assert.Contains("data-json=\"{&quot;groups&quot;", html);
+        var encodedJson = Regex.Match(html, "id=\"constellation-data\" data-json=\"(?<json>[^\"]+)\"");
+        Assert.True(encodedJson.Success, "The constellation data attribute should contain its serialized groups.");
+        using var json = JsonDocument.Parse(WebUtility.HtmlDecode(encodedJson.Groups["json"].Value));
+        var groups = json.RootElement.GetProperty("groups");
+
+        Assert.Equal(cv.ConstellationGroups.Count, groups.GetArrayLength());
+        for (var index = 0; index < cv.ConstellationGroups.Count; index++)
+        {
+            var expected = cv.ConstellationGroups[index];
+            var actual = groups[index];
+            Assert.Equal(expected.Name, actual.GetProperty("name").GetString());
+            Assert.Equal(expected.IsOther, actual.GetProperty("isOther").GetBoolean());
+            Assert.Equal(expected.Skills, actual.GetProperty("skills").EnumerateArray().Select(skill => skill.GetString()));
+        }
+        Assert.Equal(["assignments", "groups"], json.RootElement.EnumerateObject().Select(property => property.Name).Order());
     }
 
     private static WebApplicationFactory<Program> CreateReleaseFactory(string releasesRoot, string? activationToken = null) =>
