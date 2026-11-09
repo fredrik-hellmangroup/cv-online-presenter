@@ -61,6 +61,28 @@ import {
 } from './skills.js';
 import type { SkillEdge, SkillNode } from './skills.js';
 import { routeConstellationEdges } from './constellation-edges.js';
+import { CONSTELLATION_SEED_KEY, resolveConstellationSession, seededRandom } from './constellation-session.js';
+import type { ConstellationSession } from './constellation-session.js';
+
+const openSession = (): ConstellationSession => {
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+  let storedSeed: string | null = null;
+  try {
+    storedSeed = window.sessionStorage.getItem(CONSTELLATION_SEED_KEY);
+  } catch {
+    // Storage is optional; without it every page load plays the intro.
+  }
+  const session = resolveConstellationSession(
+    { storedSeed, navigationType: navigation?.type, referrer: document.referrer, origin: window.location.origin },
+    () => Math.floor(Math.random() * 0x100000000)
+  );
+  try {
+    window.sessionStorage.setItem(CONSTELLATION_SEED_KEY, String(session.seed));
+  } catch {
+    // Storage is optional.
+  }
+  return session;
+};
 
 interface Body extends SkillNode {
   hx: number;
@@ -252,6 +274,8 @@ export class ConstellationEngine implements ExperienceEngine {
     } catch {
       // Storage is optional.
     }
+    const session = openSession();
+    const placementRandom = seededRandom(session.seed);
     let state: MotionState = 'running';
     let motionInitialized = false;
     const pointer = { x: -9999, y: -9999 };
@@ -637,7 +661,7 @@ export class ConstellationEngine implements ExperienceEngine {
       const bubbleX = clampRange(area.right - bubbleHalf - 20, area.left + bubbleHalf, area.right - bubbleHalf);
       const bubbleY = clampRange(area.bottom - 12, area.top + LABEL_HEIGHT, area.bottom);
       const bubbleOrigin = { x: area.left + areaWidth() / 2 + 8, y: area.top + areaHeight() / 2 - 5 };
-      const animateIntro = firstLayout && !motion.matches;
+      const animateIntro = firstLayout && session.playIntro && !motion.matches;
       if (animateIntro) {
         introActive = true;
         introStart = performance.now();
@@ -662,7 +686,7 @@ export class ConstellationEngine implements ExperienceEngine {
         const earlier = previous[index];
         const isVisible = visibleIndices.has(index);
         const placement = earlier ?? share(scatterPoint(fittingRegion(cluster, half), half, obstacles,
-          isVisible ? taken : [], Math.random, 110, 100, isVisible ? takenLabels : []));
+          isVisible ? taken : [], placementRandom, 110, 100, isVisible ? takenLabels : []));
         const { u, v } = placement;
         const { hx, hy } = homeOf({ u, v, half, cluster });
         const remapped = earlier ? remapPoint(earlier) : null;
