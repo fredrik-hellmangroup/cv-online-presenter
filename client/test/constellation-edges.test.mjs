@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { routeConstellationEdges } from '../wwwroot/js/constellation-edges.js';
+import { constellationEdgeStyle, routeConstellationEdges } from '../wwwroot/js/constellation-edges.js';
 
 const edge = (a, b, strong = false) => ({ a, b, strong });
 const degreeCounts = (routed, nodeCount, bubbleVisible) => {
@@ -20,7 +20,7 @@ test('a visible node routes its hidden-only partner to the bubble', () => {
     [{ x: 10, y: 10 }, { x: 20, y: 20 }],
     new Set([0]), new Set(), true
   );
-  assert.deepEqual(routed, [{ a: -1, b: 0, strong: true, faint: true }]);
+  assert.deepEqual(routed, [{ a: -1, b: 0, strong: true, fallback: false }]);
 });
 
 test('popped endpoints use real nodes while still-hidden partners route to the bubble', () => {
@@ -31,19 +31,19 @@ test('popped endpoints use real nodes while still-hidden partners route to the b
     new Set([0]), new Set([1]), true
   );
   assert.deepEqual(routed, [
-    { a: 0, b: 1, strong: false, faint: false },
-    { a: -1, b: 1, strong: true, faint: true }
+    { a: 0, b: 1, strong: false, fallback: false },
+    { a: -1, b: 1, strong: true, fallback: false }
   ]);
 });
 
-test('an isolated technology gets a faint edge to its nearest visible category peer', () => {
+test('an isolated technology gets a fallback edge to its nearest visible category peer', () => {
   const routed = routeConstellationEdges(
     [edge(1, 2)],
     [{ name: 'Isolated', group: 0 }, { name: 'Peer', group: 0 }, { name: 'Other category', group: 1 }],
     [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 100, y: 0 }],
     new Set([0, 1, 2]), new Set(), false
   );
-  assert.ok(routed.some(current => current.a === 0 && current.b === 1 && current.faint));
+  assert.ok(routed.some(current => current.a === 0 && current.b === 1 && current.fallback));
 });
 
 test('all drawn technologies and the bubble have at least one routed edge', () => {
@@ -72,5 +72,15 @@ test('the bubble fallback edge connects to its nearest drawn technology', () => 
     new Set([0, 1]), new Set(), true,
     { x: 0, y: 0 }
   );
-  assert.ok(routed.some(current => current.a === -1 && current.b === 1 && current.faint));
+  assert.ok(routed.some(current => current.a === -1 && current.b === 1 && current.fallback));
+});
+
+test('fallback and routed bubble links use the normal unhighlighted edge baseline', () => {
+  const normal = constellationEdgeStyle({ strong: false, fallback: false }, 0);
+  const fallback = constellationEdgeStyle({ strong: false, fallback: true }, 0);
+  const highlightedNormal = constellationEdgeStyle({ strong: false, fallback: false }, 0.7);
+  const highlightedFallback = constellationEdgeStyle({ strong: false, fallback: true }, 0.7);
+  assert.deepEqual(normal, { alpha: 0.03, width: 1 });
+  assert.deepEqual(fallback, normal);
+  assert.deepEqual(highlightedFallback, highlightedNormal);
 });

@@ -5,10 +5,18 @@ export interface RoutedConstellationEdge {
   readonly a: number;
   readonly b: number;
   readonly strong: boolean;
-  readonly faint: boolean;
+  readonly fallback: boolean;
 }
 
-/** Routes hidden endpoints through the bubble and gives isolated drawn nodes a faint fallback link. */
+export const constellationEdgeStyle = (
+  edge: Pick<RoutedConstellationEdge, 'strong' | 'fallback'>,
+  lit: number
+): { alpha: number; width: number } => ({
+  alpha: edge.strong ? 0.05 + lit * 0.5 : 0.03 + lit * 0.18,
+  width: edge.strong && lit > 0.6 ? 1.4 : 1
+});
+
+/** Routes hidden endpoints through the bubble and gives isolated drawn nodes a visible fallback link. */
 export const routeConstellationEdges = (
   edges: readonly SkillEdge[],
   nodes: readonly SkillNode[],
@@ -20,14 +28,14 @@ export const routeConstellationEdges = (
 ): RoutedConstellationEdge[] => {
   const drawn = new Set([...visibleIndices, ...poppedIndices]);
   const routed = new Map<string, RoutedConstellationEdge>();
-  const add = (a: number, b: number, strong: boolean, faint: boolean) => {
+  const add = (a: number, b: number, strong: boolean, fallback: boolean) => {
     if (a === b || (a < 0 && b < 0)) return;
     const first = Math.min(a, b);
     const second = Math.max(a, b);
     const key = `${first}:${second}`;
     const current = routed.get(key);
-    if (!current || (current.faint && !faint) || (!current.strong && strong))
-      routed.set(key, { a: first, b: second, strong: current?.strong || strong, faint: current ? current.faint && faint : faint });
+    if (!current || (current.fallback && !fallback) || (!current.strong && strong))
+      routed.set(key, { a: first, b: second, strong: current?.strong || strong, fallback: current ? current.fallback && fallback : fallback });
   };
   const endpoint = (index: number): number => drawn.has(index) ? index : bubbleVisible ? -1 : -2;
 
@@ -35,7 +43,7 @@ export const routeConstellationEdges = (
     const a = endpoint(edge.a);
     const b = endpoint(edge.b);
     if (a === -2 || b === -2 || (a < 0 && b < 0)) continue;
-    add(a, b, edge.strong, a < 0 || b < 0);
+    add(a, b, edge.strong, false);
   }
 
   const degree = (index: number): number => [...routed.values()]

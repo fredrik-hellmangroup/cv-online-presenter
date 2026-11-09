@@ -60,8 +60,9 @@ import {
   toNodes
 } from './skills.js';
 import type { SkillEdge, SkillNode } from './skills.js';
-import { routeConstellationEdges } from './constellation-edges.js';
+import { constellationEdgeStyle, routeConstellationEdges } from './constellation-edges.js';
 import { CONSTELLATION_SEED_KEY, resolveConstellationSession, seededRandom } from './constellation-session.js';
+import type { RoutedConstellationEdge } from './constellation-edges.js';
 import type { ConstellationSession } from './constellation-session.js';
 
 const openSession = (): ConstellationSession => {
@@ -145,13 +146,6 @@ interface Drifter {
   vx: number;
   vy: number;
   phase: number;
-}
-
-interface RenderEdge {
-  a: number;
-  b: number;
-  strong: boolean;
-  faint: boolean;
 }
 
 const MAX_PIXEL_RATIO = 1.5;
@@ -283,7 +277,7 @@ export class ConstellationEngine implements ExperienceEngine {
     let packets: Packet[] = [];
     let visibleIndices = new Set<number>();
     let hiddenSortedByUsage: number[] = [];
-    let renderEdges: RenderEdge[] = [];
+    let renderEdges: RoutedConstellationEdge[] = [];
     let bubble: Bubble | null = null;
     let popIndices = new Set<number>();
     let focusedPopIndices = new Set<number>();
@@ -860,7 +854,8 @@ export class ConstellationEngine implements ExperienceEngine {
         }
       }
       if (!animationRunning) settleHiddenPopouts();
-      else rebuildRenderEdges();
+      separateDrawnLabels();
+      if (animationRunning) rebuildRenderEdges();
       if (frame === 0) {
         bodies.forEach((body, index) => { body.glow = targetGlow(index); });
         if (bubble) bubble.glow = bubbleHasMatches ? 1 : 0;
@@ -1189,9 +1184,9 @@ export class ConstellationEngine implements ExperienceEngine {
         const fromIntro = edge.a < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.a].introAlpha;
         const toIntro = edge.b < 0 ? bubble?.introAlpha ?? 1 : bodies[edge.b].introAlpha;
         const alphaFade = Math.min(fromIntro, toIntro);
-        const alpha = (edge.faint ? 0.018 + lit * 0.08 : edge.strong ? 0.05 + lit * 0.5 : 0.03 + lit * 0.18) * alphaFade;
-        context.strokeStyle = `rgba(${colour}, ${alpha})`;
-        context.lineWidth = edge.strong && lit > 0.6 && !edge.faint ? 1.4 : 1;
+        const style = constellationEdgeStyle(edge, lit);
+        context.strokeStyle = `rgba(${colour}, ${style.alpha * alphaFade})`;
+        context.lineWidth = style.width;
         context.beginPath();
         context.moveTo(from.x, from.y);
         context.lineTo(to.x, to.y);
