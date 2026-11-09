@@ -256,7 +256,7 @@ export const scatterPoint = (
       const overlapHeight = Math.max(0, Math.min(label.bottom, other.bottom) - Math.max(label.top, other.top));
       overlap += overlapWidth * overlapHeight;
     }
-    const score = (covered ? -1000 : 0) + Math.min(nearest, minGap) - (overlap > 0 ? 180 + overlap / 10 : 0);
+    const score = (covered ? -1_000_000 : 0) + Math.min(nearest, minGap) - (overlap > 0 ? 10_000 + overlap : 0);
     if (score > bestScore) {
       best = { x, y };
       bestScore = score;

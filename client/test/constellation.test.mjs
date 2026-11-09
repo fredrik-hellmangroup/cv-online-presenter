@@ -209,6 +209,19 @@ test('scattering avoids overlapping occupied label rectangles when space is avai
 });
 
 
+test('scattering keeps a dense set of labels collision-free when the area has room', () => {
+  const area = { left: 20, top: 20, right: 780, bottom: 580 };
+  const occupied = [];
+  for (let index = 0; index < 18; index++) {
+    const half = 28 + index % 4 * 8;
+    const point = scatterPoint(area, half, [], [], seeded(index + 31), 0, 500, occupied);
+    const label = labelRectAt(point, half);
+    assert.ok(occupied.every(other => labelOverlapArea(label, other) === 0), `label ${index} overlaps`);
+    occupied.push(label);
+  }
+});
+
+
 test('orbit slots derive a bounded reveal capacity and expand outward without label collisions', () => {
   const desktop = orbitSlots(
     { left: 0, top: 0, right: 1392, bottom: 709 },

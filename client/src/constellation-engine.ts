@@ -680,7 +680,7 @@ export class ConstellationEngine implements ExperienceEngine {
         const earlier = previous[index];
         const isVisible = visibleIndices.has(index);
         const placement = earlier ?? share(scatterPoint(fittingRegion(cluster, half), half, obstacles,
-          isVisible ? taken : [], placementRandom, 110, 100, isVisible ? takenLabels : []));
+          isVisible ? taken : [], placementRandom, 110, 500, isVisible ? takenLabels : []));
         const { u, v } = placement;
         const { hx, hy } = homeOf({ u, v, half, cluster });
         const remapped = earlier ? remapPoint(earlier) : null;
